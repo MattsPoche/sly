@@ -427,6 +427,17 @@ make_closure(sly_value _proto)
 	return (sly_value)clos;
 }
 
+sly_value
+make_cclosure(cfunc fn, size_t nargs, int has_varg)
+{
+	cclosure *clos = sly_alloc(sizeof(*clos));
+	clos->type = tt_cclosure;
+	clos->fn = fn;
+	clos->nargs = nargs;
+	clos->has_varg = has_varg;
+	return (sly_value)clos;
+}
+
 static sly_value
 addfx(f64 x, sly_value y)
 {

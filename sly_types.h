@@ -117,12 +117,13 @@ typedef struct _clos {
 	size_t arg_idx;   // position in upvals where args are stored
 } closure;
 
-typedef sly_value (*cfunc)(sly_value upvals, size_t arg_idx);
+typedef sly_value (*cfunc)(sly_value args);
 
 typedef struct _cclos {
 	OBJ_HEADER;
-	sly_value clos; // <closure>
+	size_t nargs; // <vector> arglist
 	cfunc fn;       // pointer to c function
+	int has_varg;
 } cclosure;
 
 typedef struct _syntax {
@@ -167,6 +168,7 @@ sly_value make_string(char *cstr, size_t len);
 sly_value make_prototype(sly_value uplist, sly_value constants, sly_value code,
 						 size_t nregs, size_t nargs, size_t entry, int has_varg);
 sly_value make_closure(sly_value _proto);
+sly_value make_cclosure(cfunc fn, size_t nargs, int has_varg);
 sly_value sly_add(sly_value x, sly_value y);
 sly_value sly_sub(sly_value x, sly_value y);
 sly_value sly_mul(sly_value x, sly_value y);

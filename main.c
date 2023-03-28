@@ -135,16 +135,14 @@ vm_run(stack_frame *frame)
 			u8 b = GET_B(instr);
 			sly_value val = get_reg(a);
 			if (cclosure_p(val)) {
-				cclosure *cclos = GET_PTR(val);
-				closure *clos = GET_PTR(cclos->clos);
-				prototype *proto = GET_PTR(clos->proto);
+				cclosure *clos = GET_PTR(val);
 				size_t nargs = b - a - 1;
-				sly_assert(nargs == proto->nargs, "Error wrong number of arguments");
-				sly_value upvals = copy_vector(clos->upvals);
+				sly_assert(nargs == clos->nargs, "Error wrong number of arguments");
+				sly_value args = make_vector(nargs, nargs);
 				for (size_t i = 0; i < nargs; ++i) {
-					vector_set(upvals, i + clos->arg_idx, get_reg(a + 1 + i));
+					vector_set(args, i, get_reg(a + 1 + i));
 				}
-				sly_value r = cclos->fn(upvals, clos->arg_idx);
+				sly_value r = clos->fn(args);
 				set_reg(a, r);
 			} else if (closure_p(val)) {
 				closure *clos = GET_PTR(val);

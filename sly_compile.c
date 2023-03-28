@@ -22,7 +22,6 @@ enum kw {
 	kw_syntax_rules,
 	kw_call_with_continuation,
 	kw_call_cc,
-	kw_plus,
 	KW_COUNT,
 };
 
@@ -32,6 +31,7 @@ enum symbol_type {
 	sym_variable,
 	sym_arg,
 	sym_upval,
+	sym_constant,
 };
 
 struct symbol_properties {
@@ -66,12 +66,11 @@ static char *keywords[KW_COUNT] = {
 	[kw_syntax_rules]			= "syntax-rules",
 	[kw_call_with_continuation] = "call-with-continuation",
 	[kw_call_cc]				= "call/cc",
-	[kw_plus]					= "+",
 };
 
 static sly_value kw_symbols[KW_COUNT];
 
-void comp_expr(struct compile *cc, sly_value form, u8 reg);
+int comp_expr(struct compile *cc, sly_value form, int reg);
 
 static int
 is_keyword(sly_value sym)
@@ -141,7 +140,7 @@ init_symtable(sly_value interned)
 	return symtable;
 }
 
-void
+int
 comp_define(struct compile *cc, sly_value form)
 { /* (define <symbol> <expr>) */
 	sly_value stx = car(form);
@@ -157,10 +156,11 @@ comp_define(struct compile *cc, sly_value form)
 	comp_expr(cc, car(form), st_prop.reg);
 	/* end of definition */
 	sly_assert(null_p(cdr(form)), "Compile Error malformed define");
+	return st_prop.reg;
 }
 
-void
-comp_atom(struct compile *cc, sly_value form, u8 reg)
+int
+comp_atom(struct compile *cc, sly_value form, int reg)
 {
 	sly_value datum;
 	datum = syntax_to_datum(form);
@@ -168,20 +168,39 @@ comp_atom(struct compile *cc, sly_value form, u8 reg)
 	if (symbol_p(datum)) {
 		sly_value prop = dictionary_ref(cc->cscope->symtable, datum);
 		struct symbol_properties st_prop = VALUE_TO_SYMPROP(prop);
-		vector_append(proto->code, iAB(OP_MOVE, reg, st_prop.reg));
+		return st_prop.reg;
 	} else { /* constant */
 		size_t idx = vector_len(proto->K);
 		vector_append(proto->K, datum);
 		vector_append(proto->code, iABx(OP_LOADK, reg, idx));
+		return reg;
 	}
 }
 
-void
-comp_expr(struct compile *cc, sly_value form, u8 reg)
+int
+comp_funcall(struct compile *cc, sly_value form, int reg)
+{
+	prototype *proto = GET_PTR(cc->cscope->proto);
+	sly_value head = car(form);
+	form = cdr(form);
+	int reg2 = comp_expr(cc, head, reg);
+	int start = reg;
+	vector_append(proto->code, iAB(OP_MOVE, reg++, reg2));
+	while (pair_p(form)) {
+		head = car(form);
+		reg2 = comp_expr(cc, head, reg);
+		vector_append(proto->code, iAB(OP_MOVE, reg++, reg2));
+		form = cdr(form);
+	}
+	vector_append(proto->code, iAB(OP_CALL, start, reg));
+	return reg;
+}
+
+int
+comp_expr(struct compile *cc, sly_value form, int reg)
 {
 	if (!pair_p(form)) {
-		comp_atom(cc, form, reg);
-		return;
+		return comp_atom(cc, form, reg);
 	}
 	sly_value stx, datum;
 	stx = car(form);
@@ -192,11 +211,8 @@ comp_expr(struct compile *cc, sly_value form, u8 reg)
 	if (symbol_p(datum)) {
 		int kw = is_keyword(datum);
 		if (kw == -1) { /* function call */
-			/* lookup symbol */
-			sly_value prop = dictionary_ref(cc->cscope->symtable, datum);
-			struct symbol_properties st_prop = VALUE_TO_SYMPROP(prop);
-			prototype *proto = GET_PTR(cc->cscope->proto);
-			vector_append(proto->code, iAB(OP_MOVE, reg, st_prop.reg));
+			printf("Here\n");
+			comp_funcall(cc, form, reg);
 		} else {
 			switch ((enum kw)kw) {
 			case kw_define: {
@@ -248,7 +264,7 @@ comp_expr(struct compile *cc, sly_value form, u8 reg)
 				prototype *proto = GET_PTR(cc->cscope->proto);
 				form = cdr(form);
 				reg = proto->nregs++;
-				comp_expr(cc, car(form), reg);
+				reg = comp_expr(cc, car(form), reg);
 				vector_append(proto->code, iA(OP_DISPLAY, reg));
 				sly_assert(null_p(cdr(form)), "Error malformed display expression");
 			} break;
@@ -259,17 +275,6 @@ comp_expr(struct compile *cc, sly_value form, u8 reg)
 			case kw_call_with_continuation:
 			case kw_call_cc: {
 			} break;
-			case kw_plus: {
-				prototype *proto = GET_PTR(cc->cscope->proto);
-				form = cdr(form);
-				comp_expr(cc, car(form), reg);
-				form = cdr(form);
-				u8 reg2 = proto->nregs++;
-				comp_expr(cc, car(form), reg2);
-				form = cdr(form);
-				sly_assert(null_p(form), "Error malformed add expression");
-				vector_append(proto->code, iABC(OP_ADD, reg, reg, reg2));
-			} break;
 			case KW_COUNT: {
 			} break;
 			}
@@ -278,6 +283,29 @@ comp_expr(struct compile *cc, sly_value form, u8 reg)
 		/* constant */
 		sly_assert(0, "Error not a function");
 	}
+	return 0;
+}
+
+sly_value
+cadd(sly_value args)
+{
+	return sly_add(vector_ref(args, 0), vector_ref(args, 1));
+}
+
+void
+init_builtins(struct compile *cc)
+{
+
+	prototype *proto = GET_PTR(cc->cscope->proto);
+	sly_value symtable = cc->cscope->symtable;
+	struct symbol_properties st_prop = {0};
+	st_prop.reg = vector_len(proto->K);
+	st_prop.islocal = 0;
+	st_prop.type = sym_constant;
+	dictionary_set(symtable,
+				   make_symbol(cc->interned, "+", 1),
+				   SYMPROP_TO_VALUE(st_prop));
+	vector_append(proto->K, make_cclosure(cadd, 2, 0));
 }
 
 struct compile
@@ -290,6 +318,7 @@ sly_compile(char *file_name)
 	cc.cscope = make_scope();
 	cc.interned = make_dictionary();
 	cc.cscope->symtable = init_symtable(cc.interned);
+	init_builtins(&cc);
 	ast = parse_file(file_name, &src, cc.interned);
 	comp_expr(&cc, ast, 0);
 	proto = GET_PTR(cc.cscope->proto);
