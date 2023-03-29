@@ -59,6 +59,8 @@ sly_hash(sly_value v)
 		byte_vector *bv = GET_PTR(v);
 		return hash_str(bv->elems, bv->len);
 	}
+	printf("(sly_hash) TAG  = %lu\n", v & TAG_MASK);
+	printf("(sly_hash) TYPE = %d\n", TYPEOF(v));
 	sly_assert(0, "Hash unemplemented for type");
 	return 0;
 }

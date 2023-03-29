@@ -42,6 +42,20 @@ vm_run(stack_frame *frame)
 			u8 b = GET_B(instr);
 			set_upval(a, get_reg(b));
 		} break;
+		case OP_GETUPDICT: {
+			u8 a = GET_A(instr);
+			u8 b = GET_B(instr);
+			u8 c = GET_C(instr);
+			sly_value dict = get_upval(b);
+			set_reg(a, dictionary_ref(dict, get_reg(c)));
+		} break;
+		case OP_SETUPDICT: {
+			u8 a = GET_A(instr);
+			u8 b = GET_B(instr);
+			u8 c = GET_C(instr);
+			sly_value dict = get_upval(a);
+			dictionary_set(dict, get_reg(b), get_reg(c));
+		} break;
 		case OP_CONS: {
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
@@ -205,6 +219,20 @@ vm_run(stack_frame *frame)
 			sly_value vec = get_reg(a);
 			vector_set(vec, get_int(get_reg(b)), get_reg(c));
 		} break;
+		case OP_DICTREF: {
+			u8 a = GET_A(instr);
+			u8 b = GET_B(instr);
+			u8 c = GET_C(instr);
+			sly_value dict = get_reg(b);
+			set_reg(a, dictionary_ref(dict, get_reg(c)));
+		} break;
+		case OP_DICTSET: {
+			u8 a = GET_A(instr);
+			u8 b = GET_B(instr);
+			u8 c = GET_C(instr);
+			sly_value dict = get_reg(a);
+			dictionary_set(dict, get_reg(b), get_reg(c));
+		} break;
 		case OP_CLOSURE: {
 			u8 a = GET_A(instr);
 			size_t b = GET_Bx(instr);
@@ -264,6 +292,18 @@ dis(INSTR instr)
 	} break;
 	case OP_SETUPVAL: {
 	} break;
+	case OP_GETUPDICT: {
+		u8 a = GET_A(instr);
+		u8 b = GET_B(instr);
+		u8 c = GET_C(instr);
+		printf("(GETUPDICT %d %d %d)\n", a, b, c);
+	} break;
+	case OP_SETUPDICT: {
+		u8 a = GET_A(instr);
+		u8 b = GET_B(instr);
+		u8 c = GET_C(instr);
+		printf("(SETUPDICT %d %d %d)\n", a, b, c);
+	} break;
 	case OP_CONS: {
 	} break;
 	case OP_CAR: {
@@ -309,6 +349,18 @@ dis(INSTR instr)
 		u8 a = GET_A(instr);
 		printf("(RETURN %d)\n", a);
 	} break;
+	case OP_DICTREF: {
+		u8 a = GET_A(instr);
+		u8 b = GET_B(instr);
+		u8 c = GET_C(instr);
+		printf("(DICTREF %d %d %d)\n", a, b, c);
+	} break;
+	case OP_DICTSET: {
+		u8 a = GET_A(instr);
+		u8 b = GET_B(instr);
+		u8 c = GET_C(instr);
+		printf("(DICTSET %d %d %d)\n", a, b, c);
+	} break;
 	case OP_VECREF: {
 	} break;
 	case OP_VECSET: {
@@ -322,10 +374,11 @@ dis(INSTR instr)
 	}
 }
 
-int
-main(void)
+sly_value
+run_file(char *file_name)
 {
-	struct compile cc = sly_compile("test.scm");
+	printf("Running file %s\n", file_name);
+	struct compile cc = sly_compile(file_name);
 	prototype *proto = GET_PTR(cc.cscope->proto);
 	stack_frame *frame = make_stack(proto->nregs);
 	size_t len = vector_len(proto->code);
@@ -333,9 +386,23 @@ main(void)
 		dis(vector_ref(proto->code, i));
 	}
 	printf("============================================\n");
+	frame->U = make_vector(12, 12);
+	vector_set(frame->U, 0, cc.globals);
 	frame->K = proto->K;
 	frame->code = proto->code;
 	frame->pc = proto->entry;
-	vm_run(frame);
+	return vm_run(frame);
+}
+
+int
+main(int argc, char *argv[])
+{
+	if (argc > 1) {
+		for (int i = 1; i < argc; ++i) {
+			run_file(argv[i]);
+		}
+	} else {
+		run_file("test.scm");
+	}
 	return 0;
 }

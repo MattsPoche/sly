@@ -33,6 +33,9 @@ case "$1" in
 	"run")
 		compile && clean && "./$target"
 		;;
+	"test")
+		"./$target" *.scm
+		;;
 	*)
 		compile
 		clean

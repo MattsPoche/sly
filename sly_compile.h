@@ -5,10 +5,12 @@ struct scope {
 	struct scope *parent; // NULL if top-level
 	sly_value proto;      // <prototype>
 	sly_value symtable;   // <dictionary>
+	int prev_var;
 };
 
 struct compile {
 	sly_value interned; // <dictionary> (<string> . <symbol>)
+	sly_value globals;  // <dictionary>
 	struct scope *cscope;
 };
 

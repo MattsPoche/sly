@@ -53,6 +53,8 @@ enum opcode {
 	OP_LOADK,    // iABx  | R[A] := K[Bx]
 	OP_GETUPVAL, // iAB  | R[A] := U[B]
 	OP_SETUPVAL, // iAB  | U[B] := R[A]
+	OP_GETUPDICT, // iABC | R[A] := <dictionary> U[B][R[C]]
+	OP_SETUPDICT, // iABC | <dictionary> U[A][R[B]] := R[C]
 	OP_CONS,     // iABC  | R[A] := pair(R[B], R[C])
 	OP_CAR,      // iAB   | R[A] := car(R[B])
 	OP_CDR,      // iAB   | R[A] := cdr(R[B])
@@ -71,6 +73,8 @@ enum opcode {
 	OP_CALL,    // iAB   | R[A] := R[A](A+1, ..., A+B-1)
 	OP_TAILCALL, // iAB   | R[A] := R[A](A+1, ..., A+B-1)
 	OP_RETURN,  // iA    | return R[A]
+	OP_DICTREF, // iABC   | R[A] := <dictionary> R[B][R[C]]
+	OP_DICTSET, // iABC  | <dictionary> R[A][R[B]] := R[C]
 	OP_VECREF,  // iABC  | R[A] := R[B][R[C]]
 	OP_VECSET,  // iABC  | R[A][R[B]] = R[C]
 	OP_CLOSURE, // iABx  | R[A] := make_closure(<prototype> K[Bx])

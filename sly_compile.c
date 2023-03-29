@@ -31,6 +31,7 @@ enum symbol_type {
 	sym_variable,
 	sym_arg,
 	sym_upval,
+	sym_global,
 	sym_constant,
 };
 
@@ -41,7 +42,7 @@ struct symbol_properties {
 	i32 reg;
 };
 
-#define SYMPROP_TO_VALUE(prop) (*((sly_value *)(&(prop))))
+#define SYMPROP_TO_VALUE(prop) (*((sly_value *)(&prop)))
 #define VALUE_TO_SYMPROP(val)  (*((struct symbol_properties *)(&(prop))))
 
 static char *keywords[KW_COUNT] = {
@@ -121,6 +122,7 @@ make_scope(void)
 								  make_vector(0, 8),
 								  0, 0, 0, 0);
 	scope->symtable = make_dictionary();
+	scope->prev_var = 0;
 	return scope;
 }
 
@@ -142,10 +144,10 @@ comp_define(struct compile *cc, sly_value form)
 { /* (define <symbol> <expr>) */
 	sly_value stx = car(form);
 	sly_value datum = syntax_to_datum(stx);
-	prototype *proto = GET_PTR(cc->cscope->proto);
+//	prototype *proto = GET_PTR(cc->cscope->proto);
 	struct symbol_properties st_prop = {0};
 	sly_assert(symbol_p(datum), "Error variable name must be a symbol");
-	st_prop.reg = proto->nregs++;
+	st_prop.reg = cc->cscope->prev_var++;
 	st_prop.islocal = 1;
 	st_prop.type = sym_variable;
 	dictionary_set(cc->cscope->symtable, datum, SYMPROP_TO_VALUE(st_prop));
@@ -165,11 +167,28 @@ comp_atom(struct compile *cc, sly_value form, int reg)
 	if (symbol_p(datum)) {
 		sly_value prop = dictionary_ref(cc->cscope->symtable, datum);
 		struct symbol_properties st_prop = VALUE_TO_SYMPROP(prop);
-		if (st_prop.type == sym_variable) {
+		switch ((enum symbol_type)st_prop.type) {
+		case sym_variable: {
 			return st_prop.reg;
-		} else if (st_prop.type == sym_constant) {
+		} break;
+		case sym_constant: {
 			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 			vector_append(proto->code, iABx(OP_LOADK, reg, st_prop.reg));
+		} break;
+		case sym_datum: {
+		} break;
+		case sym_keyword: {
+		} break;
+		case sym_arg:
+		case sym_upval: {
+			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
+			vector_append(proto->code, iAB(OP_GETUPVAL, reg, st_prop.reg));
+		} break;
+		case sym_global: {
+			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
+			vector_append(proto->code, iABx(OP_LOADK, reg, st_prop.reg));
+			vector_append(proto->code, iABC(OP_GETUPDICT, reg, 0, reg));
+		} break;
 		}
 	} else { /* constant */
 		size_t idx = vector_len(proto->K);
@@ -188,14 +207,14 @@ comp_funcall(struct compile *cc, sly_value form, int reg)
 	form = cdr(form);
 	int start = reg;
 	int reg2 = comp_expr(cc, head, reg);
-	if (reg2 != -1) {
+	if (reg2 != -1 && reg2 != reg) {
 		vector_append(proto->code, iAB(OP_MOVE, reg, reg2));
 	}
 	reg++;
 	while (pair_p(form)) {
 		head = car(form);
 		reg2 = comp_expr(cc, head, reg);
-		if (reg2 != -1) {
+		if (reg2 != -1 && reg2 != reg) {
 			vector_append(proto->code, iAB(OP_MOVE, reg, reg2));
 		}
 		reg++;
@@ -262,7 +281,7 @@ comp_expr(struct compile *cc, sly_value form, int reg)
 			reg = proto->nregs++;
 			form = cdr(form);
 			reg = comp_expr(cc, car(form), reg);
-			if (reg != -1) {
+			if (reg != -1 && st_prop.reg != reg) {
 				vector_append(proto->code, iAB(OP_MOVE, st_prop.reg, reg));
 			}
 			sly_assert(null_p(cdr(form)), "Error malformed set! expression");
@@ -315,13 +334,14 @@ init_builtins(struct compile *cc)
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	sly_value symtable = cc->cscope->symtable;
 	struct symbol_properties st_prop = {0};
+	cc->globals = make_dictionary();
 	st_prop.reg = vector_len(proto->K);
 	st_prop.islocal = 0;
-	st_prop.type = sym_constant;
-	dictionary_set(symtable,
-				   make_symbol(cc->interned, "+", 1),
-				   SYMPROP_TO_VALUE(st_prop));
-	vector_append(proto->K, make_cclosure(cadd, 2, 1));
+	st_prop.type = sym_global;
+	sly_value sym = make_symbol(cc->interned, "+", 1);
+	vector_append(proto->K, sym);
+	dictionary_set(symtable, sym, SYMPROP_TO_VALUE(st_prop));
+	dictionary_set(cc->globals, sym, make_cclosure(cadd, 2, 1));
 }
 
 struct compile
