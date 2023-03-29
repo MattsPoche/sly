@@ -192,7 +192,6 @@ comp_set(struct compile *cc, sly_value form, int reg)
 	sly_value prop = dictionary_ref(cc->cscope->symtable, datum);
 	struct symbol_properties st_prop = VALUE_TO_SYMPROP(prop);
 	prototype *proto = GET_PTR(cc->cscope->proto);
-	reg = proto->nregs++;
 	form = cdr(form);
 	reg = comp_expr(cc, car(form), reg);
 	if (st_prop.type == sym_variable) {
@@ -290,8 +289,6 @@ comp_expr(struct compile *cc, sly_value form, int reg)
 		switch ((enum kw)kw) {
 		case kw_define: {
 			form = cdr(form);
-			prototype *proto = GET_PTR(cc->cscope->proto);
-			reg = proto->nregs++;
 			comp_define(cc, form, reg);
 		} break;
 		case kw_lambda: {
@@ -327,7 +324,6 @@ comp_expr(struct compile *cc, sly_value form, int reg)
 		case kw_display: {
 			prototype *proto = GET_PTR(cc->cscope->proto);
 			form = cdr(form);
-			reg = proto->nregs++;
 			int reg2 = comp_expr(cc, car(form), reg);
 			if (reg2 == -1) {
 				vector_append(proto->code, iA(OP_DISPLAY, reg));
