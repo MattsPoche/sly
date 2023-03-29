@@ -44,6 +44,7 @@ struct symbol_properties {
 
 #define SYMPROP_TO_VALUE(prop) (*((sly_value *)(&prop)))
 #define VALUE_TO_SYMPROP(val)  (*((struct symbol_properties *)(&(prop))))
+#define IS_GLOBAL(scope)       ((scope)->parent == NULL)
 
 static char *keywords[KW_COUNT] = {
 	[kw_define]					= "define",
@@ -140,22 +141,70 @@ init_symtable(sly_value interned)
 }
 
 int
-comp_define(struct compile *cc, sly_value form)
+comp_define(struct compile *cc, sly_value form, int reg)
 { /* (define <symbol> <expr>) */
 	sly_value stx = car(form);
-	sly_value datum = syntax_to_datum(stx);
-//	prototype *proto = GET_PTR(cc->cscope->proto);
+	sly_value var = syntax_to_datum(stx);
+	sly_value symtable = cc->cscope->symtable;
+	prototype *proto = GET_PTR(cc->cscope->proto);
 	struct symbol_properties st_prop = {0};
-	sly_assert(symbol_p(datum), "Error variable name must be a symbol");
-	st_prop.reg = cc->cscope->prev_var++;
-	st_prop.islocal = 1;
-	st_prop.type = sym_variable;
-	dictionary_set(cc->cscope->symtable, datum, SYMPROP_TO_VALUE(st_prop));
+	sly_assert(symbol_p(var), "Error variable name must be a symbol");
+	if (IS_GLOBAL(cc->cscope)) {
+		form = cdr(form);
+		stx = car(form);
+		sly_value globals  = cc->globals;
+		sly_value datum = syntax_p(stx) ? syntax_to_datum(stx) : stx;
+		st_prop.islocal = 0;
+		st_prop.type = sym_global;
+		st_prop.reg = vector_len(proto->K);
+		dictionary_set(symtable, var, SYMPROP_TO_VALUE(st_prop));
+		vector_append(proto->K, var);
+		if (pair_p(datum) || symbol_p(datum)) {
+			dictionary_set(globals, var, SLY_VOID);
+			comp_expr(cc, car(form), reg);
+			vector_append(proto->code, iABx(OP_LOADK, reg + 1, st_prop.reg));
+			vector_append(proto->code, iABC(OP_SETUPDICT, 0, reg + 1, reg));
+		} else {
+			dictionary_set(globals, var, datum);
+		}
+		sly_assert(null_p(cdr(form)), "Compile Error malformed define");
+		return reg;
+	} else {
+		st_prop.reg = cc->cscope->prev_var++;
+		st_prop.islocal = 1;
+		st_prop.type = sym_variable;
+		dictionary_set(symtable, var, SYMPROP_TO_VALUE(st_prop));
+		form = cdr(form);
+		comp_expr(cc, car(form), st_prop.reg);
+		/* end of definition */
+		sly_assert(null_p(cdr(form)), "Compile Error malformed define");
+		return st_prop.reg;
+	}
+}
+
+int
+comp_set(struct compile *cc, sly_value form, int reg)
+{
 	form = cdr(form);
-	comp_expr(cc, car(form), st_prop.reg);
-	/* end of definition */
-	sly_assert(null_p(cdr(form)), "Compile Error malformed define");
-	return st_prop.reg;
+	sly_value stx = car(form);
+	sly_value datum = syntax_to_datum(stx);
+	sly_assert(symbol_p(datum), "Error must be a variable");
+	sly_value prop = dictionary_ref(cc->cscope->symtable, datum);
+	struct symbol_properties st_prop = VALUE_TO_SYMPROP(prop);
+	prototype *proto = GET_PTR(cc->cscope->proto);
+	reg = proto->nregs++;
+	form = cdr(form);
+	reg = comp_expr(cc, car(form), reg);
+	if (st_prop.type == sym_variable) {
+		if (reg != -1 && st_prop.reg != reg) {
+			vector_append(proto->code, iAB(OP_MOVE, st_prop.reg, reg));
+		}
+	} else if (st_prop.type == sym_global) {
+		vector_append(proto->code, iAB(OP_LOADK, reg + 1, st_prop.reg));
+		vector_append(proto->code, iABC(OP_SETUPDICT, 0, reg + 1, reg));
+	}
+	sly_assert(null_p(cdr(form)), "Error malformed set! expression");
+	return reg;
 }
 
 int
@@ -241,7 +290,9 @@ comp_expr(struct compile *cc, sly_value form, int reg)
 		switch ((enum kw)kw) {
 		case kw_define: {
 			form = cdr(form);
-			comp_define(cc, form);
+			prototype *proto = GET_PTR(cc->cscope->proto);
+			reg = proto->nregs++;
+			comp_define(cc, form, reg);
 		} break;
 		case kw_lambda: {
 		} break;
@@ -271,20 +322,7 @@ comp_expr(struct compile *cc, sly_value form, int reg)
 		case kw_if: {
 		} break;
 		case kw_set: {
-			form = cdr(form);
-			stx = car(form);
-			datum = syntax_to_datum(stx);
-			sly_assert(symbol_p(datum), "Error must be a variable");
-			sly_value prop = dictionary_ref(cc->cscope->symtable, datum);
-			struct symbol_properties st_prop = VALUE_TO_SYMPROP(prop);
-			prototype *proto = GET_PTR(cc->cscope->proto);
-			reg = proto->nregs++;
-			form = cdr(form);
-			reg = comp_expr(cc, car(form), reg);
-			if (reg != -1 && st_prop.reg != reg) {
-				vector_append(proto->code, iAB(OP_MOVE, st_prop.reg, reg));
-			}
-			sly_assert(null_p(cdr(form)), "Error malformed set! expression");
+			comp_set(cc, form, reg);
 		} break;
 		case kw_display: {
 			prototype *proto = GET_PTR(cc->cscope->proto);
@@ -309,7 +347,6 @@ comp_expr(struct compile *cc, sly_value form, int reg)
 		} break;
 		}
 	} else {
-		/* constant */
 		comp_funcall(cc, form, reg);
 	}
 	return reg;
@@ -356,8 +393,8 @@ sly_compile(char *file_name)
 	cc.cscope->symtable = init_symtable(cc.interned);
 	init_builtins(&cc);
 	ast = parse_file(file_name, &src, cc.interned);
-	comp_expr(&cc, ast, 0);
 	proto = GET_PTR(cc.cscope->proto);
+	comp_expr(&cc, ast, 0);
 	vector_append(proto->code, iA(OP_RETURN, 0));
 	return cc;
 }
