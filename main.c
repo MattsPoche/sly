@@ -137,8 +137,21 @@ vm_run(stack_frame *frame)
 			if (cclosure_p(val)) {
 				cclosure *clos = GET_PTR(val);
 				size_t nargs = b - a - 1;
-				sly_assert(nargs == clos->nargs, "Error wrong number of arguments");
-				sly_value args = make_vector(nargs, nargs);
+				sly_value args;
+				if (clos->has_varg) {
+					sly_assert(nargs >= clos->nargs, "Error wrong number of arguments");
+					size_t nvargs = nargs - clos->nargs;
+					sly_value vargs = SLY_NULL;
+					args = make_vector(clos->nargs + 1, clos->nargs + 1);
+					for (size_t i = b - 1; nvargs--; --i) {
+						vargs = cons(get_reg(i), vargs);
+					}
+					vector_set(args, clos->nargs, vargs);
+					nargs = clos->nargs;
+				} else {
+					sly_assert(nargs == clos->nargs, "Error wrong number of arguments");
+					args = make_vector(clos->nargs, clos->nargs);
+				}
 				for (size_t i = 0; i < nargs; ++i) {
 					vector_set(args, i, get_reg(a + 1 + i));
 				}
@@ -214,6 +227,9 @@ vm_run(stack_frame *frame)
 			if (int_p(v)) {
 				i64 n = get_int(v);
 				printf("%ld\n", n);
+			} else if (float_p(v)) {
+				f64 n = get_float(v);
+				printf("%g\n", n);
 			} else {
 				sly_assert(0, "UNEMPLEMENTED");
 			}
@@ -283,6 +299,9 @@ dis(INSTR instr)
 	case OP_JNZ: {
 	} break;
 	case OP_CALL: {
+		u8 a = GET_A(instr);
+		u8 b = GET_B(instr);
+		printf("(CALL %d %d)\n", a, b);
 	} break;
 	case OP_TAILCALL: {
 	} break;
@@ -306,22 +325,6 @@ dis(INSTR instr)
 int
 main(void)
 {
-#if 0
-	sly_value k = make_vector(1, 1);
-	sly_value mc = code_chunk_from_array(main_code, ARR_LEN(main_code));
-	sly_value fc = code_chunk_from_array(fn_code, ARR_LEN(fn_code));
-	vector_set(k, 0, make_prototype(SLY_NULL, SLY_NULL, fc, 2, 2, 0, 0));
-	stack_frame frame = {
-		.parent = NULL,
-		.K = k,
-		.code = mc,
-		.U = SLY_NULL,
-		.R = make_vector(4, 4),
-		.pc = 0,
-	};
-	sly_value r = vm_run(&frame);
-	printf("%ld\n", get_int(r));
-#else
 	struct compile cc = sly_compile("test.scm");
 	prototype *proto = GET_PTR(cc.cscope->proto);
 	stack_frame *frame = make_stack(proto->nregs);
@@ -329,10 +332,10 @@ main(void)
 	for (size_t i = 0; i < len; ++i) {
 		dis(vector_ref(proto->code, i));
 	}
+	printf("============================================\n");
 	frame->K = proto->K;
 	frame->code = proto->code;
 	frame->pc = proto->entry;
 	vm_run(frame);
-#endif
 	return 0;
 }

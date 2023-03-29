@@ -3,7 +3,7 @@
 cflags='-D_POSIX_C_SOURCE=200809L -Wextra -Wall -Wswitch-enum -ggdb -std=c11'
 lflags=
 cc=gcc
-target='pg'
+target='sly'
 
 compile() {
 	"$cc" $cflags $lflags -o "$target" *.c

@@ -1,5 +1,7 @@
 (define foo 69)
 (define bar 420)
 (set! foo (+ foo bar))
+(define baz (+ 69 5.8 322 1029))
 (display foo)
+(display baz)
 (display bar)
