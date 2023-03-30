@@ -10,8 +10,6 @@ typedef struct sly_state {
 sly_value
 vm_run(stack_frame *frame)
 {
-	int jmp_limit = 5;
-	int jmps = 0;
 	INSTR instr;
     for (;;) {
 		instr = next_instr();
@@ -133,14 +131,10 @@ vm_run(stack_frame *frame)
 		} break;
 #endif
 		case OP_JMP: {
-			if (jmps == jmp_limit) return SLY_NULL;
-			jmps++;
 			u64 a = GET_Ax(instr);
 			frame->pc = a;
 		} break;
 		case OP_FJMP: {
-			if (jmps == jmp_limit) return SLY_NULL;
-			jmps++;
 			u8 a = GET_A(instr);
 			u64 b = GET_Bx(instr);
 			if (get_reg(a) == SLY_FALSE) {
