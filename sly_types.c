@@ -612,6 +612,45 @@ sly_mod(sly_value x, sly_value y)
 	return make_int(get_int(x) % get_int(y));
 }
 
+static sly_value
+num_eqfx(f64 x, sly_value y)
+{
+	sly_assert(number_p(y), "Type Error expected number");
+	if (int_p(y)) {
+		return ctobool(x  == get_int(y));
+	} else if (float_p(y)) {
+		return ctobool(x == get_float(y));
+	}
+	sly_assert(0, "Error Unreachable");
+	return SLY_NULL;
+}
+
+static sly_value
+num_eqix(i64 x, sly_value y)
+{
+	sly_assert(number_p(y), "Type Error expected number");
+	if (int_p(y)) {
+		return ctobool(x == get_int(y));
+	} else if (float_p(y)) {
+		return ctobool(x == get_float(y));
+	}
+	sly_assert(0, "Error Unreachable");
+	return SLY_NULL;
+}
+
+sly_value
+sly_num_eq(sly_value x, sly_value y)
+{
+	sly_assert(number_p(x), "Type Error expected number");
+	if (int_p(x)) {
+		return num_eqix(get_int(x), y);
+	} else if (float_p(x)) {
+		return num_eqfx(get_float(x), y);
+	}
+	sly_assert(0, "Error Unreachable");
+	return SLY_NULL;
+}
+
 sly_value
 make_syntax(token tok, sly_value datum)
 {

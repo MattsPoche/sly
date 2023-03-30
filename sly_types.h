@@ -177,6 +177,7 @@ sly_value sly_mul(sly_value x, sly_value y);
 sly_value sly_div(sly_value x, sly_value y);
 sly_value sly_idiv(sly_value x, sly_value y);
 sly_value sly_mod(sly_value x, sly_value y);
+sly_value sly_num_eq(sly_value x, sly_value y);
 sly_value make_syntax(token tok, sly_value datum);
 sly_value syntax_to_datum(sly_value syn);
 sly_value make_dictionary(void);

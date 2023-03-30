@@ -45,15 +45,15 @@ struct symbol_properties {
 #define SYMPROP_TO_VALUE(prop) (*((sly_value *)(&prop)))
 #define VALUE_TO_SYMPROP(val)  (*((struct symbol_properties *)(&(prop))))
 #define IS_GLOBAL(scope)       ((scope)->parent == NULL)
-#define ADD_BUILTIN(name, fn)										\
-	do {															\
-		st_prop.reg = vector_len(proto->K);							\
-		st_prop.islocal = 0;										\
-		st_prop.type = sym_global;									\
-		sym = make_symbol(cc->interned, name, strlen(name));		\
-		vector_append(proto->K, sym);								\
-		dictionary_set(symtable, sym, SYMPROP_TO_VALUE(st_prop));	\
-		dictionary_set(cc->globals, sym, make_cclosure(fn, 2, 1));	\
+#define ADD_BUILTIN(name, fn, nargs, has_vargs)							\
+	do {																\
+		st_prop.reg = vector_len(proto->K);								\
+		st_prop.islocal = 0;											\
+		st_prop.type = sym_global;										\
+		sym = make_symbol(cc->interned, name, strlen(name));			\
+		vector_append(proto->K, sym);									\
+		dictionary_set(symtable, sym, SYMPROP_TO_VALUE(st_prop));		\
+		dictionary_set(cc->globals, sym, make_cclosure(fn, nargs, has_vargs)); \
 	} while (0)
 
 static char *keywords[KW_COUNT] = {
@@ -211,7 +211,6 @@ comp_if(struct compile *cc, sly_value form, int reg)
 	vector_append(proto->code, 0);
 	comp_expr(cc, fbranch, reg);
 	size_t end = vector_len(proto->code);
-	printf("end :: %zu\n", end);
 	if (be_res == -1) {
 		vector_set(proto->code, fjmp, iABx(OP_FJMP, reg, jmp + 1));
 	} else {
@@ -247,7 +246,7 @@ comp_set(struct compile *cc, sly_value form, int reg)
 
 int
 comp_atom(struct compile *cc, sly_value form, int reg)
-{
+{ /* TODO repeated constants are duplicated. Need to fix */
 	sly_value datum;
 	datum = syntax_to_datum(form);
 	prototype *proto = GET_PTR(cc->cscope->proto);
@@ -459,6 +458,12 @@ cmod(sly_value args)
 	return total;
 }
 
+sly_value
+cnum_eq(sly_value args)
+{
+	return sly_num_eq(vector_ref(args, 0), vector_ref(args, 1));
+}
+
 void
 init_builtins(struct compile *cc)
 {
@@ -468,11 +473,12 @@ init_builtins(struct compile *cc)
 	struct symbol_properties st_prop = {0};
 	sly_value sym;
 	cc->globals = make_dictionary();
-	ADD_BUILTIN("+", cadd);
-	ADD_BUILTIN("-", csub);
-	ADD_BUILTIN("*", cmul);
-	ADD_BUILTIN("/", cdiv);
-	ADD_BUILTIN("%", cmod);
+	ADD_BUILTIN("+", cadd, 2, 1);
+	ADD_BUILTIN("-", csub, 2, 1);
+	ADD_BUILTIN("*", cmul, 2, 1);
+	ADD_BUILTIN("/", cdiv, 2, 1);
+	ADD_BUILTIN("%", cmod, 2, 1);
+	ADD_BUILTIN("=", cnum_eq, 2, 0);
 }
 
 struct compile
