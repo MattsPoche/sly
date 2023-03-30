@@ -1,13 +1,9 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 #include <time.h>
 #include "sly_types.h"
 
 #define DICT_INIT_SIZE 32
 #define DICT_LOAD_FACTOR 0.70
 
-static int slot_is_free(sly_value slot);
 static sly_value dictionary_entry_ref_by_hash(sly_value d, u64 h);
 
 static u8
@@ -47,6 +43,15 @@ hash_symbol(char *name, size_t len)
 	return h;
 }
 
+void
+sly_assert(int p, char *msg)
+{
+	if (!p) {
+		fprintf(stderr, "%s\n", msg);
+		exit(1);
+	}
+}
+
 u64
 sly_hash(sly_value v)
 {
@@ -59,8 +64,6 @@ sly_hash(sly_value v)
 		byte_vector *bv = GET_PTR(v);
 		return hash_str(bv->elems, bv->len);
 	}
-	printf("(sly_hash) TAG  = %lu\n", v & TAG_MASK);
-	printf("(sly_hash) TYPE = %d\n", TYPEOF(v));
 	sly_assert(0, "Hash unemplemented for type");
 	return 0;
 }
@@ -418,13 +421,9 @@ make_closure(sly_value _proto)
 	closure *clos = sly_alloc(sizeof(*clos));
 	clos->type = tt_closure;
 	prototype *proto = GET_PTR(_proto);
-	if (null_p(proto->uplist)) {
-		clos->arg_idx = 0;
-	} else {
-		clos->arg_idx = byte_vector_len(proto->uplist);
-	}
+	clos->arg_idx = 1;
 	size_t cap = clos->arg_idx + proto->nargs;
-	clos->upvals = make_vector(cap, cap);
+	clos->upvals = make_vector(0, cap);
 	clos->proto = _proto;
 	return (sly_value)clos;
 }
@@ -687,7 +686,7 @@ make_dictionary(void)
 	return make_dictionary_sz(DICT_INIT_SIZE);
 }
 
-static int
+int
 slot_is_free(sly_value slot)
 {
 	return null_p(slot) || null_p(car(slot));

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-cflags='-D_POSIX_C_SOURCE=200809L -Wextra -Wall -Wswitch-enum -ggdb -std=c11'
+cflags='-D_POSIX_C_SOURCE=200809L -Wextra -Wall -Wswitch-enum -ggdb -rdynamic -std=c11'
 lflags=
 cc=gcc
 target='sly'

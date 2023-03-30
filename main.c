@@ -7,12 +7,17 @@ typedef struct sly_state {
 	stack_frame *begin;  // top level code
 } Sly_State;
 
+void dis(INSTR instr);
+
 sly_value
 vm_run(stack_frame *frame)
 {
 	INSTR instr;
     for (;;) {
+		printf("PC :: %zu\n", frame->pc);
 		instr = next_instr();
+		printf("PC :: %zu\n", frame->pc);
+		dis(instr);
 		enum opcode i = GET_OP(instr);
 		switch (i) {
 		case OP_NOP: break;
@@ -62,8 +67,10 @@ vm_run(stack_frame *frame)
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
 			u8 c = GET_C(instr);
+			printf("HELLO\n");
 			sly_value dict = get_upval(b);
 			set_reg(a, dictionary_ref(dict, get_reg(c)));
+			printf("HELLO AGAIN\n");
 		} break;
 		case OP_SETUPDICT: {
 			u8 a = GET_A(instr);
@@ -208,6 +215,12 @@ vm_run(stack_frame *frame)
 				for (size_t i = 0; i < nargs; ++i) {
 					vector_set(nframe->U, i + clos->arg_idx, get_reg(a + 1 + i));
 				}
+				printf("**********************************\n");
+				for (size_t i = 0; i < vector_len(proto->code); ++i) {
+					dis(vector_ref(proto->code, i));
+				}
+				printf("**********************************\n");
+				nframe->K = proto->K;
 				nframe->code = proto->code;
 				nframe->pc = proto->entry;
 				nframe->ret_slot = a;
@@ -266,14 +279,7 @@ vm_run(stack_frame *frame)
 			sly_value _proto = get_const(b);
 			sly_value val = make_closure(_proto);
 			closure *clos = GET_PTR(val);
-			prototype *proto = GET_PTR(_proto);
-			if (!null_p(proto->uplist)) {
-				size_t len = byte_vector_len(proto->uplist);
-				/* capture enclosing scope */
-				for (size_t i = 0; i < len; ++i) {
-					vector_set(clos->upvals, i, get_reg(byte_vector_ref(proto->uplist, i)));
-				}
-			}
+			vector_append(clos->upvals, vector_ref(frame->U, 0));
 			set_reg(a, val);
 		} break;
 		case OP_DISPLAY: {
@@ -420,6 +426,9 @@ dis(INSTR instr)
 	case OP_VECSET: {
 	} break;
 	case OP_CLOSURE: {
+		u8 a = GET_A(instr);
+		u64 b = GET_Bx(instr);
+		printf("(CLOSURE %d, %lu)\n", a, b);
 	} break;
 	case OP_DISPLAY: {
 		u8 a = GET_A(instr);

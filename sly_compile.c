@@ -80,6 +80,7 @@ static char *keywords[KW_COUNT] = {
 static sly_value kw_symbols[KW_COUNT];
 
 int comp_expr(struct compile *cc, sly_value form, int reg);
+static sly_value init_symtable(sly_value interned);
 
 static int
 is_keyword(sly_value sym)
@@ -90,6 +91,22 @@ is_keyword(sly_value sym)
 		}
 	}
 	return -1;
+}
+
+static sly_value
+symbol_lookup_props(struct compile *cc, sly_value sym)
+{
+	sly_value entry;
+	struct scope *scope = cc->cscope;
+	while (scope) {
+		entry = dictionary_entry_ref(scope->symtable, sym);
+		if (!slot_is_free(entry)) {
+			return cdr(entry);
+		}
+		scope = scope->parent;
+	}
+	sly_assert(0, "Error undefined symbol");
+	return SLY_NULL;
 }
 
 void
@@ -132,7 +149,6 @@ make_scope(void)
 								  make_vector(0, 8),
 								  make_vector(0, 8),
 								  0, 0, 0, 0);
-	scope->symtable = make_dictionary();
 	scope->prev_var = 0;
 	return scope;
 }
@@ -172,6 +188,7 @@ comp_define(struct compile *cc, sly_value form, int reg)
 		if (pair_p(datum) || symbol_p(datum)) {
 			dictionary_set(globals, var, SLY_VOID);
 			comp_expr(cc, car(form), reg);
+			if ((size_t)reg + 1 >= proto->nregs) proto->nregs = reg + 2;
 			vector_append(proto->code, iABx(OP_LOADK, reg + 1, st_prop.reg));
 			vector_append(proto->code, iABC(OP_SETUPDICT, 0, reg + 1, reg));
 		} else {
@@ -227,11 +244,12 @@ comp_set(struct compile *cc, sly_value form, int reg)
 	sly_value stx = car(form);
 	sly_value datum = syntax_to_datum(stx);
 	sly_assert(symbol_p(datum), "Error must be a variable");
-	sly_value prop = dictionary_ref(cc->cscope->symtable, datum);
+	sly_value prop = symbol_lookup_props(cc, datum);
 	struct symbol_properties st_prop = VALUE_TO_SYMPROP(prop);
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	form = cdr(form);
 	reg = comp_expr(cc, car(form), reg);
+	if ((size_t)reg + 1 <= proto->nregs) proto->nregs = reg + 2;
 	if (st_prop.type == sym_variable) {
 		if (reg != -1 && st_prop.reg != reg) {
 			vector_append(proto->code, iAB(OP_MOVE, st_prop.reg, reg));
@@ -251,7 +269,7 @@ comp_atom(struct compile *cc, sly_value form, int reg)
 	datum = syntax_to_datum(form);
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	if (symbol_p(datum)) {
-		sly_value prop = dictionary_ref(cc->cscope->symtable, datum);
+		sly_value prop = symbol_lookup_props(cc, datum);
 		struct symbol_properties st_prop = VALUE_TO_SYMPROP(prop);
 		switch ((enum symbol_type)st_prop.type) {
 		case sym_variable: {
@@ -271,6 +289,13 @@ comp_atom(struct compile *cc, sly_value form, int reg)
 			vector_append(proto->code, iAB(OP_GETUPVAL, reg, st_prop.reg));
 		} break;
 		case sym_global: {
+			if (!IS_GLOBAL(cc->cscope)) {
+				st_prop.islocal = 1;
+				st_prop.type = sym_constant;
+				st_prop.reg = vector_len(proto->K);
+				vector_append(proto->K, datum);
+				dictionary_set(cc->cscope->symtable, datum, SYMPROP_TO_VALUE(st_prop));
+			}
 			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 			vector_append(proto->code, iABx(OP_LOADK, reg, st_prop.reg));
 			vector_append(proto->code, iABC(OP_GETUPDICT, reg, 0, reg));
@@ -321,6 +346,55 @@ comp_funcall(struct compile *cc, sly_value form, int reg)
 }
 
 int
+comp_lambda(struct compile *cc, sly_value form, int reg)
+{
+	struct scope *scope = make_scope();
+	scope->symtable = init_symtable(cc->interned);
+	scope->parent = cc->cscope;
+	cc->cscope = scope;
+	int preg = reg;
+	reg = 0;
+	prototype *proto = GET_PTR(scope->proto);
+	sly_value symtable = scope->symtable;
+	sly_value stx, sym, args = car(form);
+	form = cdr(form);
+	struct symbol_properties st_prop = {0};
+	st_prop.type = sym_arg;
+	st_prop.islocal = 1;
+	size_t nargs = 0;
+	while (pair_p(args)) {
+		stx = car(args);
+		sym = syntax_to_datum(stx);
+		sly_assert(symbol_p(sym), "Compile error function parameter must be a symbol");
+		nargs++;
+		st_prop.reg = nargs;
+		dictionary_set(symtable, sym, SYMPROP_TO_VALUE(st_prop));
+		args = cdr(args);
+	}
+	if (!null_p(args)) {
+		sym = syntax_to_datum(args);
+		sly_assert(symbol_p(sym), "Compile error function parameter must be a symbol");
+		proto->has_varg = 1;
+		st_prop.reg = nargs + 1;
+		dictionary_set(symtable, sym, SYMPROP_TO_VALUE(st_prop));
+	}
+	proto->nargs = nargs;
+	while (!null_p(form)) {
+		reg = comp_expr(cc, car(form), reg);
+		form = cdr(form);
+	}
+	vector_append(proto->code, iA(OP_RETURN, reg));
+	cc->cscope = cc->cscope->parent;
+	reg = preg;
+	prototype *cproto = GET_PTR(cc->cscope->proto);
+	size_t i = vector_len(cproto->K);
+	vector_append(cproto->K, scope->proto);
+	if ((size_t)reg >= cproto->nregs) cproto->nregs = reg + 1;
+	vector_append(cproto->code, iABx(OP_CLOSURE, reg, i));
+	return reg;
+}
+
+int
 comp_expr(struct compile *cc, sly_value form, int reg)
 {
 	if (!pair_p(form)) {
@@ -337,9 +411,11 @@ comp_expr(struct compile *cc, sly_value form, int reg)
 		switch ((enum kw)kw) {
 		case kw_define: {
 			form = cdr(form);
-			comp_define(cc, form, reg);
+			reg = comp_define(cc, form, reg);
 		} break;
 		case kw_lambda: {
+			form = cdr(form);
+			reg = comp_lambda(cc, form, reg);
 		} break;
 		case kw_quote: {
 		} break;
@@ -494,7 +570,7 @@ sly_compile(char *file_name)
 	init_builtins(&cc);
 	ast = parse_file(file_name, &src, cc.interned);
 	proto = GET_PTR(cc.cscope->proto);
-	comp_expr(&cc, ast, 0);
-	vector_append(proto->code, iA(OP_RETURN, 0));
+	int r = comp_expr(&cc, ast, 0);
+	vector_append(proto->code, iA(OP_RETURN, r));
 	return cc;
 }

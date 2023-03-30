@@ -35,7 +35,7 @@ typedef uintptr_t sly_value;
 #define SLY_NULL  ((sly_value)st_pair)
 #define SLY_VOID  ((sly_value)0)
 #define SLY_FALSE ((sly_value)st_bool)
-#define SLY_TRUE  ((sly_value)((UINT64_MAX^TAG_MASK)|st_bool))
+#define SLY_TRUE  ((sly_value)((UINT64_MAX & ~TAG_MASK)|st_bool))
 #define ctobool(b) ((b) ? SLY_TRUE : SLY_FALSE)
 
 struct imm_value {
@@ -135,6 +135,7 @@ typedef struct _syntax {
 	sly_value datum;
 } syntax;
 
+void sly_assert(int p, char *msg);
 u64 sly_hash(sly_value v);
 int symbol_eq(sly_value o1, sly_value o2);
 i64 get_int(sly_value v);
@@ -181,6 +182,7 @@ sly_value sly_num_eq(sly_value x, sly_value y);
 sly_value make_syntax(token tok, sly_value datum);
 sly_value syntax_to_datum(sly_value syn);
 sly_value make_dictionary(void);
+int slot_is_free(sly_value slot);
 void dictionary_set(sly_value d, sly_value key, sly_value value);
 sly_value dictionary_entry_ref(sly_value d, sly_value key);
 sly_value dictionary_ref(sly_value d, sly_value key);
@@ -237,15 +239,6 @@ byte_p(sly_value val)
 	}
 	return TYPEOF(val) == tt_byte;
 	return 0;
-}
-
-static inline void
-sly_assert(int p, char *msg)
-{
-	if (!p) {
-		fprintf(stderr, "%s\n", msg);
-		exit(1);
-	}
 }
 
 static inline void *
