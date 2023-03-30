@@ -76,6 +76,13 @@ parse_value(char *cstr, sly_value interned)
 	case tok_string: {
 		return make_syntax(t, make_string(&cstr[t.so+1], t.eo - t.so - 2));
 	} break;
+	case tok_bool: {
+		if (cstr[t.so+1] == 'f') {
+			return make_syntax(t, SLY_FALSE);
+		} else {
+			return make_syntax(t, SLY_TRUE);
+		}
+	} break;
 	case tok_float: {
 		return make_syntax(t, make_float(strtod(&cstr[t.so], NULL)));
 	} break;

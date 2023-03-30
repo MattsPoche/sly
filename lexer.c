@@ -26,6 +26,7 @@ static char retok[] =
 	"|^(\\.)"RE_SEP
 	"|^(#[(])"
 	"|^(\".*\")"RE_SEP
+	"|^(#t|#f)"RE_SEP
 	"|^(-?[0-9]+\\.[0-9]+)"RE_SEP
 	"|^(#[xX][0-9A-Fa-f]+)"RE_SEP
 	"|^(-?[0-9]+)"RE_SEP
@@ -59,6 +60,7 @@ tok_to_string(enum token t)
 	case tok_rbracket: return "rbracket";
 	case tok_vector: return "vector";
 	case tok_dot: return "dot";
+	case tok_bool: return "bool";
 	case tok_string: return "string";
 	case tok_float: return "float";
 	case tok_hex: return "hex";

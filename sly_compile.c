@@ -45,6 +45,16 @@ struct symbol_properties {
 #define SYMPROP_TO_VALUE(prop) (*((sly_value *)(&prop)))
 #define VALUE_TO_SYMPROP(val)  (*((struct symbol_properties *)(&(prop))))
 #define IS_GLOBAL(scope)       ((scope)->parent == NULL)
+#define ADD_BUILTIN(name, fn)										\
+	do {															\
+		st_prop.reg = vector_len(proto->K);							\
+		st_prop.islocal = 0;										\
+		st_prop.type = sym_global;									\
+		sym = make_symbol(cc->interned, name, strlen(name));		\
+		vector_append(proto->K, sym);								\
+		dictionary_set(symtable, sym, SYMPROP_TO_VALUE(st_prop));	\
+		dictionary_set(cc->globals, sym, make_cclosure(fn, 2, 1));	\
+	} while (0)
 
 static char *keywords[KW_COUNT] = {
 	[kw_define]					= "define",
@@ -183,6 +193,35 @@ comp_define(struct compile *cc, sly_value form, int reg)
 }
 
 int
+comp_if(struct compile *cc, sly_value form, int reg)
+{
+	prototype *proto = GET_PTR(cc->cscope->proto);
+	sly_value boolexpr = car(form);
+	form = cdr(form);
+	sly_value tbranch = car(form);
+	form = cdr(form);
+	sly_value fbranch = car(form);
+	form = cdr(form);
+	sly_assert(null_p(form), "Compile Error malformed if expression");
+	int be_res = comp_expr(cc, boolexpr, reg);
+	size_t fjmp = vector_len(proto->code);
+	vector_append(proto->code, 0);
+	comp_expr(cc, tbranch, reg);
+	size_t jmp = vector_len(proto->code);
+	vector_append(proto->code, 0);
+	comp_expr(cc, fbranch, reg);
+	size_t end = vector_len(proto->code);
+	printf("end :: %zu\n", end);
+	if (be_res == -1) {
+		vector_set(proto->code, fjmp, iABx(OP_FJMP, reg, jmp + 1));
+	} else {
+		vector_set(proto->code, fjmp, iABx(OP_FJMP, be_res, jmp + 1));
+	}
+	vector_set(proto->code, jmp,  iAx(OP_JMP, end));
+	return reg;
+}
+
+int
 comp_set(struct compile *cc, sly_value form, int reg)
 {
 	form = cdr(form);
@@ -239,10 +278,20 @@ comp_atom(struct compile *cc, sly_value form, int reg)
 		} break;
 		}
 	} else { /* constant */
-		size_t idx = vector_len(proto->K);
-		vector_append(proto->K, datum);
-		if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
-		vector_append(proto->code, iABx(OP_LOADK, reg, idx));
+		if (datum == SLY_FALSE) {
+			vector_append(proto->code, iA(OP_LOAD_FALSE, reg));
+		} else if (datum == SLY_TRUE) {
+			vector_append(proto->code, iA(OP_LOAD_TRUE, reg));
+		} else if (null_p(datum)) {
+			vector_append(proto->code, iA(OP_LOAD_NULL, reg));
+		} else if (void_p(datum)) {
+			vector_append(proto->code, iA(OP_LOAD_VOID, reg));
+		} else {
+			size_t idx = vector_len(proto->K);
+			vector_append(proto->K, datum);
+			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
+			vector_append(proto->code, iABx(OP_LOADK, reg, idx));
+		}
 	}
 	return -1;
 }
@@ -317,6 +366,8 @@ comp_expr(struct compile *cc, sly_value form, int reg)
 			}
 		} break;
 		case kw_if: {
+			form = cdr(form);
+			reg = comp_if(cc, form, reg);
 		} break;
 		case kw_set: {
 			comp_set(cc, form, reg);
@@ -351,13 +402,61 @@ comp_expr(struct compile *cc, sly_value form, int reg)
 sly_value
 cadd(sly_value args)
 {
-	sly_value sum = sly_add(vector_ref(args, 0), vector_ref(args, 1));
+	sly_value total = sly_add(vector_ref(args, 0), vector_ref(args, 1));
 	sly_value vargs = vector_ref(args, 2);
 	while (!null_p(vargs)) {
-		sum = sly_add(sum, car(vargs));
+		total = sly_add(total, car(vargs));
 		vargs = cdr(vargs);
 	}
-	return sum;
+	return total;
+}
+
+sly_value
+csub(sly_value args)
+{
+	sly_value total = sly_sub(vector_ref(args, 0), vector_ref(args, 1));
+	sly_value vargs = vector_ref(args, 2);
+	while (!null_p(vargs)) {
+		total = sly_sub(total, car(vargs));
+		vargs = cdr(vargs);
+	}
+	return total;
+}
+
+sly_value
+cmul(sly_value args)
+{
+	sly_value total = sly_mul(vector_ref(args, 0), vector_ref(args, 1));
+	sly_value vargs = vector_ref(args, 2);
+	while (!null_p(vargs)) {
+		total = sly_mul(total, car(vargs));
+		vargs = cdr(vargs);
+	}
+	return total;
+}
+
+sly_value
+cdiv(sly_value args)
+{
+	sly_value total = sly_div(vector_ref(args, 0), vector_ref(args, 1));
+	sly_value vargs = vector_ref(args, 2);
+	while (!null_p(vargs)) {
+		total = sly_div(total, car(vargs));
+		vargs = cdr(vargs);
+	}
+	return total;
+}
+
+sly_value
+cmod(sly_value args)
+{
+	sly_value total = sly_mod(vector_ref(args, 0), vector_ref(args, 1));
+	sly_value vargs = vector_ref(args, 2);
+	while (!null_p(vargs)) {
+		total = sly_mod(total, car(vargs));
+		vargs = cdr(vargs);
+	}
+	return total;
 }
 
 void
@@ -367,14 +466,13 @@ init_builtins(struct compile *cc)
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	sly_value symtable = cc->cscope->symtable;
 	struct symbol_properties st_prop = {0};
+	sly_value sym;
 	cc->globals = make_dictionary();
-	st_prop.reg = vector_len(proto->K);
-	st_prop.islocal = 0;
-	st_prop.type = sym_global;
-	sly_value sym = make_symbol(cc->interned, "+", 1);
-	vector_append(proto->K, sym);
-	dictionary_set(symtable, sym, SYMPROP_TO_VALUE(st_prop));
-	dictionary_set(cc->globals, sym, make_cclosure(cadd, 2, 1));
+	ADD_BUILTIN("+", cadd);
+	ADD_BUILTIN("-", csub);
+	ADD_BUILTIN("*", cmul);
+	ADD_BUILTIN("/", cdiv);
+	ADD_BUILTIN("%", cmod);
 }
 
 struct compile

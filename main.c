@@ -10,6 +10,8 @@ typedef struct sly_state {
 sly_value
 vm_run(stack_frame *frame)
 {
+	int jmp_limit = 5;
+	int jmps = 0;
 	INSTR instr;
     for (;;) {
 		instr = next_instr();
@@ -31,6 +33,22 @@ vm_run(stack_frame *frame)
 			u8 a = GET_A(instr);
 			size_t b = GET_Bx(instr);
 			set_reg(a, get_const(b));
+		} break;
+		case OP_LOAD_FALSE: {
+			u8 a = GET_A(instr);
+			set_reg(a, SLY_FALSE);
+		} break;
+		case OP_LOAD_TRUE: {
+			u8 a = GET_A(instr);
+			set_reg(a, SLY_TRUE);
+		} break;
+		case OP_LOAD_NULL: {
+			u8 a = GET_A(instr);
+			set_reg(a, SLY_NULL);
+		} break;
+		case OP_LOAD_VOID: {
+			u8 a = GET_A(instr);
+			set_reg(a, SLY_VOID);
 		} break;
 		case OP_GETUPVAL: {
 			u8 a = GET_A(instr);
@@ -82,6 +100,7 @@ vm_run(stack_frame *frame)
 			u8 b = GET_B(instr);
 			set_cdr(get_reg(a), get_reg(b));
 		} break;
+#if 0
 		case OP_ADD: {
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
@@ -112,10 +131,23 @@ vm_run(stack_frame *frame)
 			u8 c = GET_C(instr);
 			set_reg(a, sly_mod(get_reg(b), get_reg(c)));
 		} break;
+#endif
 		case OP_JMP: {
+			if (jmps == jmp_limit) return SLY_NULL;
+			jmps++;
 			u64 a = GET_Ax(instr);
 			frame->pc = a;
 		} break;
+		case OP_FJMP: {
+			if (jmps == jmp_limit) return SLY_NULL;
+			jmps++;
+			u8 a = GET_A(instr);
+			u64 b = GET_Bx(instr);
+			if (get_reg(a) == SLY_FALSE) {
+				frame->pc = b;
+			}
+		} break;
+#if 0
 		case OP_JGZ: {
 			u8 a = GET_A(instr);
 			u64 b = GET_Bx(instr);
@@ -144,6 +176,7 @@ vm_run(stack_frame *frame)
 				frame->pc = b;
 			}
 		} break;
+#endif
 		case OP_CALL: {
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
@@ -288,6 +321,22 @@ dis(INSTR instr)
 		u64 b = GET_Bx(instr);
 		printf("(LOADK %d %lu)\n", a, b);
 	} break;
+	case OP_LOAD_FALSE: {
+		u8 a = GET_A(instr);
+		printf("(OP_LOAD_FALSE %d)\n", a);
+	} break;
+	case OP_LOAD_TRUE: {
+		u8 a = GET_A(instr);
+		printf("(OP_LOAD_TRUE %d)\n", a);
+	} break;
+	case OP_LOAD_NULL: {
+		u8 a = GET_A(instr);
+		printf("(OP_LOAD_NULL %d)\n", a);
+	} break;
+	case OP_LOAD_VOID: {
+		u8 a = GET_A(instr);
+		printf("(OP_LOAD_VOID %d)\n", a);
+	} break;
 	case OP_GETUPVAL: {
 	} break;
 	case OP_SETUPVAL: {
@@ -314,6 +363,7 @@ dis(INSTR instr)
 	} break;
 	case OP_SETCDR: {
 	} break;
+#if 0
 	case OP_ADD: {
 		u8 a = GET_A(instr);
 		u8 b = GET_B(instr);
@@ -328,8 +378,17 @@ dis(INSTR instr)
 	} break;
 	case OP_MOD: {
 	} break;
+#endif
 	case OP_JMP: {
+		u64 a = GET_Ax(instr);
+		printf("(JMP %lu)\n", a);
 	} break;
+	case OP_FJMP: {
+		u8 a = GET_A(instr);
+		u64 b = GET_Bx(instr);
+		printf("(FJMP %d %lu)\n", a, b);
+	} break;
+#if 0
 	case OP_JGZ: {
 	} break;
 	case OP_JLZ: {
@@ -338,6 +397,7 @@ dis(INSTR instr)
 	} break;
 	case OP_JNZ: {
 	} break;
+#endif
 	case OP_CALL: {
 		u8 a = GET_A(instr);
 		u8 b = GET_B(instr);

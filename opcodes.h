@@ -29,7 +29,7 @@
 #define GET_E(instr)  ((u8)(((instr) & E_MASK) >> 40))
 #define GET_F(instr)  ((u8)(((instr) & F_MASK) >> 48))
 #define GET_G(instr)  ((u8)(((instr) & G_MASK) >> 56))
-#define GET_Ax(instr) ((sly_value)(((instr) & Bx_MASK) >> 8))
+#define GET_Ax(instr) ((sly_value)(((instr) & Ax_MASK) >> 8))
 #define GET_Bx(instr) ((sly_value)(((instr) & Bx_MASK) >> 16))
 #define GET_Cx(instr) ((sly_value)(((instr) & Cx_MASK) >> 24))
 #define GET_Dx(instr) ((sly_value)(((instr) & Dx_MASK) >> 32))
@@ -51,6 +51,10 @@ enum opcode {
 	OP_MOVE,      // iAB   | R[A] := R[B]
 	OP_LOADI,    // iABx  | R[A] := <i64> Bx
 	OP_LOADK,    // iABx  | R[A] := K[Bx]
+	OP_LOAD_FALSE, // iA  | R[A] := SLY_FALSE
+	OP_LOAD_TRUE, // iA  | R[A] := SLY_TRUE
+	OP_LOAD_NULL,  // iA  | R[A] := SLY_NULL
+	OP_LOAD_VOID,  // iA  | R[A] := SLY_VOID
 	OP_GETUPVAL, // iAB  | R[A] := U[B]
 	OP_SETUPVAL, // iAB  | U[B] := R[A]
 	OP_GETUPDICT, // iABC | R[A] := <dictionary> U[B][R[C]]
@@ -60,16 +64,21 @@ enum opcode {
 	OP_CDR,      // iAB   | R[A] := cdr(R[B])
 	OP_SETCAR,  // iAB   | CAR(R[A]) := R[B]
 	OP_SETCDR,  // iAB   | CDR(R[A]) := R[B]
+#if 0
 	OP_ADD,     // iABC  | R[C] := <i64> R[A] + <i64> R[B]
 	OP_SUB,     // iABC  | R[C] := <i64> R[A] - <i64> R[B]
 	OP_MUL,     // iABC  | R[C] := <i64> R[A] * <i64> R[B]
 	OP_DIV,     // iABC  | R[C] := <i64> R[A] / <i64> R[B]
 	OP_MOD,     // iABC  | R[C] := <i64> R[A] % <i64> R[B]
+#endif
 	OP_JMP,     // iAx   | PC := <u64> Ax
+	OP_FJMP,    // iABx  | if R[A] == #f then PC := Bx
+#if 0
 	OP_JGZ,     // iABx  | if <i64> R[A] > 0: PC := <u64> Bx
 	OP_JLZ,     // iABx  | if <i64> R[A] < 0: PC := <u64> Bx
 	OP_JEZ,     // iABx  | if <i64> R[A] == 0: PC := <u64> Bx
 	OP_JNZ,     // iABx  | if <i64> R[A] != 0: PC := <u64> Bx
+#endif
 	OP_CALL,    // iAB   | R[A] := R[A](A+1, ..., A+B-1)
 	OP_TAILCALL, // iAB   | R[A] := R[A](A+1, ..., A+B-1)
 	OP_RETURN,  // iA    | return R[A]

@@ -25,6 +25,7 @@ typedef uintptr_t sly_value;
 #define st_ptr         0x0
 #define st_pair        0x1
 #define st_imm         0x2
+#define st_bool        0x4
 #define TAG_MASK       0x7
 
 #define imm_int   0
@@ -33,7 +34,9 @@ typedef uintptr_t sly_value;
 
 #define SLY_NULL  ((sly_value)st_pair)
 #define SLY_VOID  ((sly_value)0)
-#define SLY_FALSE ((sly_value)st_imm)
+#define SLY_FALSE ((sly_value)st_bool)
+#define SLY_TRUE  ((sly_value)((UINT64_MAX^TAG_MASK)|st_bool))
+#define ctobool(b) ((b) ? SLY_TRUE : SLY_FALSE)
 
 struct imm_value {
 	u8 _padding[3];
@@ -46,7 +49,6 @@ struct imm_value {
 };
 
 enum type_tag {
-	tt_bool,
 	tt_byte,
 	tt_int,
 	tt_float,
@@ -193,6 +195,7 @@ void dictionary_remove(sly_value d, sly_value key);
 #define void_p(v)        ((v) == SLY_VOID)
 #define pair_p(v)        (!null_p(v) && ((v) & TAG_MASK) == st_pair)
 #define imm_p(v)         (((v) & TAG_MASK) == st_imm)
+#define bool_p(v)        (((v) & TAG_MASK) == st_bool)
 #define number_p(v)      (int_p(v) || float_p(v) || byte_p(v))
 #define symbol_p(v)      (ptr_p(v) && TYPEOF(v) == tt_symbol)
 #define vector_p(v)      (ptr_p(v) && TYPEOF(v) == tt_vector)
