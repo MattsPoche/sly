@@ -14,10 +14,7 @@ vm_run(stack_frame *frame)
 {
 	INSTR instr;
     for (;;) {
-		printf("PC :: %zu\n", frame->pc);
 		instr = next_instr();
-		printf("PC :: %zu\n", frame->pc);
-		dis(instr);
 		enum opcode i = GET_OP(instr);
 		switch (i) {
 		case OP_NOP: break;
@@ -67,10 +64,8 @@ vm_run(stack_frame *frame)
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
 			u8 c = GET_C(instr);
-			printf("HELLO\n");
 			sly_value dict = get_upval(b);
 			set_reg(a, dictionary_ref(dict, get_reg(c)));
-			printf("HELLO AGAIN\n");
 		} break;
 		case OP_SETUPDICT: {
 			u8 a = GET_A(instr);
@@ -212,14 +207,11 @@ vm_run(stack_frame *frame)
 				sly_assert(nargs == proto->nargs, "Error wrong number of arguments");
 				stack_frame *nframe = make_stack(proto->nregs);
 				nframe->U = copy_vector(clos->upvals);
+				nframe->U = make_vector(0, 1);
+				vector_append(nframe->U, vector_ref(clos->upvals, 0));
 				for (size_t i = 0; i < nargs; ++i) {
-					vector_set(nframe->U, i + clos->arg_idx, get_reg(a + 1 + i));
+					vector_append(nframe->U, get_reg(a + 1 + i));
 				}
-				printf("**********************************\n");
-				for (size_t i = 0; i < vector_len(proto->code); ++i) {
-					dis(vector_ref(proto->code, i));
-				}
-				printf("**********************************\n");
 				nframe->K = proto->K;
 				nframe->code = proto->code;
 				nframe->pc = proto->entry;
@@ -323,23 +315,29 @@ dis(INSTR instr)
 	} break;
 	case OP_LOAD_FALSE: {
 		u8 a = GET_A(instr);
-		printf("(OP_LOAD_FALSE %d)\n", a);
+		printf("(LOAD_FALSE %d)\n", a);
 	} break;
 	case OP_LOAD_TRUE: {
 		u8 a = GET_A(instr);
-		printf("(OP_LOAD_TRUE %d)\n", a);
+		printf("(LOAD_TRUE %d)\n", a);
 	} break;
 	case OP_LOAD_NULL: {
 		u8 a = GET_A(instr);
-		printf("(OP_LOAD_NULL %d)\n", a);
+		printf("(LOAD_NULL %d)\n", a);
 	} break;
 	case OP_LOAD_VOID: {
 		u8 a = GET_A(instr);
-		printf("(OP_LOAD_VOID %d)\n", a);
+		printf("(LOAD_VOID %d)\n", a);
 	} break;
 	case OP_GETUPVAL: {
+		u8 a = GET_A(instr);
+		u8 b = GET_B(instr);
+		printf("(GETUPVAL %d %d)\n", a, b);
 	} break;
 	case OP_SETUPVAL: {
+		u8 a = GET_A(instr);
+		u8 b = GET_B(instr);
+		printf("(SETUPVAL %d %d)\n", a, b);
 	} break;
 	case OP_GETUPDICT: {
 		u8 a = GET_A(instr);
@@ -465,7 +463,7 @@ main(int argc, char *argv[])
 			run_file(argv[i]);
 		}
 	} else {
-		run_file("test.scm");
+		run_file("test2.scm");
 	}
 	return 0;
 }
