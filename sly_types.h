@@ -181,6 +181,8 @@ sly_value sly_div(sly_value x, sly_value y);
 sly_value sly_idiv(sly_value x, sly_value y);
 sly_value sly_mod(sly_value x, sly_value y);
 int sly_num_eq(sly_value x, sly_value y);
+int sly_num_lt(sly_value x, sly_value y);
+int sly_num_gt(sly_value x, sly_value y);
 int sly_eq(sly_value o2, sly_value o1);
 sly_value make_syntax(token tok, sly_value datum);
 sly_value syntax_to_datum(sly_value syn);

@@ -64,21 +64,8 @@ enum opcode {
 	OP_CDR,      // iAB   | R[A] := cdr(R[B])
 	OP_SETCAR,  // iAB   | CAR(R[A]) := R[B]
 	OP_SETCDR,  // iAB   | CDR(R[A]) := R[B]
-#if 0
-	OP_ADD,     // iABC  | R[C] := <i64> R[A] + <i64> R[B]
-	OP_SUB,     // iABC  | R[C] := <i64> R[A] - <i64> R[B]
-	OP_MUL,     // iABC  | R[C] := <i64> R[A] * <i64> R[B]
-	OP_DIV,     // iABC  | R[C] := <i64> R[A] / <i64> R[B]
-	OP_MOD,     // iABC  | R[C] := <i64> R[A] % <i64> R[B]
-#endif
 	OP_JMP,     // iAx   | PC := <u64> Ax
 	OP_FJMP,    // iABx  | if R[A] == #f then PC := Bx
-#if 0
-	OP_JGZ,     // iABx  | if <i64> R[A] > 0: PC := <u64> Bx
-	OP_JLZ,     // iABx  | if <i64> R[A] < 0: PC := <u64> Bx
-	OP_JEZ,     // iABx  | if <i64> R[A] == 0: PC := <u64> Bx
-	OP_JNZ,     // iABx  | if <i64> R[A] != 0: PC := <u64> Bx
-#endif
 	OP_CALL,    // iAB   | R[A] := R[A](A+1, ..., A+B-1)
 	OP_TAILCALL, // iAB   | R[A] := R[A](A+1, ..., A+B-1)
 	OP_RETURN,  // iA    | return R[A]

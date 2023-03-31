@@ -3,6 +3,11 @@
 #include "opcodes.h"
 #include "sly_compile.h"
 
+/* TODO
+ * [ ] Associate syntactic info with opcodes
+ * [ ] Better error messages / vm traps.
+ */
+
 enum kw {
 	kw_define = 0,
 	kw_lambda,
@@ -400,6 +405,7 @@ comp_lambda(struct compile *cc, sly_value form, int reg)
 	vector_append(cproto->K, scope->proto);
 	if ((size_t)reg >= cproto->nregs) cproto->nregs = reg + 1;
 	vector_append(cproto->code, iABx(OP_CLOSURE, reg, i));
+	free(scope);
 	return reg;
 }
 
@@ -549,6 +555,18 @@ cnum_eq(sly_value args)
 	return ctobool(sly_num_eq(vector_ref(args, 0), vector_ref(args, 1)));
 }
 
+sly_value
+cnum_lt(sly_value args)
+{
+	return ctobool(sly_num_lt(vector_ref(args, 0), vector_ref(args, 1)));
+}
+
+sly_value
+cnum_gt(sly_value args)
+{
+	return ctobool(sly_num_gt(vector_ref(args, 0), vector_ref(args, 1)));
+}
+
 void
 init_builtins(struct compile *cc)
 { /* TODO The names of these symbols do not need to be added into
@@ -566,6 +584,8 @@ init_builtins(struct compile *cc)
 	ADD_BUILTIN("/", cdiv, 2, 1);
 	ADD_BUILTIN("%", cmod, 2, 1);
 	ADD_BUILTIN("=", cnum_eq, 2, 0);
+	ADD_BUILTIN("<", cnum_lt, 2, 0);
+	ADD_BUILTIN(">", cnum_gt, 2, 0);
 }
 
 struct compile

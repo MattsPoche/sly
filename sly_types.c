@@ -671,6 +671,84 @@ sly_num_eq(sly_value x, sly_value y)
 	return 0;
 }
 
+static int
+num_ltfx(f64 x, sly_value y)
+{
+	sly_assert(number_p(y), "Type Error expected number");
+	if (int_p(y)) {
+		return x  < get_int(y);
+	} else if (float_p(y)) {
+		return x < get_float(y);
+	}
+	sly_assert(0, "Error Unreachable");
+	return 0;
+}
+
+static int
+num_ltix(i64 x, sly_value y)
+{
+	sly_assert(number_p(y), "Type Error expected number");
+	if (int_p(y)) {
+		return x < get_int(y);
+	} else if (float_p(y)) {
+		return x < get_float(y);
+	}
+	sly_assert(0, "Error Unreachable");
+	return 0;
+}
+
+int
+sly_num_lt(sly_value x, sly_value y)
+{
+	sly_assert(number_p(x), "Type Error expected number");
+	if (int_p(x)) {
+		return num_ltix(get_int(x), y);
+	} else if (float_p(x)) {
+		return num_ltfx(get_float(x), y);
+	}
+	sly_assert(0, "Error Unreachable");
+	return 0;
+}
+
+static int
+num_gtfx(f64 x, sly_value y)
+{
+	sly_assert(number_p(y), "Type Error expected number");
+	if (int_p(y)) {
+		return x  > get_int(y);
+	} else if (float_p(y)) {
+		return x > get_float(y);
+	}
+	sly_assert(0, "Error Unreachable");
+	return 0;
+}
+
+static int
+num_gtix(i64 x, sly_value y)
+{
+	sly_assert(number_p(y), "Type Error expected number");
+	if (int_p(y)) {
+		return x > get_int(y);
+	} else if (float_p(y)) {
+		return x > get_float(y);
+	}
+	sly_assert(0, "Error Unreachable");
+	return 0;
+}
+
+int
+sly_num_gt(sly_value x, sly_value y)
+{
+	sly_assert(number_p(x), "Type Error expected number");
+	if (int_p(x)) {
+		return num_gtix(get_int(x), y);
+	} else if (float_p(x)) {
+		return num_gtfx(get_float(x), y);
+	}
+	sly_assert(0, "Error Unreachable");
+	return 0;
+}
+
 int
 sly_eq(sly_value o1, sly_value o2)
 {

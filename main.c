@@ -100,38 +100,6 @@ vm_run(stack_frame *frame)
 			u8 b = GET_B(instr);
 			set_cdr(get_reg(a), get_reg(b));
 		} break;
-#if 0
-		case OP_ADD: {
-			u8 a = GET_A(instr);
-			u8 b = GET_B(instr);
-			u8 c = GET_C(instr);
-			set_reg(a, sly_add(get_reg(b), get_reg(c)));
-		} break;
-		case OP_SUB: {
-			u8 a = GET_A(instr);
-			u8 b = GET_B(instr);
-			u8 c = GET_C(instr);
-			set_reg(a, sly_sub(get_reg(b), get_reg(c)));
-		} break;
-		case OP_MUL: {
-			u8 a = GET_A(instr);
-			u8 b = GET_B(instr);
-			u8 c = GET_C(instr);
-			set_reg(a, sly_mul(get_reg(b), get_reg(c)));
-		} break;
-		case OP_DIV: {
-			u8 a = GET_A(instr);
-			u8 b = GET_B(instr);
-			u8 c = GET_C(instr);
-			set_reg(a, sly_div(get_reg(b), get_reg(c)));
-		} break;
-		case OP_MOD: {
-			u8 a = GET_A(instr);
-			u8 b = GET_B(instr);
-			u8 c = GET_C(instr);
-			set_reg(a, sly_mod(get_reg(b), get_reg(c)));
-		} break;
-#endif
 		case OP_JMP: {
 			u64 a = GET_Ax(instr);
 			frame->pc = a;
@@ -143,36 +111,6 @@ vm_run(stack_frame *frame)
 				frame->pc = b;
 			}
 		} break;
-#if 0
-		case OP_JGZ: {
-			u8 a = GET_A(instr);
-			u64 b = GET_Bx(instr);
-			if (get_int(get_reg(a)) > 0) {
-				frame->pc = b;
-			}
-		} break;
-		case OP_JLZ: {
-			u8 a = GET_A(instr);
-			u64 b = GET_Bx(instr);
-			if (get_int(get_reg(a)) < 0) {
-				frame->pc = b;
-			}
-		} break;
-		case OP_JEZ: {
-			u8 a = GET_A(instr);
-			u64 b = GET_Bx(instr);
-			if (get_int(get_reg(a)) == 0) {
-				frame->pc = b;
-			}
-		} break;
-		case OP_JNZ: {
-			u8 a = GET_A(instr);
-			u64 b = GET_Bx(instr);
-			if (get_int(get_reg(a)) != 0) {
-				frame->pc = b;
-			}
-		} break;
-#endif
 		case OP_CALL: {
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
@@ -219,6 +157,8 @@ vm_run(stack_frame *frame)
 				nframe->parent = frame;
 				frame = nframe;
 			} else {
+				printf("[%zu]\t", frame->pc-1);
+				dis(instr);
 				sly_assert(0, "Type Error expected procedure");
 			}
 		} break;
@@ -361,22 +301,6 @@ dis(INSTR instr)
 	} break;
 	case OP_SETCDR: {
 	} break;
-#if 0
-	case OP_ADD: {
-		u8 a = GET_A(instr);
-		u8 b = GET_B(instr);
-		u8 c = GET_C(instr);
-		printf("(ADD %d %d %d)\n", a, b, c);
-	} break;
-	case OP_SUB: {
-	} break;
-	case OP_MUL: {
-	} break;
-	case OP_DIV: {
-	} break;
-	case OP_MOD: {
-	} break;
-#endif
 	case OP_JMP: {
 		u64 a = GET_Ax(instr);
 		printf("(JMP %lu)\n", a);
@@ -386,16 +310,6 @@ dis(INSTR instr)
 		u64 b = GET_Bx(instr);
 		printf("(FJMP %d %lu)\n", a, b);
 	} break;
-#if 0
-	case OP_JGZ: {
-	} break;
-	case OP_JLZ: {
-	} break;
-	case OP_JEZ: {
-	} break;
-	case OP_JNZ: {
-	} break;
-#endif
 	case OP_CALL: {
 		u8 a = GET_A(instr);
 		u8 b = GET_B(instr);
@@ -435,6 +349,32 @@ dis(INSTR instr)
 	}
 }
 
+void
+dis_code(sly_value code)
+{
+	size_t len = vector_len(code);
+	for (size_t i = 0; i < len; ++i) {
+		printf("[%zu]\t", i);
+		dis(vector_ref(code, i));
+	}
+}
+
+void
+dis_all(stack_frame *frame)
+{
+	dis_code(frame->code);
+	printf("============================================\n");
+	size_t len = vector_len(frame->K);
+	for (size_t i = 0; i < len; ++i) {
+		sly_value value = vector_ref(frame->K, i);
+		if (prototype_p(value)) {
+			prototype *proto = GET_PTR(value);
+			dis_code(proto->code);
+			printf("============================================\n");
+		}
+	}
+}
+
 sly_value
 run_file(char *file_name)
 {
@@ -442,16 +382,12 @@ run_file(char *file_name)
 	struct compile cc = sly_compile(file_name);
 	prototype *proto = GET_PTR(cc.cscope->proto);
 	stack_frame *frame = make_stack(proto->nregs);
-	size_t len = vector_len(proto->code);
-	for (size_t i = 0; i < len; ++i) {
-		dis(vector_ref(proto->code, i));
-	}
-	printf("============================================\n");
 	frame->U = make_vector(12, 12);
 	vector_set(frame->U, 0, cc.globals);
 	frame->K = proto->K;
 	frame->code = proto->code;
 	frame->pc = proto->entry;
+	dis_all(frame);
 	return vm_run(frame);
 }
 
