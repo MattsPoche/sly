@@ -157,8 +157,6 @@ vm_run(stack_frame *frame)
 				nframe->parent = frame;
 				frame = nframe;
 			} else {
-				printf("[%zu]\t", frame->pc-1);
-				dis(instr);
 				sly_assert(0, "Type Error expected procedure");
 			}
 		} break;
@@ -223,6 +221,12 @@ vm_run(stack_frame *frame)
 			} else if (float_p(v)) {
 				f64 n = get_float(v);
 				printf("%g\n", n);
+			} else if (symbol_p(v)) {
+				symbol *s = GET_PTR(v);
+				printf("%.*s\n", (int)s->len, (char *)s->name);
+			} else if (string_p(v)) {
+				byte_vector *s = GET_PTR(v);
+				printf("%.*s\n", (int)s->len, (char *)s->elems);
 			} else {
 				sly_assert(0, "UNEMPLEMENTED");
 			}
@@ -362,6 +366,7 @@ dis_code(sly_value code)
 void
 dis_all(stack_frame *frame)
 {
+	printf("Disassembly of top-level code\n");
 	dis_code(frame->code);
 	printf("============================================\n");
 	size_t len = vector_len(frame->K);
@@ -369,6 +374,7 @@ dis_all(stack_frame *frame)
 		sly_value value = vector_ref(frame->K, i);
 		if (prototype_p(value)) {
 			prototype *proto = GET_PTR(value);
+			printf("Disassembly of function @ 0x%lx\n", (uintptr_t)proto);
 			dis_code(proto->code);
 			printf("============================================\n");
 		}

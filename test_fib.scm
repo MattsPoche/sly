@@ -4,4 +4,5 @@
 		n
 		(+ (fib (- n 1))
 		   (fib (- n 2))))))
-(display (fib 5))
+(display "The 20th fibonacci number is:")
+(display (fib 20))

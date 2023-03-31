@@ -307,7 +307,6 @@ comp_atom(struct compile *cc, sly_value form, int reg)
 		case sym_global: {
 			if (!IS_GLOBAL(cc->cscope)) {
 				st_prop.islocal = 1;
-				st_prop.type = sym_constant;
 				st_prop.reg = intern_constant(cc, datum);
 				dictionary_set(cc->cscope->symtable, datum, SYMPROP_TO_VALUE(st_prop));
 			}
