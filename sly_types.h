@@ -168,6 +168,8 @@ sly_value make_symbol(sly_value interned, char *cstr, size_t len);
 sly_value get_interned_symbol(sly_value alist, char *name, size_t len);
 void intern_symbol(sly_value interned, sly_value sym_v);
 sly_value make_string(char *cstr, size_t len);
+size_t string_len(sly_value str);
+sly_value string_eq(sly_value s1, sly_value s2);
 sly_value make_prototype(sly_value uplist, sly_value constants, sly_value code,
 						 size_t nregs, size_t nargs, size_t entry, int has_varg);
 sly_value make_closure(sly_value _proto);
@@ -178,7 +180,8 @@ sly_value sly_mul(sly_value x, sly_value y);
 sly_value sly_div(sly_value x, sly_value y);
 sly_value sly_idiv(sly_value x, sly_value y);
 sly_value sly_mod(sly_value x, sly_value y);
-sly_value sly_num_eq(sly_value x, sly_value y);
+int sly_num_eq(sly_value x, sly_value y);
+int sly_eq(sly_value o2, sly_value o1);
 sly_value make_syntax(token tok, sly_value datum);
 sly_value syntax_to_datum(sly_value syn);
 sly_value make_dictionary(void);

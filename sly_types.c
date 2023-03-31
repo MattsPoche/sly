@@ -398,6 +398,27 @@ make_string(char *cstr, size_t len)
 	return val;
 }
 
+size_t
+string_len(sly_value str)
+{
+	sly_assert(string_p(str), "Type error expected <string>");
+	byte_vector *bv = GET_PTR(str);
+	return bv->len;
+}
+
+sly_value
+string_eq(sly_value s1, sly_value s2)
+{
+	sly_assert(string_p(s1) && string_p(s2), "Type error expected <string>");
+	if (string_len(s1) != string_len(s2)) return 0;
+	byte_vector *bv1 = GET_PTR(s1);
+	byte_vector *bv2 = GET_PTR(s2);
+	for (size_t i = 0; i < bv1->len; ++i) {
+		if (bv1->elems[i] != bv2->elems[i]) return 0;
+	}
+	return 1;
+}
+
 sly_value
 make_prototype(sly_value uplist, sly_value constants, sly_value code,
 			   size_t nregs, size_t nargs, size_t entry, int has_varg)
@@ -611,33 +632,33 @@ sly_mod(sly_value x, sly_value y)
 	return make_int(get_int(x) % get_int(y));
 }
 
-static sly_value
+static int
 num_eqfx(f64 x, sly_value y)
 {
 	sly_assert(number_p(y), "Type Error expected number");
 	if (int_p(y)) {
-		return ctobool(x  == get_int(y));
+		return x  == get_int(y);
 	} else if (float_p(y)) {
-		return ctobool(x == get_float(y));
+		return x == get_float(y);
 	}
 	sly_assert(0, "Error Unreachable");
-	return SLY_NULL;
+	return 0;
 }
 
-static sly_value
+static int
 num_eqix(i64 x, sly_value y)
 {
 	sly_assert(number_p(y), "Type Error expected number");
 	if (int_p(y)) {
-		return ctobool(x == get_int(y));
+		return x == get_int(y);
 	} else if (float_p(y)) {
-		return ctobool(x == get_float(y));
+		return x == get_float(y);
 	}
 	sly_assert(0, "Error Unreachable");
-	return SLY_NULL;
+	return 0;
 }
 
-sly_value
+int
 sly_num_eq(sly_value x, sly_value y)
 {
 	sly_assert(number_p(x), "Type Error expected number");
@@ -647,7 +668,22 @@ sly_num_eq(sly_value x, sly_value y)
 		return num_eqfx(get_float(x), y);
 	}
 	sly_assert(0, "Error Unreachable");
-	return SLY_NULL;
+	return 0;
+}
+
+int
+sly_eq(sly_value o1, sly_value o2)
+{
+	if (symbol_p(o1) && symbol_p(o2)) {
+		return symbol_eq(o1, o2);
+	}
+	if (number_p(o1) && number_p(o2)) {
+		return sly_num_eq(o1, o2);
+	}
+	if (string_p(o1) && string_p(o2)) {
+		return string_eq(o1, o2);
+	}
+	return 0;
 }
 
 sly_value

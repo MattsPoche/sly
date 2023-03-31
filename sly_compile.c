@@ -47,14 +47,12 @@ struct symbol_properties {
 #define IS_GLOBAL(scope)       ((scope)->parent == NULL)
 #define ADD_BUILTIN(name, fn, nargs, has_vargs)							\
 	do {																\
-		st_prop.reg = vector_len(proto->K);								\
-		st_prop.islocal = 0;											\
-		st_prop.type = sym_global;										\
 		sym = make_symbol(cc->interned, name, strlen(name));			\
-		vector_append(proto->K, sym);									\
+		st_prop.reg = intern_constant(cc, sym);							\
 		dictionary_set(symtable, sym, SYMPROP_TO_VALUE(st_prop));		\
 		dictionary_set(cc->globals, sym, make_cclosure(fn, nargs, has_vargs)); \
 	} while (0)
+
 
 static char *keywords[KW_COUNT] = {
 	[kw_define]					= "define",
@@ -107,6 +105,20 @@ symbol_lookup_props(struct compile *cc, sly_value sym)
 	}
 	sly_assert(0, "Error undefined symbol");
 	return SLY_NULL;
+}
+
+static size_t
+intern_constant(struct compile *cc, sly_value value)
+{
+	prototype *proto = GET_PTR(cc->cscope->proto);
+	size_t len = vector_len(proto->K);
+	for (size_t i = 0; i < len; ++i) {
+		if (sly_eq(value, vector_ref(proto->K, i))) {
+			return i;
+		}
+	}
+	vector_append(proto->K, value);
+	return len;
 }
 
 void
@@ -182,9 +194,8 @@ comp_define(struct compile *cc, sly_value form, int reg)
 		sly_value datum = syntax_p(stx) ? syntax_to_datum(stx) : stx;
 		st_prop.islocal = 0;
 		st_prop.type = sym_global;
-		st_prop.reg = vector_len(proto->K);
+		st_prop.reg = intern_constant(cc, var);
 		dictionary_set(symtable, var, SYMPROP_TO_VALUE(st_prop));
-		vector_append(proto->K, var);
 		if (pair_p(datum) || symbol_p(datum)) {
 			dictionary_set(globals, var, SLY_VOID);
 			comp_expr(cc, car(form), reg);
@@ -264,7 +275,7 @@ comp_set(struct compile *cc, sly_value form, int reg)
 
 int
 comp_atom(struct compile *cc, sly_value form, int reg)
-{ /* TODO repeated constants are duplicated. Need to fix */
+{
 	sly_value datum;
 	datum = syntax_to_datum(form);
 	prototype *proto = GET_PTR(cc->cscope->proto);
@@ -292,8 +303,7 @@ comp_atom(struct compile *cc, sly_value form, int reg)
 			if (!IS_GLOBAL(cc->cscope)) {
 				st_prop.islocal = 1;
 				st_prop.type = sym_constant;
-				st_prop.reg = vector_len(proto->K);
-				vector_append(proto->K, datum);
+				st_prop.reg = intern_constant(cc, datum);
 				dictionary_set(cc->cscope->symtable, datum, SYMPROP_TO_VALUE(st_prop));
 			}
 			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
@@ -311,8 +321,7 @@ comp_atom(struct compile *cc, sly_value form, int reg)
 		} else if (void_p(datum)) {
 			vector_append(proto->code, iA(OP_LOAD_VOID, reg));
 		} else {
-			size_t idx = vector_len(proto->K);
-			vector_append(proto->K, datum);
+			size_t idx = intern_constant(cc, datum);
 			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 			vector_append(proto->code, iABx(OP_LOADK, reg, idx));
 		}
@@ -537,17 +546,19 @@ cmod(sly_value args)
 sly_value
 cnum_eq(sly_value args)
 {
-	return sly_num_eq(vector_ref(args, 0), vector_ref(args, 1));
+	return ctobool(sly_num_eq(vector_ref(args, 0), vector_ref(args, 1)));
 }
 
 void
 init_builtins(struct compile *cc)
-{
-
-	prototype *proto = GET_PTR(cc->cscope->proto);
+{ /* TODO The names of these symbols do not need to be added into
+   * constants if they are never referenced.
+   */
 	sly_value symtable = cc->cscope->symtable;
 	struct symbol_properties st_prop = {0};
 	sly_value sym;
+	st_prop.islocal = 0;
+	st_prop.type = sym_global;
 	cc->globals = make_dictionary();
 	ADD_BUILTIN("+", cadd, 2, 1);
 	ADD_BUILTIN("-", csub, 2, 1);
