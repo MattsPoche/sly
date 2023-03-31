@@ -90,14 +90,9 @@ typedef struct _stack_frame {
 
 typedef sly_value INSTR;
 
-static inline stack_frame *
-make_stack(size_t nregs)
-{
-	sly_assert(nregs <= REG_MAX, "Stack too big");
-	stack_frame *frame = sly_alloc(sizeof(*frame));
-	frame->parent = NULL;
-	frame->R = make_vector(nregs, nregs);
-	return frame;
-}
+stack_frame *make_stack(size_t nregs);
+void dis(INSTR instr);
+void dis_code(sly_value code);
+void dis_all(stack_frame *frame);
 
 #endif /* SLY_OPCODES_H_ */
