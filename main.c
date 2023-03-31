@@ -257,11 +257,11 @@ sly_load_file(Sly_State *ss, char *file_name)
 }
 
 void
-sly_push_global(Sly_State *ss, char *gname)
+sly_push_global(Sly_State *ss, char *name)
 {
 	stack_frame *frame = ss->frame;
 	sly_value globals = vector_ref(frame->U, 0);
-	sly_value key = make_symbol(ss->cc.interned, gname, strlen(gname));
+	sly_value key = make_symbol(ss->cc.interned, name, strlen(name));
 	vector_append(ss->stack, dictionary_ref(globals, key));
 }
 
@@ -269,6 +269,18 @@ void
 sly_push_int(Sly_State *ss, i64 i)
 {
 	vector_append(ss->stack, make_int(i));
+}
+
+void
+sly_push_symbol(Sly_State *ss, char *name)
+{
+	vector_append(ss->stack, make_symbol(ss->cc.interned, name, strlen(name)));
+}
+
+void
+sly_push_cstr(Sly_State *ss, char *str)
+{
+	vector_append(ss->stack, make_string(str, strlen(str)));
 }
 
 sly_value
