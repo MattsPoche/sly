@@ -2,6 +2,59 @@
 #include "lexer.h"
 #include "parser.h"
 
+static char *
+escape_string(char *str, size_t len)
+{
+	char *buf = sly_alloc(len);
+	size_t i, j;
+	for (i = 0, j = 0; i < len; ++i, ++j) {
+		if (str[i] == '\\') {
+			i++;
+			switch (str[i]) {
+			case 'a': {
+				buf[j] = '\a';
+			} break;
+			case 'b': {
+				buf[j] = '\b';
+			} break;
+			case 'e': {
+				buf[j] = '\e';
+			} break;
+			case 'f': {
+				buf[j] = '\f';
+			} break;
+			case 'n': {
+				buf[j] = '\n';
+			} break;
+			case 'r': {
+				buf[j] = '\r';
+			} break;
+			case 't': {
+				buf[j] = '\t';
+			} break;
+			case 'v': {
+				buf[j] = '\v';
+			} break;
+			case '\\': {
+				buf[j] = '\\';
+			} break;
+			case '\'': {
+				buf[j] = '\'';
+			} break;
+			case '"': {
+				buf[j] = '"';
+			} break;
+			default: {
+				sly_assert(0, "Parse Error unrecognized escape sequence");
+			} break;
+			}
+		} else {
+			buf[j] = str[i];
+		}
+	}
+	return buf;
+}
+
 static sly_value
 parse_value(char *cstr, sly_value interned)
 {
@@ -47,7 +100,10 @@ parse_value(char *cstr, sly_value interned)
 		return parse_value(cstr, interned);
 	} break;
 	case tok_lbracket: {
-		if (peek().tag == tok_rbracket) return SLY_NULL;
+		if (peek().tag == tok_rbracket) {
+			next_token();
+			return SLY_NULL;
+		}
 		sly_value list = cons(parse_value(cstr, interned), SLY_NULL);
 		for (;;) {
 			t = peek();
@@ -74,7 +130,10 @@ parse_value(char *cstr, sly_value interned)
 		sly_assert(0, "Parse Error bad dot");
 	} break;
 	case tok_string: {
-		return make_syntax(t, make_string(&cstr[t.so+1], t.eo - t.so - 2));
+		char *s = escape_string(&cstr[t.so+1], t.eo - t.so - 2);
+		sly_value stx = make_syntax(t, make_string(s, strlen(s)));
+		free(s);
+		return stx;
 	} break;
 	case tok_bool: {
 		if (cstr[t.so+1] == 'f') {

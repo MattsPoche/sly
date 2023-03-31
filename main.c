@@ -217,16 +217,16 @@ vm_run(stack_frame *frame)
 			sly_value v = get_reg(a);
 			if (int_p(v)) {
 				i64 n = get_int(v);
-				printf("%ld\n", n);
+				printf("%ld", n);
 			} else if (float_p(v)) {
 				f64 n = get_float(v);
-				printf("%g\n", n);
+				printf("%g", n);
 			} else if (symbol_p(v)) {
 				symbol *s = GET_PTR(v);
-				printf("%.*s\n", (int)s->len, (char *)s->name);
+				printf("%.*s", (int)s->len, (char *)s->name);
 			} else if (string_p(v)) {
 				byte_vector *s = GET_PTR(v);
-				printf("%.*s\n", (int)s->len, (char *)s->elems);
+				printf("%.*s", (int)s->len, (char *)s->elems);
 			} else {
 				sly_assert(0, "UNEMPLEMENTED");
 			}
