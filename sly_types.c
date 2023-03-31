@@ -52,6 +52,27 @@ sly_assert(int p, char *msg)
 	}
 }
 
+void
+sly_display(sly_value v)
+{
+	if (int_p(v)) {
+		i64 n = get_int(v);
+		printf("%ld", n);
+	} else if (float_p(v)) {
+		f64 n = get_float(v);
+		printf("%g", n);
+	} else if (symbol_p(v)) {
+		symbol *s = GET_PTR(v);
+		printf("%.*s", (int)s->len, (char *)s->name);
+	} else if (string_p(v)) {
+		byte_vector *s = GET_PTR(v);
+		printf("%.*s", (int)s->len, (char *)s->elems);
+	} else {
+		sly_assert(0, "UNEMPLEMENTED");
+	}
+}
+
+
 u64
 sly_hash(sly_value v)
 {

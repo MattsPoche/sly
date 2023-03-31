@@ -2,12 +2,12 @@
 #include "opcodes.h"
 #include "sly_compile.h"
 
-typedef struct sly_state {
-	sly_value interned;  // <alist> of interned symbols
-	stack_frame *begin;  // top level code
+typedef struct _sly_state {
+	struct compile cc;
+	stack_frame *frame;
+	sly_value code;
+	sly_value stack;
 } Sly_State;
-
-void dis(INSTR instr);
 
 sly_value
 vm_run(stack_frame *frame)
@@ -215,21 +215,7 @@ vm_run(stack_frame *frame)
 		case OP_DISPLAY: {
 			u8 a = GET_A(instr);
 			sly_value v = get_reg(a);
-			if (int_p(v)) {
-				i64 n = get_int(v);
-				printf("%ld", n);
-			} else if (float_p(v)) {
-				f64 n = get_float(v);
-				printf("%g", n);
-			} else if (symbol_p(v)) {
-				symbol *s = GET_PTR(v);
-				printf("%.*s", (int)s->len, (char *)s->name);
-			} else if (string_p(v)) {
-				byte_vector *s = GET_PTR(v);
-				printf("%.*s", (int)s->len, (char *)s->elems);
-			} else {
-				sly_assert(0, "UNEMPLEMENTED");
-			}
+			sly_display(v);
 		} break;
 		}
 	}
@@ -252,6 +238,61 @@ run_file(char *file_name)
 	return vm_run(frame);
 }
 
+void
+sly_load_file(Sly_State *ss, char *file_name)
+{
+	struct compile cc = sly_compile(file_name);
+	prototype *proto = GET_PTR(cc.cscope->proto);
+	stack_frame *frame = make_stack(proto->nregs);
+	frame->U = make_vector(12, 12);
+	vector_set(frame->U, 0, cc.globals);
+	frame->K = proto->K;
+	frame->code = proto->code;
+	frame->pc = proto->entry;
+	vm_run(frame);
+	ss->cc = cc;
+	ss->code = make_vector(0, 1);
+	ss->stack = make_vector(0, 16);
+	ss->frame = frame;
+}
+
+void
+sly_push_global(Sly_State *ss, char *gname)
+{
+	stack_frame *frame = ss->frame;
+	sly_value globals = vector_ref(frame->U, 0);
+	sly_value key = make_symbol(ss->cc.interned, gname, strlen(gname));
+	vector_append(ss->stack, dictionary_ref(globals, key));
+}
+
+void
+sly_push_int(Sly_State *ss, i64 i)
+{
+	vector_append(ss->stack, make_int(i));
+}
+
+sly_value
+sly_call(Sly_State *ss, size_t nargs)
+{
+	size_t end = vector_len(ss->stack);
+	sly_assert(nargs + 1 <= end, "Error not enough arguments");
+	size_t begin = end - (nargs + 1);
+	ss->code = make_vector(0, 2);
+	vector_append(ss->code, iAB(OP_CALL, begin, end));
+	vector_append(ss->code, iA(OP_RETURN, begin));
+	sly_value R = ss->frame->R;
+	sly_value code = ss->frame->code;
+	size_t pc = ss->frame->pc;
+	ss->frame->R = ss->stack;
+	ss->frame->code = ss->code;
+	ss->frame->pc = 0;
+	sly_value r = vm_run(ss->frame);
+	ss->frame->R = R;
+	ss->frame->code = code;
+	ss->frame->pc = pc;
+	return r;
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -260,7 +301,17 @@ main(int argc, char *argv[])
 			run_file(argv[i]);
 		}
 	} else {
-		run_file("test2.scm");
+		Sly_State ss;
+		sly_load_file(&ss, "test_rec.scm");
+		dis_all(ss.frame);
+		sly_push_global(&ss, "fib");
+		sly_push_int(&ss, 10);
+		sly_display(sly_call(&ss, 1));
+		printf("\n");
+		sly_push_global(&ss, "fac");
+		sly_push_int(&ss, 10);
+		sly_display(sly_call(&ss, 1));
+		printf("\n");
 	}
 	return 0;
 }

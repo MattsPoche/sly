@@ -136,6 +136,7 @@ typedef struct _syntax {
 } syntax;
 
 void sly_assert(int p, char *msg);
+void sly_display(sly_value v);
 u64 sly_hash(sly_value v);
 int symbol_eq(sly_value o1, sly_value o2);
 i64 get_int(sly_value v);

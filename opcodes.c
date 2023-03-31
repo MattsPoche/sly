@@ -138,6 +138,21 @@ dis_code(sly_value code)
 	}
 }
 
+static void
+dis_prototype(prototype *proto)
+{
+	printf("Disassembly of function @ 0x%lx\n", (uintptr_t)proto);
+	dis_code(proto->code);
+	printf("============================================\n");
+	size_t len = vector_len(proto->K);
+	for (size_t i = 0; i < len; ++i) {
+		sly_value value = vector_ref(proto->K, i);
+		if (prototype_p(value)) {
+			dis_prototype(GET_PTR(value));
+		}
+	}
+}
+
 void
 dis_all(stack_frame *frame)
 {
@@ -148,10 +163,7 @@ dis_all(stack_frame *frame)
 	for (size_t i = 0; i < len; ++i) {
 		sly_value value = vector_ref(frame->K, i);
 		if (prototype_p(value)) {
-			prototype *proto = GET_PTR(value);
-			printf("Disassembly of function @ 0x%lx\n", (uintptr_t)proto);
-			dis_code(proto->code);
-			printf("============================================\n");
+			dis_prototype(GET_PTR(value));
 		}
 	}
 }
