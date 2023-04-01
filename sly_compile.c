@@ -1,3 +1,4 @@
+#include <assert.h>
 #include "sly_types.h"
 #include "parser.h"
 #include "opcodes.h"
@@ -52,10 +53,10 @@ struct symbol_properties {
 #define IS_GLOBAL(scope)       ((scope)->parent == NULL)
 #define ADD_BUILTIN(name, fn, nargs, has_vargs)							\
 	do {																\
-		sym = make_symbol(cc->interned, name, strlen(name));			\
-		st_prop.reg = intern_constant(cc, sym);							\
-		dictionary_set(symtable, sym, SYMPROP_TO_VALUE(st_prop));		\
-		dictionary_set(cc->globals, sym, make_cclosure(fn, nargs, has_vargs)); \
+		sym = make_symbol(ss, name, strlen(name));						\
+		st_prop.reg = intern_constant(ss, sym);							\
+		dictionary_set(ss, symtable, sym, SYMPROP_TO_VALUE(st_prop));	\
+		dictionary_set(ss, cc->globals, sym, make_cclosure(ss, fn, nargs, has_vargs)); \
 	} while (0)
 
 
@@ -82,8 +83,8 @@ static char *keywords[KW_COUNT] = {
 
 static sly_value kw_symbols[KW_COUNT];
 
-int comp_expr(struct compile *cc, sly_value form, int reg);
-static sly_value init_symtable(sly_value interned);
+int comp_expr(Sly_State *ss, sly_value form, int reg);
+static sly_value init_symtable(Sly_State *ss);
 
 static int
 is_keyword(sly_value sym)
@@ -113,8 +114,9 @@ symbol_lookup_props(struct compile *cc, sly_value sym)
 }
 
 static size_t
-intern_constant(struct compile *cc, sly_value value)
+intern_constant(Sly_State *ss, sly_value value)
 {
+	struct compile *cc = ss->cc;
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	size_t len = vector_len(proto->K);
 	for (size_t i = 0; i < len; ++i) {
@@ -122,7 +124,7 @@ intern_constant(struct compile *cc, sly_value value)
 			return i;
 		}
 	}
-	vector_append(proto->K, value);
+	vector_append(ss, proto->K, value);
 	return len;
 }
 
@@ -158,34 +160,37 @@ print_syntax(sly_value list)
 }
 
 static struct scope *
-make_scope(void)
+make_scope(Sly_State *ss)
 {
-	struct scope *scope = sly_alloc(sizeof(*scope));
+	struct scope *scope = malloc(sizeof(*scope));
+	assert(scope != NULL);
 	scope->parent = NULL;
-	scope->proto = make_prototype(make_byte_vector(0, 8),
-								  make_vector(0, 8),
-								  make_vector(0, 8),
+	scope->proto = make_prototype(ss,
+								  make_byte_vector(ss, 0, 8),
+								  make_vector(ss, 0, 8),
+								  make_vector(ss, 0, 8),
 								  0, 0, 0, 0);
 	scope->prev_var = 0;
 	return scope;
 }
 
 static sly_value
-init_symtable(sly_value interned)
+init_symtable(Sly_State *ss)
 {
 	struct symbol_properties prop = { .type = sym_keyword };
-	sly_value symtable = make_dictionary();
+	sly_value symtable = make_dictionary(ss);
 	for (int i = 0; i < KW_COUNT; ++i) {
-		sly_value sym = make_symbol(interned, keywords[i], strlen(keywords[i]));
-		dictionary_set(symtable, sym, SYMPROP_TO_VALUE(prop));
+		sly_value sym = make_symbol(ss, keywords[i], strlen(keywords[i]));
+		dictionary_set(ss, symtable, sym, SYMPROP_TO_VALUE(prop));
 		kw_symbols[i] = sym;
 	}
 	return symtable;
 }
 
 int
-comp_define(struct compile *cc, sly_value form, int reg)
+comp_define(Sly_State *ss, sly_value form, int reg)
 { /* (define <symbol> <expr>) */
+	struct compile *cc = ss->cc;
 	sly_value stx = car(form);
 	sly_value var = syntax_to_datum(stx);
 	sly_value symtable = cc->cscope->symtable;
@@ -199,16 +204,16 @@ comp_define(struct compile *cc, sly_value form, int reg)
 		sly_value datum = syntax_p(stx) ? syntax_to_datum(stx) : stx;
 		st_prop.islocal = 0;
 		st_prop.type = sym_global;
-		st_prop.reg = intern_constant(cc, var);
-		dictionary_set(symtable, var, SYMPROP_TO_VALUE(st_prop));
+		st_prop.reg = intern_constant(ss, var);
+		dictionary_set(ss, symtable, var, SYMPROP_TO_VALUE(st_prop));
 		if (pair_p(datum) || symbol_p(datum)) {
-			dictionary_set(globals, var, SLY_VOID);
-			comp_expr(cc, car(form), reg);
+			dictionary_set(ss, globals, var, SLY_VOID);
+			comp_expr(ss, car(form), reg);
 			if ((size_t)reg + 1 >= proto->nregs) proto->nregs = reg + 2;
-			vector_append(proto->code, iABx(OP_LOADK, reg + 1, st_prop.reg));
-			vector_append(proto->code, iABC(OP_SETUPDICT, 0, reg + 1, reg));
+			vector_append(ss, proto->code, iABx(OP_LOADK, reg + 1, st_prop.reg));
+			vector_append(ss, proto->code, iABC(OP_SETUPDICT, 0, reg + 1, reg));
 		} else {
-			dictionary_set(globals, var, datum);
+			dictionary_set(ss, globals, var, datum);
 		}
 		sly_assert(null_p(cdr(form)), "Compile Error malformed define");
 		return reg;
@@ -216,9 +221,9 @@ comp_define(struct compile *cc, sly_value form, int reg)
 		st_prop.reg = cc->cscope->prev_var++;
 		st_prop.islocal = 1;
 		st_prop.type = sym_variable;
-		dictionary_set(symtable, var, SYMPROP_TO_VALUE(st_prop));
+		dictionary_set(ss, symtable, var, SYMPROP_TO_VALUE(st_prop));
 		form = cdr(form);
-		comp_expr(cc, car(form), st_prop.reg);
+		comp_expr(ss, car(form), st_prop.reg);
 		/* end of definition */
 		sly_assert(null_p(cdr(form)), "Compile Error malformed define");
 		return st_prop.reg;
@@ -226,8 +231,9 @@ comp_define(struct compile *cc, sly_value form, int reg)
 }
 
 int
-comp_if(struct compile *cc, sly_value form, int reg)
+comp_if(Sly_State *ss, sly_value form, int reg)
 {
+	struct compile *cc = ss->cc;
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	sly_value boolexpr = car(form);
 	form = cdr(form);
@@ -236,13 +242,13 @@ comp_if(struct compile *cc, sly_value form, int reg)
 	sly_value fbranch = car(form);
 	form = cdr(form);
 	sly_assert(null_p(form), "Compile Error malformed if expression");
-	int be_res = comp_expr(cc, boolexpr, reg);
+	int be_res = comp_expr(ss, boolexpr, reg);
 	size_t fjmp = vector_len(proto->code);
-	vector_append(proto->code, 0);
-	comp_expr(cc, tbranch, reg);
+	vector_append(ss, proto->code, 0);
+	comp_expr(ss, tbranch, reg);
 	size_t jmp = vector_len(proto->code);
-	vector_append(proto->code, 0);
-	comp_expr(cc, fbranch, reg);
+	vector_append(ss, proto->code, 0);
+	comp_expr(ss, fbranch, reg);
 	size_t end = vector_len(proto->code);
 	if (be_res == -1) {
 		vector_set(proto->code, fjmp, iABx(OP_FJMP, reg, jmp + 1));
@@ -254,8 +260,9 @@ comp_if(struct compile *cc, sly_value form, int reg)
 }
 
 int
-comp_set(struct compile *cc, sly_value form, int reg)
+comp_set(Sly_State *ss, sly_value form, int reg)
 {
+	struct compile *cc = ss->cc;
 	form = cdr(form);
 	sly_value stx = car(form);
 	sly_value datum = syntax_to_datum(stx);
@@ -264,23 +271,24 @@ comp_set(struct compile *cc, sly_value form, int reg)
 	struct symbol_properties st_prop = VALUE_TO_SYMPROP(prop);
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	form = cdr(form);
-	reg = comp_expr(cc, car(form), reg);
+	reg = comp_expr(ss, car(form), reg);
 	if ((size_t)reg + 1 <= proto->nregs) proto->nregs = reg + 2;
 	if (st_prop.type == sym_variable) {
 		if (reg != -1 && st_prop.reg != reg) {
-			vector_append(proto->code, iAB(OP_MOVE, st_prop.reg, reg));
+			vector_append(ss, proto->code, iAB(OP_MOVE, st_prop.reg, reg));
 		}
 	} else if (st_prop.type == sym_global) {
-		vector_append(proto->code, iAB(OP_LOADK, reg + 1, st_prop.reg));
-		vector_append(proto->code, iABC(OP_SETUPDICT, 0, reg + 1, reg));
+		vector_append(ss, proto->code, iAB(OP_LOADK, reg + 1, st_prop.reg));
+		vector_append(ss, proto->code, iABC(OP_SETUPDICT, 0, reg + 1, reg));
 	}
 	sly_assert(null_p(cdr(form)), "Error malformed set! expression");
 	return reg;
 }
 
 int
-comp_atom(struct compile *cc, sly_value form, int reg)
+comp_atom(Sly_State *ss, sly_value form, int reg)
 {
+	struct compile *cc = ss->cc;
 	sly_value datum;
 	datum = syntax_to_datum(form);
 	prototype *proto = GET_PTR(cc->cscope->proto);
@@ -293,7 +301,7 @@ comp_atom(struct compile *cc, sly_value form, int reg)
 		} break;
 		case sym_constant: {
 			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
-			vector_append(proto->code, iABx(OP_LOADK, reg, st_prop.reg));
+			vector_append(ss, proto->code, iABx(OP_LOADK, reg, st_prop.reg));
 		} break;
 		case sym_datum: {
 		} break;
@@ -302,67 +310,69 @@ comp_atom(struct compile *cc, sly_value form, int reg)
 		case sym_arg:
 		case sym_upval: {
 			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
-			vector_append(proto->code, iAB(OP_GETUPVAL, reg, st_prop.reg));
+			vector_append(ss, proto->code, iAB(OP_GETUPVAL, reg, st_prop.reg));
 		} break;
 		case sym_global: {
 			if (!IS_GLOBAL(cc->cscope)) {
 				st_prop.islocal = 1;
-				st_prop.reg = intern_constant(cc, datum);
-				dictionary_set(cc->cscope->symtable, datum, SYMPROP_TO_VALUE(st_prop));
+				st_prop.reg = intern_constant(ss, datum);
+				dictionary_set(ss, cc->cscope->symtable, datum, SYMPROP_TO_VALUE(st_prop));
 			}
 			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
-			vector_append(proto->code, iABx(OP_LOADK, reg, st_prop.reg));
-			vector_append(proto->code, iABC(OP_GETUPDICT, reg, 0, reg));
+			vector_append(ss, proto->code, iABx(OP_LOADK, reg, st_prop.reg));
+			vector_append(ss, proto->code, iABC(OP_GETUPDICT, reg, 0, reg));
 		} break;
 		}
 	} else { /* constant */
 		if (datum == SLY_FALSE) {
-			vector_append(proto->code, iA(OP_LOAD_FALSE, reg));
+			vector_append(ss, proto->code, iA(OP_LOAD_FALSE, reg));
 		} else if (datum == SLY_TRUE) {
-			vector_append(proto->code, iA(OP_LOAD_TRUE, reg));
+			vector_append(ss, proto->code, iA(OP_LOAD_TRUE, reg));
 		} else if (null_p(datum)) {
-			vector_append(proto->code, iA(OP_LOAD_NULL, reg));
+			vector_append(ss, proto->code, iA(OP_LOAD_NULL, reg));
 		} else if (void_p(datum)) {
-			vector_append(proto->code, iA(OP_LOAD_VOID, reg));
+			vector_append(ss, proto->code, iA(OP_LOAD_VOID, reg));
 		} else {
-			size_t idx = intern_constant(cc, datum);
+			size_t idx = intern_constant(ss, datum);
 			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
-			vector_append(proto->code, iABx(OP_LOADK, reg, idx));
+			vector_append(ss, proto->code, iABx(OP_LOADK, reg, idx));
 		}
 	}
 	return -1;
 }
 
 int
-comp_funcall(struct compile *cc, sly_value form, int reg)
+comp_funcall(Sly_State *ss, sly_value form, int reg)
 {
+	struct compile *cc = ss->cc;
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	sly_value head = car(form);
 	form = cdr(form);
 	int start = reg;
-	int reg2 = comp_expr(cc, head, reg);
+	int reg2 = comp_expr(ss, head, reg);
 	if (reg2 != -1 && reg2 != reg) {
-		vector_append(proto->code, iAB(OP_MOVE, reg, reg2));
+		vector_append(ss, proto->code, iAB(OP_MOVE, reg, reg2));
 	}
 	reg++;
 	while (pair_p(form)) {
 		head = car(form);
-		reg2 = comp_expr(cc, head, reg);
+		reg2 = comp_expr(ss, head, reg);
 		if (reg2 != -1 && reg2 != reg) {
-			vector_append(proto->code, iAB(OP_MOVE, reg, reg2));
+			vector_append(ss, proto->code, iAB(OP_MOVE, reg, reg2));
 		}
 		reg++;
 		form = cdr(form);
 	}
-	vector_append(proto->code, iAB(OP_CALL, start, reg));
+	vector_append(ss, proto->code, iAB(OP_CALL, start, reg));
 	return reg;
 }
 
 int
-comp_lambda(struct compile *cc, sly_value form, int reg)
+comp_lambda(Sly_State *ss, sly_value form, int reg)
 {
-	struct scope *scope = make_scope();
-	scope->symtable = init_symtable(cc->interned);
+	struct compile *cc = ss->cc;
+	struct scope *scope = make_scope(ss);
+	scope->symtable = init_symtable(ss);
 	scope->parent = cc->cscope;
 	cc->cscope = scope;
 	int preg = reg;
@@ -381,7 +391,7 @@ comp_lambda(struct compile *cc, sly_value form, int reg)
 		sly_assert(symbol_p(sym), "Compile error function parameter must be a symbol");
 		nargs++;
 		st_prop.reg = nargs;
-		dictionary_set(symtable, sym, SYMPROP_TO_VALUE(st_prop));
+		dictionary_set(ss, symtable, sym, SYMPROP_TO_VALUE(st_prop));
 		args = cdr(args);
 	}
 	if (!null_p(args)) {
@@ -389,30 +399,31 @@ comp_lambda(struct compile *cc, sly_value form, int reg)
 		sly_assert(symbol_p(sym), "Compile error function parameter must be a symbol");
 		proto->has_varg = 1;
 		st_prop.reg = nargs + 1;
-		dictionary_set(symtable, sym, SYMPROP_TO_VALUE(st_prop));
+		dictionary_set(ss, symtable, sym, SYMPROP_TO_VALUE(st_prop));
 	}
 	proto->nargs = nargs;
 	while (!null_p(form)) {
-		reg = comp_expr(cc, car(form), reg);
+		reg = comp_expr(ss, car(form), reg);
 		form = cdr(form);
 	}
-	vector_append(proto->code, iA(OP_RETURN, reg));
+	vector_append(ss, proto->code, iA(OP_RETURN, reg));
 	cc->cscope = cc->cscope->parent;
 	reg = preg;
 	prototype *cproto = GET_PTR(cc->cscope->proto);
 	size_t i = vector_len(cproto->K);
-	vector_append(cproto->K, scope->proto);
+	vector_append(ss, cproto->K, scope->proto);
 	if ((size_t)reg >= cproto->nregs) cproto->nregs = reg + 1;
-	vector_append(cproto->code, iABx(OP_CLOSURE, reg, i));
+	vector_append(ss, cproto->code, iABx(OP_CLOSURE, reg, i));
 	free(scope);
 	return reg;
 }
 
 int
-comp_expr(struct compile *cc, sly_value form, int reg)
+comp_expr(Sly_State *ss, sly_value form, int reg)
 {
+	struct compile *cc = ss->cc;
 	if (!pair_p(form)) {
-		return comp_atom(cc, form, reg);
+		return comp_atom(ss, form, reg);
 	}
 	sly_value stx, datum;
 	stx = car(form);
@@ -425,11 +436,11 @@ comp_expr(struct compile *cc, sly_value form, int reg)
 		switch ((enum kw)kw) {
 		case kw_define: {
 			form = cdr(form);
-			reg = comp_define(cc, form, reg);
+			reg = comp_define(ss, form, reg);
 		} break;
 		case kw_lambda: {
 			form = cdr(form);
-			reg = comp_lambda(cc, form, reg);
+			reg = comp_lambda(ss, form, reg);
 		} break;
 		case kw_quote: {
 		} break;
@@ -450,25 +461,25 @@ comp_expr(struct compile *cc, sly_value form, int reg)
 		case kw_begin: {
 			form = cdr(form);
 			while (!null_p(form)) {
-				reg = comp_expr(cc, car(form), reg);
+				reg = comp_expr(ss, car(form), reg);
 				form = cdr(form);
 			}
 		} break;
 		case kw_if: {
 			form = cdr(form);
-			reg = comp_if(cc, form, reg);
+			reg = comp_if(ss, form, reg);
 		} break;
 		case kw_set: {
-			comp_set(cc, form, reg);
+			comp_set(ss, form, reg);
 		} break;
 		case kw_display: {
 			prototype *proto = GET_PTR(cc->cscope->proto);
 			form = cdr(form);
-			int reg2 = comp_expr(cc, car(form), reg);
+			int reg2 = comp_expr(ss, car(form), reg);
 			if (reg2 == -1) {
-				vector_append(proto->code, iA(OP_DISPLAY, reg));
+				vector_append(ss, proto->code, iA(OP_DISPLAY, reg));
 			} else {
-				vector_append(proto->code, iA(OP_DISPLAY, reg2));
+				vector_append(ss, proto->code, iA(OP_DISPLAY, reg2));
 			}
 			sly_assert(null_p(cdr(form)), "Error malformed display expression");
 		} break;
@@ -483,100 +494,104 @@ comp_expr(struct compile *cc, sly_value form, int reg)
 		} break;
 		}
 	} else {
-		comp_funcall(cc, form, reg);
+		comp_funcall(ss, form, reg);
 	}
 	return reg;
 }
 
 sly_value
-cadd(sly_value args)
+cadd(Sly_State *ss, sly_value args)
 {
-	sly_value total = sly_add(vector_ref(args, 0), vector_ref(args, 1));
+	sly_value total = sly_add(ss, vector_ref(args, 0), vector_ref(args, 1));
 	sly_value vargs = vector_ref(args, 2);
 	while (!null_p(vargs)) {
-		total = sly_add(total, car(vargs));
+		total = sly_add(ss, total, car(vargs));
 		vargs = cdr(vargs);
 	}
 	return total;
 }
 
 sly_value
-csub(sly_value args)
+csub(Sly_State *ss, sly_value args)
 {
-	sly_value total = sly_sub(vector_ref(args, 0), vector_ref(args, 1));
+	sly_value total = sly_sub(ss, vector_ref(args, 0), vector_ref(args, 1));
 	sly_value vargs = vector_ref(args, 2);
 	while (!null_p(vargs)) {
-		total = sly_sub(total, car(vargs));
+		total = sly_sub(ss, total, car(vargs));
 		vargs = cdr(vargs);
 	}
 	return total;
 }
 
 sly_value
-cmul(sly_value args)
+cmul(Sly_State *ss, sly_value args)
 {
-	sly_value total = sly_mul(vector_ref(args, 0), vector_ref(args, 1));
+	sly_value total = sly_mul(ss, vector_ref(args, 0), vector_ref(args, 1));
 	sly_value vargs = vector_ref(args, 2);
 	while (!null_p(vargs)) {
-		total = sly_mul(total, car(vargs));
+		total = sly_mul(ss, total, car(vargs));
 		vargs = cdr(vargs);
 	}
 	return total;
 }
 
 sly_value
-cdiv(sly_value args)
+cdiv(Sly_State *ss, sly_value args)
 {
-	sly_value total = sly_div(vector_ref(args, 0), vector_ref(args, 1));
+	sly_value total = sly_div(ss, vector_ref(args, 0), vector_ref(args, 1));
 	sly_value vargs = vector_ref(args, 2);
 	while (!null_p(vargs)) {
-		total = sly_div(total, car(vargs));
+		total = sly_div(ss, total, car(vargs));
 		vargs = cdr(vargs);
 	}
 	return total;
 }
 
 sly_value
-cmod(sly_value args)
+cmod(Sly_State *ss, sly_value args)
 {
-	sly_value total = sly_mod(vector_ref(args, 0), vector_ref(args, 1));
+	sly_value total = sly_mod(ss, vector_ref(args, 0), vector_ref(args, 1));
 	sly_value vargs = vector_ref(args, 2);
 	while (!null_p(vargs)) {
-		total = sly_mod(total, car(vargs));
+		total = sly_mod(ss, total, car(vargs));
 		vargs = cdr(vargs);
 	}
 	return total;
 }
 
 sly_value
-cnum_eq(sly_value args)
+cnum_eq(Sly_State *ss, sly_value args)
 {
+	(void)ss;
 	return ctobool(sly_num_eq(vector_ref(args, 0), vector_ref(args, 1)));
 }
 
 sly_value
-cnum_lt(sly_value args)
+cnum_lt(Sly_State *ss, sly_value args)
 {
+	(void)ss;
 	return ctobool(sly_num_lt(vector_ref(args, 0), vector_ref(args, 1)));
 }
 
 sly_value
-cnum_gt(sly_value args)
+cnum_gt(Sly_State *ss, sly_value args)
 {
+	(void)ss;
 	return ctobool(sly_num_gt(vector_ref(args, 0), vector_ref(args, 1)));
 }
 
 void
-init_builtins(struct compile *cc)
+init_builtins(Sly_State *ss)
 { /* TODO The names of these symbols do not need to be added into
    * constants if they are never referenced.
    */
+	struct compile *cc = ss->cc;
 	sly_value symtable = cc->cscope->symtable;
 	struct symbol_properties st_prop = {0};
 	sly_value sym;
 	st_prop.islocal = 0;
 	st_prop.type = sym_global;
-	cc->globals = make_dictionary();
+	cc->globals = make_dictionary(ss);
 	ADD_BUILTIN("+", cadd, 2, 1);
 	ADD_BUILTIN("-", csub, 2, 1);
 	ADD_BUILTIN("*", cmul, 2, 1);
@@ -587,20 +602,21 @@ init_builtins(struct compile *cc)
 	ADD_BUILTIN(">", cnum_gt, 2, 0);
 }
 
-struct compile
-sly_compile(char *file_name)
+void
+sly_compile(Sly_State *ss, char *file_name)
 {
 	char *src;
 	sly_value ast;
-	struct compile cc;
 	prototype *proto;
-	cc.cscope = make_scope();
-	cc.interned = make_dictionary();
-	cc.cscope->symtable = init_symtable(cc.interned);
-	init_builtins(&cc);
-	ast = parse_file(file_name, &src, cc.interned);
-	proto = GET_PTR(cc.cscope->proto);
-	int r = comp_expr(&cc, ast, 0);
-	vector_append(proto->code, iA(OP_RETURN, r));
-	return cc;
+	ss->cc = malloc(sizeof(*ss->cc));
+	assert(ss->cc != NULL);
+	struct compile *cc = ss->cc;
+	cc->cscope = make_scope(ss);
+	cc->interned = make_dictionary(ss);
+	cc->cscope->symtable = init_symtable(ss);
+	init_builtins(ss);
+	ast = parse_file(ss, file_name, &src);
+	proto = GET_PTR(cc->cscope->proto);
+	int r = comp_expr(ss, ast, 0);
+	vector_append(ss, proto->code, iA(OP_RETURN, r));
 }

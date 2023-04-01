@@ -1,3 +1,4 @@
+#include <assert.h>
 #include "sly_types.h"
 #include "lexer.h"
 #include "parser.h"
@@ -5,7 +6,8 @@
 static char *
 escape_string(char *str, size_t len)
 {
-	char *buf = sly_alloc(len);
+	char *buf = malloc(len+1);
+	assert(buf != NULL);
 	size_t i, j;
 	for (i = 0, j = 0; i < len; ++i, ++j) {
 		if (str[i] == '\\') {
@@ -52,11 +54,12 @@ escape_string(char *str, size_t len)
 			buf[j] = str[i];
 		}
 	}
+	buf[j] = '\0';
 	return buf;
 }
 
 static sly_value
-parse_value(char *cstr, sly_value interned)
+parse_value(Sly_State *ss, char *cstr)
 {
 	token t = next_token();
 	switch (t.tag) {
@@ -65,46 +68,46 @@ parse_value(char *cstr, sly_value interned)
 		sly_assert(0, "UNEMPLEMENTED");
 	} break;
 	case tok_quote: {
-		sly_value stx = make_syntax(t, cstr_to_symbol("quote"));
-		return cons(stx, cons(parse_value(cstr, interned), SLY_NULL));
+		sly_value stx = make_syntax(ss, t, cstr_to_symbol("quote"));
+		return cons(ss, stx, cons(ss, parse_value(ss, cstr), SLY_NULL));
 	} break;
 	case tok_quasiquote: {
-		sly_value stx = make_syntax(t, cstr_to_symbol("quasiquote"));
-		return cons(stx, cons(parse_value(cstr, interned), SLY_NULL));
+		sly_value stx = make_syntax(ss, t, cstr_to_symbol("quasiquote"));
+		return cons(ss, stx, cons(ss, parse_value(ss, cstr), SLY_NULL));
 	} break;
 	case tok_unquote: {
-		sly_value stx = make_syntax(t, cstr_to_symbol("unquote"));
-		return cons(stx, cons(parse_value(cstr, interned), SLY_NULL));
+		sly_value stx = make_syntax(ss, t, cstr_to_symbol("unquote"));
+		return cons(ss, stx, cons(ss, parse_value(ss, cstr), SLY_NULL));
 	} break;
 	case tok_unquote_splice: {
-		sly_value stx = make_syntax(t, cstr_to_symbol("unquote-splice"));
-		return cons(stx, cons(parse_value(cstr, interned), SLY_NULL));
+		sly_value stx = make_syntax(ss, t, cstr_to_symbol("unquote-splice"));
+		return cons(ss, stx, cons(ss, parse_value(ss, cstr), SLY_NULL));
 	} break;
 	case tok_syntax_quote: {
-		sly_value stx = make_syntax(t, cstr_to_symbol("syntax-unquote"));
-		return cons(stx, cons(parse_value(cstr, interned), SLY_NULL));
+		sly_value stx = make_syntax(ss, t, cstr_to_symbol("syntax-unquote"));
+		return cons(ss, stx, cons(ss, parse_value(ss, cstr), SLY_NULL));
 	} break;
 	case tok_syntax_quasiquote: {
-		sly_value stx = make_syntax(t, cstr_to_symbol("syntax-quasiquote"));
-		return cons(stx, cons(parse_value(cstr, interned), SLY_NULL));
+		sly_value stx = make_syntax(ss, t, cstr_to_symbol("syntax-quasiquote"));
+		return cons(ss, stx, cons(ss, parse_value(ss, cstr), SLY_NULL));
 	} break;
 	case tok_syntax_unquote: {
-		sly_value stx = make_syntax(t, cstr_to_symbol("syntax-unquote"));
-		return cons(stx, cons(parse_value(cstr, interned), SLY_NULL));
+		sly_value stx = make_syntax(ss, t, cstr_to_symbol("syntax-unquote"));
+		return cons(ss, stx, cons(ss, parse_value(ss, cstr), SLY_NULL));
 	} break;
 	case tok_syntax_unquote_splice: {
-		sly_value stx = make_syntax(t, cstr_to_symbol("syntax-unquote-splice"));
-		return cons(stx, cons(parse_value(cstr, interned), SLY_NULL));
+		sly_value stx = make_syntax(ss, t, cstr_to_symbol("syntax-unquote-splice"));
+		return cons(ss, stx, cons(ss, parse_value(ss, cstr), SLY_NULL));
 	} break;
 	case tok_comment: {
-		return parse_value(cstr, interned);
+		return parse_value(ss, cstr);
 	} break;
 	case tok_lbracket: {
 		if (peek().tag == tok_rbracket) {
 			next_token();
 			return SLY_NULL;
 		}
-		sly_value list = cons(parse_value(cstr, interned), SLY_NULL);
+		sly_value list = cons(ss, parse_value(ss, cstr), SLY_NULL);
 		for (;;) {
 			t = peek();
 			if (t.tag == tok_rbracket) {
@@ -113,11 +116,11 @@ parse_value(char *cstr, sly_value interned)
 			}
 			if (t.tag == tok_dot) {
 				next_token();
-				append(list, parse_value(cstr, interned));
+				append(list, parse_value(ss, cstr));
 				sly_assert(next_token().tag == tok_rbracket, "Parse Error expected closing bracket");
 				return list;
 			}
-			append(list, cons(parse_value(cstr, interned), SLY_NULL));
+			append(list, cons(ss, parse_value(ss, cstr), SLY_NULL));
 		}
 	} break;
 	case tok_rbracket: {
@@ -131,29 +134,29 @@ parse_value(char *cstr, sly_value interned)
 	} break;
 	case tok_string: {
 		char *s = escape_string(&cstr[t.so+1], t.eo - t.so - 2);
-		sly_value stx = make_syntax(t, make_string(s, strlen(s)));
+		sly_value stx = make_syntax(ss, t, make_string(ss, s, strlen(s)));
 		free(s);
 		return stx;
 	} break;
 	case tok_bool: {
 		if (cstr[t.so+1] == 'f') {
-			return make_syntax(t, SLY_FALSE);
+			return make_syntax(ss, t, SLY_FALSE);
 		} else {
-			return make_syntax(t, SLY_TRUE);
+			return make_syntax(ss, t, SLY_TRUE);
 		}
 	} break;
 	case tok_float: {
-		return make_syntax(t, make_float(strtod(&cstr[t.so], NULL)));
+		return make_syntax(ss, t, make_float(ss, strtod(&cstr[t.so], NULL)));
 	} break;
 	case tok_hex: {
-		return make_syntax(t, make_int(strtol(&cstr[t.so+2], NULL, 16)));
+		return make_syntax(ss, t, make_int(ss, strtol(&cstr[t.so+2], NULL, 16)));
 	} break;
 	case tok_int: {
-		return make_syntax(t, make_int(strtol(&cstr[t.so], NULL, 0)));
+		return make_syntax(ss, t, make_int(ss, strtol(&cstr[t.so], NULL, 0)));
 	} break;
 	case tok_sym: {
 		size_t len = t.eo - t.so;
-		sly_value stx = make_syntax(t, make_symbol(interned, &cstr[t.so], len));
+		sly_value stx = make_syntax(ss, t, make_symbol(ss, &cstr[t.so], len));
 		return stx;
 	} break;
 	case tok_max: {
@@ -171,16 +174,16 @@ parse_value(char *cstr, sly_value interned)
 }
 
 sly_value
-parse(char *cstr, sly_value interned)
+parse(Sly_State *ss, char *cstr)
 {
 	lexer_init(cstr);
 
-	sly_value code = cons(make_syntax((token){}, cstr_to_symbol("begin")),
+	sly_value code = cons(ss, make_syntax(ss, (token){}, cstr_to_symbol("begin")),
 						  SLY_NULL);
 	sly_value val;
 	while (peek().tag != tok_eof) {
-		if (null_p(val = parse_value(cstr, interned))) break;
-		append(code, cons(val, SLY_NULL));
+		if (null_p(val = parse_value(ss, cstr))) break;
+		append(code, cons(ss, val, SLY_NULL));
 	}
 	lexer_end();
 	return code;
@@ -196,14 +199,15 @@ get_file_size(FILE *file)
 }
 
 sly_value
-parse_file(char *file_path, char **contents, sly_value interned)
+parse_file(Sly_State *ss, char *file_path, char **contents)
 {
 	FILE *file = fopen(file_path, "r");
 	size_t size = get_file_size(file);
-	char *str = sly_alloc(size+1);
+	char *str = malloc(size+1);
+	assert(str != NULL);
 	fread(str, 1, size, file);
 	str[size] = '\0';
 	fclose(file);
 	*contents = str;
-	return parse(str, interned);
+	return parse(ss, str);
 }

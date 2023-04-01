@@ -5,13 +5,10 @@ lflags=
 cc=gcc
 target='sly'
 
+set -e
+
 compile() {
 	"$cc" $cflags $lflags -o "$target" *.c
-}
-
-asm() {
-	"$cc" $cflags -S -o main3.s main.c
-	"$cc" $cflags -S sly_types.c
 }
 
 clean() {
@@ -24,20 +21,17 @@ clean_all() {
 }
 
 case "$1" in
-	"asm")
-		asm
-		;;
 	"clean")
 		clean_all
 		;;
 	"run")
-		compile && clean && "./$target"
+		(set -x; compile) && clean && (set -x; "./$target")
 		;;
 	"test")
-		"./$target" *.scm
+		(set -x; "./$target" *.scm)
 		;;
 	*)
-		compile
+		(set -x; compile)
 		clean
 		;;
 esac

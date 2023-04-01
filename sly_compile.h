@@ -14,6 +14,6 @@ struct compile {
 	struct scope *cscope;
 };
 
-struct compile sly_compile(char *file_name);
+void sly_compile(Sly_State *ss, char *file_name);
 
 #endif /* SLY_COMPILE_H_ */

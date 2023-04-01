@@ -90,7 +90,7 @@ typedef struct _stack_frame {
 
 typedef sly_value INSTR;
 
-stack_frame *make_stack(size_t nregs);
+stack_frame *make_stack(Sly_State *ss, size_t nregs);
 void dis(INSTR instr);
 void dis_code(sly_value code);
 void dis_all(stack_frame *frame);

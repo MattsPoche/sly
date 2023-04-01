@@ -2,12 +2,12 @@
 #include "opcodes.h"
 
 stack_frame *
-make_stack(size_t nregs)
+make_stack(Sly_State *ss, size_t nregs)
 {
 	sly_assert(nregs <= REG_MAX, "Stack too big");
-	stack_frame *frame = sly_alloc(sizeof(*frame));
+	stack_frame *frame = sly_alloc(ss, sizeof(*frame));
 	frame->parent = NULL;
-	frame->R = make_vector(nregs, nregs);
+	frame->R = make_vector(ss, nregs, nregs);
 	return frame;
 }
 

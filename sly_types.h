@@ -1,26 +1,13 @@
 #ifndef SLY_TYPES_H_
 #define SLY_TYPES_H_
 
-#include <stdlib.h>
 #include <stdio.h>
-#include <stdint.h>
 #include <string.h>
-#include <limits.h>
+#include "common_def.h"
 #include "lexer.h"
+#include "gc.h"
 
-typedef int8_t   i8;
-typedef int16_t  i16;
-typedef int32_t  i32;
-typedef int64_t  i64;
-typedef uint8_t  u8;
-typedef uint16_t u16;
-typedef uint32_t u32;
-typedef uint64_t u64;
-typedef float    f32;
-typedef double   f64;
 typedef uintptr_t sly_value;
-
-#define ARR_LEN(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 #define st_ptr         0x0
 #define st_pair        0x1
@@ -37,6 +24,16 @@ typedef uintptr_t sly_value;
 #define SLY_FALSE ((sly_value)st_bool)
 #define SLY_TRUE  ((sly_value)((UINT64_MAX & ~TAG_MASK)|st_bool))
 #define ctobool(b) ((b) ? SLY_TRUE : SLY_FALSE)
+
+typedef struct _sly_state {
+	GC gc;
+	struct compile *cc;
+	struct _stack_frame *frame;
+	sly_value code;
+	sly_value stack;
+} Sly_State;
+
+#include "sly_compile.h"
 
 struct imm_value {
 	u8 _padding[3];
@@ -61,6 +58,7 @@ enum type_tag {
 	tt_closure,
 	tt_cclosure,
 	tt_syntax,
+	TYPE_TAG_COUNT,
 };
 
 typedef struct _pair {
@@ -68,7 +66,12 @@ typedef struct _pair {
 	sly_value cdr;
 } pair;
 
-#define OBJ_HEADER int type, gcinfo
+struct obj_header {
+	gcinfo gci;
+	int type;
+};
+
+#define OBJ_HEADER struct obj_header h
 
 typedef struct _number {
 	OBJ_HEADER;
@@ -119,7 +122,7 @@ typedef struct _clos {
 	size_t arg_idx;   // position in upvals where args are stored
 } closure;
 
-typedef sly_value (*cfunc)(sly_value args);
+typedef sly_value (*cfunc)(Sly_State *ss, sly_value args);
 
 typedef struct _cclos {
 	OBJ_HEADER;
@@ -141,10 +144,10 @@ u64 sly_hash(sly_value v);
 int symbol_eq(sly_value o1, sly_value o2);
 i64 get_int(sly_value v);
 f64 get_float(sly_value v);
-sly_value make_int(i64 i);
-sly_value make_float(f64 f);
-sly_value make_small_float(f32  f);
-sly_value cons(sly_value car, sly_value cdr);
+sly_value make_int(Sly_State *ss, i64 i);
+sly_value make_float(Sly_State *ss, f64 f);
+sly_value make_small_float(Sly_State *ss, f32  f);
+sly_value cons(Sly_State *ss, sly_value car, sly_value cdr);
 sly_value car(sly_value obj);
 sly_value cdr(sly_value obj);
 void set_car(sly_value obj, sly_value value);
@@ -152,54 +155,54 @@ void set_cdr(sly_value obj, sly_value value);
 sly_value tail(sly_value obj);
 void append(sly_value p, sly_value v);
 size_t list_len(sly_value list);
-sly_value list_to_vector(sly_value list);
-sly_value vector_to_list(sly_value vec);
-sly_value make_byte_vector(size_t len, size_t cap);
-sly_value byte_vector_ref(sly_value v, size_t idx);
+sly_value list_to_vector(Sly_State *ss, sly_value list);
+sly_value vector_to_list(Sly_State *ss, sly_value vec);
+sly_value make_byte_vector(Sly_State *ss, size_t len, size_t cap);
+sly_value byte_vector_ref(Sly_State *ss, sly_value v, size_t idx);
 void byte_vector_set(sly_value v, size_t idx, sly_value value);
 size_t byte_vector_len(sly_value v);
-sly_value make_vector(size_t len, size_t cap);
-sly_value copy_vector(sly_value v);
+sly_value make_vector(Sly_State *ss, size_t len, size_t cap);
+sly_value copy_vector(Sly_State *ss, sly_value v);
 sly_value vector_ref(sly_value v, size_t idx);
 void vector_set(sly_value v, size_t idx, sly_value value);
 size_t vector_len(sly_value v);
-void vector_append(sly_value v, sly_value value);
-sly_value make_uninterned_symbol(char *cstr, size_t len);
-sly_value make_symbol(sly_value interned, char *cstr, size_t len);
+void vector_append(Sly_State *ss, sly_value v, sly_value value);
+sly_value make_uninterned_symbol(Sly_State *ss, char *cstr, size_t len);
+sly_value make_symbol(Sly_State *ss, char *cstr, size_t len);
 sly_value get_interned_symbol(sly_value alist, char *name, size_t len);
-void intern_symbol(sly_value interned, sly_value sym_v);
-sly_value make_string(char *cstr, size_t len);
+void intern_symbol(Sly_State *ss, sly_value sym_v);
+sly_value make_string(Sly_State *ss, char *cstr, size_t len);
 size_t string_len(sly_value str);
 sly_value string_eq(sly_value s1, sly_value s2);
-sly_value make_prototype(sly_value uplist, sly_value constants, sly_value code,
+sly_value make_prototype(Sly_State *ss, sly_value uplist, sly_value constants, sly_value code,
 						 size_t nregs, size_t nargs, size_t entry, int has_varg);
-sly_value make_closure(sly_value _proto);
-sly_value make_cclosure(cfunc fn, size_t nargs, int has_varg);
-sly_value sly_add(sly_value x, sly_value y);
-sly_value sly_sub(sly_value x, sly_value y);
-sly_value sly_mul(sly_value x, sly_value y);
-sly_value sly_div(sly_value x, sly_value y);
-sly_value sly_idiv(sly_value x, sly_value y);
-sly_value sly_mod(sly_value x, sly_value y);
+sly_value make_closure(Sly_State *ss, sly_value _proto);
+sly_value make_cclosure(Sly_State *ss, cfunc fn, size_t nargs, int has_varg);
+sly_value sly_add(Sly_State *ss, sly_value x, sly_value y);
+sly_value sly_sub(Sly_State *ss, sly_value x, sly_value y);
+sly_value sly_mul(Sly_State *ss, sly_value x, sly_value y);
+sly_value sly_div(Sly_State *ss, sly_value x, sly_value y);
+sly_value sly_idiv(Sly_State *ss, sly_value x, sly_value y);
+sly_value sly_mod(Sly_State *ss, sly_value x, sly_value y);
 int sly_num_eq(sly_value x, sly_value y);
 int sly_num_lt(sly_value x, sly_value y);
 int sly_num_gt(sly_value x, sly_value y);
 int sly_eq(sly_value o2, sly_value o1);
-sly_value make_syntax(token tok, sly_value datum);
+sly_value make_syntax(Sly_State *ss, token tok, sly_value datum);
 sly_value syntax_to_datum(sly_value syn);
-sly_value make_dictionary(void);
+sly_value make_dictionary(Sly_State *ss);
 int slot_is_free(sly_value slot);
-void dictionary_set(sly_value d, sly_value key, sly_value value);
+void dictionary_set(Sly_State *ss, sly_value d, sly_value key, sly_value value);
 sly_value dictionary_entry_ref(sly_value d, sly_value key);
 sly_value dictionary_ref(sly_value d, sly_value key);
 void dictionary_remove(sly_value d, sly_value key);
 
-#define cstr_to_symbol(cstr) (make_symbol(interned, (cstr), strlen(cstr)))
+#define cstr_to_symbol(cstr) (make_symbol(ss, (cstr), strlen(cstr)))
 
 /* type predicates */
 #define ptr_p(v)         (((v) & TAG_MASK) == st_ptr)
 #define GET_PTR(v)       ((void *)((v) & ~TAG_MASK))
-#define TYPEOF(v)        (*((enum type_tag *)GET_PTR(v)))
+#define TYPEOF(v)        (((struct obj_header *)GET_PTR(v))->type)
 #define null_p(v)        ((v) == SLY_NULL)
 #define void_p(v)        ((v) == SLY_VOID)
 #define pair_p(v)        (!null_p(v) && ((v) & TAG_MASK) == st_pair)
@@ -248,11 +251,9 @@ byte_p(sly_value val)
 }
 
 static inline void *
-sly_alloc(size_t size)
+sly_alloc(Sly_State *ss, size_t size)
 {
-	void *ptr = malloc(size);
-	sly_assert(ptr != NULL, "Error malloc failed");
-	return ptr;
+	return gc_alloc(&ss->gc, size, 1);
 }
 
 #endif /* SLY_TYPES_H_ */

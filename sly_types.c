@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <time.h>
 #include "sly_types.h"
 
@@ -124,7 +125,7 @@ get_float(sly_value v)
 }
 
 sly_value
-make_int(i64 i)
+make_int(Sly_State *ss, i64 i)
 {
 	if (i >= INT32_MIN && i <= INT32_MAX) {
 		/* small int */
@@ -134,24 +135,25 @@ make_int(i64 i)
 		sly_value s = *((sly_value *)(&v));
 		return (s & ~TAG_MASK) | st_imm;
 	}
-	number *n = sly_alloc(sizeof(*n));
-	n->type = tt_int;
+	number *n = sly_alloc(ss, sizeof(*n));
+	n->h.type = tt_int;
 	n->val.as_int = i;
 	return (sly_value)n;
 }
 
 sly_value
-make_float(f64 f)
+make_float(Sly_State *ss, f64 f)
 {
-	number *n = sly_alloc(sizeof(*n));
-	n->type = tt_float;
+	number *n = sly_alloc(ss, sizeof(*n));
+	n->h.type = tt_float;
 	n->val.as_float = f;
 	return (sly_value)n;
 }
 
 sly_value
-make_small_float(f32  f)
+make_small_float(Sly_State *ss, f32  f)
 {
+	(void)ss;
 	struct imm_value v;
 	v.type = imm_int;
 	v.val.as_float = f;
@@ -159,9 +161,9 @@ make_small_float(f32  f)
 }
 
 sly_value
-cons(sly_value car, sly_value cdr)
+cons(Sly_State *ss, sly_value car, sly_value cdr)
 {
-	pair *p = sly_alloc(sizeof(*p));
+	pair *p = gc_alloc(&ss->gc, sizeof(*p), 0);
 	p->car = car;
 	p->cdr = cdr;
 	sly_value v = (sly_value)p;
@@ -228,50 +230,50 @@ list_len(sly_value list)
 }
 
 sly_value
-list_to_vector(sly_value list)
+list_to_vector(Sly_State *ss, sly_value list)
 {
 	size_t cap = list_len(list);
-	sly_value vec = make_vector(0, cap);
+	sly_value vec = make_vector(ss, 0, cap);
 	while (pair_p(list)) {
-		vector_append(vec, car(list));
+		vector_append(ss, vec, car(list));
 		list = cdr(list);
 	}
 	return vec;
 }
 
 sly_value
-vector_to_list(sly_value vec)
+vector_to_list(Sly_State *ss, sly_value vec)
 {
 	size_t len = vector_len(vec);
 	if (len == 0) return SLY_NULL;
-	if (len == 1) return cons(vector_ref(vec, 0), SLY_NULL);
+	if (len == 1) return cons(ss, vector_ref(vec, 0), SLY_NULL);
 	/* construct list back to front */
-	sly_value list = cons(vector_ref(vec, len - 1), SLY_NULL);
+	sly_value list = cons(ss, vector_ref(vec, len - 1), SLY_NULL);
 	for (size_t i = len - 2; i > 0; ++i) {
-		list = cons(vector_ref(vec, i), list);
+		list = cons(ss, vector_ref(vec, i), list);
 	}
-	return cons(vector_ref(vec, 0), list);
+	return cons(ss, vector_ref(vec, 0), list);
 }
 
 sly_value
-make_byte_vector(size_t len, size_t cap)
+make_byte_vector(Sly_State *ss, size_t len, size_t cap)
 {
 	sly_assert(len <= cap, "Error vector length may not exceed its capacity");
-	byte_vector *vec = sly_alloc(sizeof(*vec));
-	vec->elems = sly_alloc(cap);
-	vec->type = tt_byte_vector;
+	byte_vector *vec = sly_alloc(ss, sizeof(*vec));
+	vec->elems = sly_alloc(ss, cap);
+	vec->h.type = tt_byte_vector;
 	vec->cap = cap;
 	vec->len = len;
 	return (sly_value)vec;
 }
 
 sly_value
-byte_vector_ref(sly_value v, size_t idx)
+byte_vector_ref(Sly_State *ss, sly_value v, size_t idx)
 {
 	sly_assert(vector_p(v), "Type Error: Expected byte-vector");
 	byte_vector *vec = GET_PTR(v);
 	sly_assert(idx < vec->len, "Error: Index out of bounds");
-	return make_int(vec->elems[idx]);
+	return make_int(ss, vec->elems[idx]);
 }
 
 void
@@ -296,23 +298,25 @@ byte_vector_len(sly_value v)
 }
 
 sly_value
-make_vector(size_t len, size_t cap)
+make_vector(Sly_State *ss, size_t len, size_t cap)
 {
 	sly_assert(len <= cap, "Error vector length may not exceed its capacity");
-	vector *vec = sly_alloc(sizeof(*vec));
-	vec->elems = sly_alloc(sizeof(sly_value) * cap);
-	vec->type = tt_vector;
+	vector *vec = sly_alloc(ss, sizeof(*vec));
+	//sly_alloc(ss, sizeof(sly_value) * cap);
+	vec->elems = malloc(sizeof(sly_value) * cap);
+	assert(vec->elems != NULL);
+	vec->h.type = tt_vector;
 	vec->cap = cap;
 	vec->len = len;
 	return (sly_value)vec;
 }
 
 sly_value
-copy_vector(sly_value v)
+copy_vector(Sly_State *ss, sly_value v)
 {
 	sly_assert(vector_p(v), "Type Error: Expected vector");
 	vector *vec = GET_PTR(v);
-	sly_value p = make_vector(vec->len, vec->cap);
+	sly_value p = make_vector(ss, vec->len, vec->cap);
 	for (size_t i = 0; i < vec->len; ++i) {
 		vector_set(p, i, vector_ref(v, i));
 	}
@@ -351,17 +355,15 @@ vector_grow(sly_value v)
 	 * Object must be a <vector> or <dictionary>
 	 */
 	vector *vec = GET_PTR(v);
-	size_t size = vec->cap * sizeof(sly_value);
-	void *ptr = vec->elems;
 	vec->cap *= 2;
-	vec->elems = sly_alloc(vec->cap * sizeof(sly_value));
-	memcpy(vec->elems, ptr, size);
-	free(ptr);
+	vec->elems = realloc(vec->elems, vec->cap * sizeof(sly_value));
+	assert(vec->elems != NULL);
 }
 
 void
-vector_append(sly_value v, sly_value value)
+vector_append(Sly_State *ss, sly_value v, sly_value value)
 {
+	(void)ss;
 	sly_assert(vector_p(v), "Type Error: Expected vector");
 	vector *vec = GET_PTR(v);
 	if (vec->len >= vec->cap) {
@@ -371,13 +373,13 @@ vector_append(sly_value v, sly_value value)
 }
 
 sly_value
-make_uninterned_symbol(char *cstr, size_t len)
+make_uninterned_symbol(Sly_State *ss, char *cstr, size_t len)
 {
 	sly_assert(len <= UCHAR_MAX,
 			   "Value Error: name exceeds maximum for symbol");
-	symbol *sym = sly_alloc(sizeof(*sym));
-	sym->name = sly_alloc(len);
-	sym->type = tt_symbol;
+	symbol *sym = sly_alloc(ss, sizeof(*sym));
+	sym->name = sly_alloc(ss, len);
+	sym->h.type = tt_symbol;
 	sym->len = len;
 	memcpy(sym->name, cstr, len);
 	sym->hash = hash_symbol(cstr, len);
@@ -385,15 +387,16 @@ make_uninterned_symbol(char *cstr, size_t len)
 }
 
 sly_value
-make_symbol(sly_value interned, char *cstr, size_t len)
+make_symbol(Sly_State *ss, char *cstr, size_t len)
 {
 	u64 h = hash_str(cstr, len);
+	sly_value interned = ss->cc->interned;
 	sly_value entry = dictionary_entry_ref_by_hash(interned, h);
 	sly_value str, sym = SLY_NULL;
 	if (slot_is_free(entry)) {
-		str = make_string(cstr, len);
-		sym = make_uninterned_symbol(cstr, len);
-		dictionary_set(interned, str, sym);
+		str = make_string(ss, cstr, len);
+		sym = make_uninterned_symbol(ss, cstr, len);
+		dictionary_set(ss, interned, str, sym);
 	} else {
 		sym = cdr(entry);
 	}
@@ -401,20 +404,21 @@ make_symbol(sly_value interned, char *cstr, size_t len)
 }
 
 void
-intern_symbol(sly_value interned, sly_value sym)
+intern_symbol(Sly_State *ss, sly_value sym)
 {
 	sly_assert(symbol_p(sym), "Type error expected <symbol>");
+	sly_value interned = ss->cc->interned;
 	symbol *s = GET_PTR(sym);
-	sly_value str = make_string((char *)s->name, s->len);
-	dictionary_set(interned, str, sym);
+	sly_value str = make_string(ss, (char *)s->name, s->len);
+	dictionary_set(ss, interned, str, sym);
 }
 
 sly_value
-make_string(char *cstr, size_t len)
+make_string(Sly_State *ss, char *cstr, size_t len)
 {
-	sly_value val = make_byte_vector(len, len);
+	sly_value val = make_byte_vector(ss, len, len);
 	byte_vector *vec = GET_PTR(val);
-	vec->type = tt_string;
+	vec->h.type = tt_string;
 	memcpy(vec->elems, cstr, len);
 	return val;
 }
@@ -441,11 +445,11 @@ string_eq(sly_value s1, sly_value s2)
 }
 
 sly_value
-make_prototype(sly_value uplist, sly_value constants, sly_value code,
+make_prototype(Sly_State *ss, sly_value uplist, sly_value constants, sly_value code,
 			   size_t nregs, size_t nargs, size_t entry, int has_varg)
 {
-	prototype *proto = sly_alloc(sizeof(*proto));
-	proto->type = tt_prototype;
+	prototype *proto = sly_alloc(ss, sizeof(*proto));
+	proto->h.type = tt_prototype;
 	proto->uplist = uplist;
 	proto->K = constants;
 	proto->code = code;
@@ -457,24 +461,24 @@ make_prototype(sly_value uplist, sly_value constants, sly_value code,
 }
 
 sly_value
-make_closure(sly_value _proto)
+make_closure(Sly_State *ss, sly_value _proto)
 {
 	sly_assert(prototype_p(_proto), "Type Error expected prototype");
-	closure *clos = sly_alloc(sizeof(*clos));
-	clos->type = tt_closure;
+	closure *clos = sly_alloc(ss, sizeof(*clos));
+	clos->h.type = tt_closure;
 	prototype *proto = GET_PTR(_proto);
 	clos->arg_idx = 1;
 	size_t cap = clos->arg_idx + proto->nargs;
-	clos->upvals = make_vector(0, cap);
+	clos->upvals = make_vector(ss, 0, cap);
 	clos->proto = _proto;
 	return (sly_value)clos;
 }
 
 sly_value
-make_cclosure(cfunc fn, size_t nargs, int has_varg)
+make_cclosure(Sly_State *ss, cfunc fn, size_t nargs, int has_varg)
 {
-	cclosure *clos = sly_alloc(sizeof(*clos));
-	clos->type = tt_cclosure;
+	cclosure *clos = sly_alloc(ss, sizeof(*clos));
+	clos->h.type = tt_cclosure;
 	clos->fn = fn;
 	clos->nargs = nargs;
 	clos->has_varg = has_varg;
@@ -482,175 +486,175 @@ make_cclosure(cfunc fn, size_t nargs, int has_varg)
 }
 
 static sly_value
-addfx(f64 x, sly_value y)
+addfx(Sly_State *ss, f64 x, sly_value y)
 {
 	sly_assert(number_p(y), "Type Error expected number");
 	if (int_p(y)) {
-		return make_float(x + (f64)get_int(y));
+		return make_float(ss, x + (f64)get_int(y));
 	} else if (float_p(y)) {
-		return make_float(x + get_float(y));
+		return make_float(ss, x + get_float(y));
 	}
 	sly_assert(0, "Error Unreachable");
 	return SLY_NULL;
 }
 
 static sly_value
-addix(i64 x, sly_value y)
+addix(Sly_State *ss, i64 x, sly_value y)
 {
 	sly_assert(number_p(y), "Type Error expected number");
 	if (int_p(y)) {
-		return make_int(x + get_int(y));
+		return make_int(ss, x + get_int(y));
 	} else if (float_p(y)) {
-		return make_float((f64)x + get_float(y));
+		return make_float(ss, (f64)x + get_float(y));
 	}
 	sly_assert(0, "Error Unreachable");
 	return SLY_NULL;
 }
 
 sly_value
-sly_add(sly_value x, sly_value y)
+sly_add(Sly_State *ss, sly_value x, sly_value y)
 {
 	sly_assert(number_p(x), "Type Error expected number");
 	if (int_p(x)) {
-		return addix(get_int(x), y);
+		return addix(ss, get_int(x), y);
 	} else if (float_p(x)) {
-		return addfx(get_float(x), y);
+		return addfx(ss, get_float(x), y);
 	}
 	sly_assert(0, "Error Unreachable");
 	return SLY_NULL;
 }
 
 static sly_value
-subfx(f64 x, sly_value y)
+subfx(Sly_State *ss, f64 x, sly_value y)
 {
 	sly_assert(number_p(y), "Type Error expected number");
 	if (int_p(y)) {
-		return make_float(x - (f64)get_int(y));
+		return make_float(ss, x - (f64)get_int(y));
 	} else if (float_p(y)) {
-		return make_float(x - get_float(y));
+		return make_float(ss, x - get_float(y));
 	}
 	sly_assert(0, "Error Unreachable");
 	return SLY_NULL;
 }
 
 static sly_value
-subix(i64 x, sly_value y)
+subix(Sly_State *ss, i64 x, sly_value y)
 {
 	sly_assert(number_p(y), "Type Error expected number");
 	if (int_p(y)) {
-		return make_int(x - get_int(y));
+		return make_int(ss, x - get_int(y));
 	} else if (float_p(y)) {
-		return make_float((f64)x - get_float(y));
+		return make_float(ss, (f64)x - get_float(y));
 	}
 	sly_assert(0, "Error Unreachable");
 	return SLY_NULL;
 }
 
 sly_value
-sly_sub(sly_value x, sly_value y)
+sly_sub(Sly_State *ss, sly_value x, sly_value y)
 {
 	sly_assert(number_p(x), "Type Error expected number");
 	if (int_p(x)) {
-		return subix(get_int(x), y);
+		return subix(ss, get_int(x), y);
 	} else if (float_p(x)) {
-		return subfx(get_float(x), y);
+		return subfx(ss, get_float(x), y);
 	}
 	sly_assert(0, "Error Unreachable");
 	return SLY_NULL;
 }
 
 static sly_value
-mulfx(f64 x, sly_value y)
+mulfx(Sly_State *ss, f64 x, sly_value y)
 {
 	sly_assert(number_p(y), "Type Error expected number");
 	if (int_p(y)) {
-		return make_float(x * (f64)get_int(y));
+		return make_float(ss, x * (f64)get_int(y));
 	} else if (float_p(y)) {
-		return make_float(x * get_float(y));
+		return make_float(ss, x * get_float(y));
 	}
 	sly_assert(0, "Error Unreachable");
 	return SLY_NULL;
 }
 
 static sly_value
-mulix(i64 x, sly_value y)
+mulix(Sly_State *ss, i64 x, sly_value y)
 {
 	sly_assert(number_p(y), "Type Error expected number");
 	if (int_p(y)) {
-		return make_int(x * get_int(y));
+		return make_int(ss, x * get_int(y));
 	} else if (float_p(y)) {
-		return make_float((f64)x * get_float(y));
+		return make_float(ss, (f64)x * get_float(y));
 	}
 	sly_assert(0, "Error Unreachable");
 	return SLY_NULL;
 }
 
 sly_value
-sly_mul(sly_value x, sly_value y)
+sly_mul(Sly_State *ss, sly_value x, sly_value y)
 {
 	sly_assert(number_p(x), "Type Error expected number");
 	if (int_p(x)) {
-		return mulix(get_int(x), y);
+		return mulix(ss, get_int(x), y);
 	} else if (float_p(x)) {
-		return mulfx(get_float(x), y);
+		return mulfx(ss, get_float(x), y);
 	}
 	sly_assert(0, "Error Unreachable");
 	return SLY_NULL;
 }
 
 static sly_value
-divfx(f64 x, sly_value y)
+divfx(Sly_State *ss, f64 x, sly_value y)
 {
 	sly_assert(number_p(y), "Type Error expected number");
 	if (int_p(y)) {
-		return make_float(x / (f64)get_int(y));
+		return make_float(ss, x / (f64)get_int(y));
 	} else if (float_p(y)) {
-		return make_float(x / get_float(y));
+		return make_float(ss, x / get_float(y));
 	}
 	sly_assert(0, "Error Unreachable");
 	return SLY_NULL;
 }
 
 static sly_value
-divix(i64 x, sly_value y)
+divix(Sly_State *ss, i64 x, sly_value y)
 {
 	sly_assert(number_p(y), "Type Error expected number");
 	if (int_p(y)) {
-		return make_int(x / get_int(y));
+		return make_int(ss, x / get_int(y));
 	} else if (float_p(y)) {
-		return make_float((f64)x / get_float(y));
+		return make_float(ss, (f64)x / get_float(y));
 	}
 	sly_assert(0, "Error Unreachable");
 	return SLY_NULL;
 }
 
 sly_value
-sly_div(sly_value x, sly_value y)
+sly_div(Sly_State *ss, sly_value x, sly_value y)
 {
 	sly_assert(number_p(x), "Type Error expected number");
 	if (int_p(x)) {
-		return divix(get_int(x), y);
+		return divix(ss, get_int(x), y);
 	} else if (float_p(x)) {
-		return divfx(get_float(x), y);
+		return divfx(ss, get_float(x), y);
 	}
 	sly_assert(0, "Error Unreachable");
 	return SLY_NULL;
 }
 
 sly_value
-sly_idiv(sly_value x, sly_value y)
+sly_idiv(Sly_State *ss, sly_value x, sly_value y)
 {
 	sly_assert(int_p(x), "Type Error expected integer");
 	sly_assert(int_p(y), "Type Error expected integer");
-	return make_int(get_int(x) / get_int(y));
+	return make_int(ss, get_int(x) / get_int(y));
 }
 
 sly_value
-sly_mod(sly_value x, sly_value y)
+sly_mod(Sly_State *ss, sly_value x, sly_value y)
 {
 	sly_assert(int_p(x), "Type Error expected integer");
 	sly_assert(int_p(y), "Type Error expected integer");
-	return make_int(get_int(x) % get_int(y));
+	return make_int(ss, get_int(x) % get_int(y));
 }
 
 static int
@@ -786,10 +790,10 @@ sly_eq(sly_value o1, sly_value o2)
 }
 
 sly_value
-make_syntax(token tok, sly_value datum)
+make_syntax(Sly_State *ss, token tok, sly_value datum)
 {
-	syntax *stx = sly_alloc(sizeof(*stx));
-	stx->type = tt_syntax;
+	syntax *stx = sly_alloc(ss, sizeof(*stx));
+	stx->h.type = tt_syntax;
 	stx->tok = tok;
 	stx->datum = datum;
 	return (sly_value)stx;
@@ -804,11 +808,11 @@ syntax_to_datum(sly_value syn)
 }
 
 static sly_value
-make_dictionary_sz(size_t size)
+make_dictionary_sz(Sly_State *ss, size_t size)
 {
-	sly_value v = make_vector(0, size);
+	sly_value v = make_vector(ss, 0, size);
 	vector *dict = GET_PTR(v);
-	dict->type = tt_dictionary;
+	dict->h.type = tt_dictionary;
 	for (size_t i = 0; i < dict->cap; ++i) {
 		dict->elems[i] = SLY_NULL;
 	}
@@ -816,9 +820,9 @@ make_dictionary_sz(size_t size)
 }
 
 sly_value
-make_dictionary(void)
+make_dictionary(Sly_State *ss)
 {
-	return make_dictionary_sz(DICT_INIT_SIZE);
+	return make_dictionary_sz(ss, DICT_INIT_SIZE);
 }
 
 int
@@ -863,23 +867,23 @@ loop:
 }
 
 static void
-dict_resize(sly_value d)
+dict_resize(Sly_State *ss, sly_value d)
 {
 	vector *old = GET_PTR(d);
-	d = make_dictionary_sz(old->cap * 2);
+	d = make_dictionary_sz(ss, old->cap * 2);
 	vector *new = GET_PTR(d);
 	for (size_t i = 0; i < old->cap; ++i) {
 		sly_value entry = old->elems[i];
 		if (pair_p(entry)) {
-			dictionary_set(d, car(entry), cdr(entry));
+			dictionary_set(ss, d, car(entry), cdr(entry));
 		}
 	}
-	free(old->elems);
+	//free(old->elems);
 	*old = *new;
 }
 
 void
-dictionary_set(sly_value d, sly_value key, sly_value value)
+dictionary_set(Sly_State *ss, sly_value d, sly_value key, sly_value value)
 {
 	sly_assert(dictionary_p(d), "Type Error expected <dictionary>");
 	sly_assert(!null_p(key), "Type Error key cannot be <null>");
@@ -889,10 +893,10 @@ dictionary_set(sly_value d, sly_value key, sly_value value)
 	size_t idx = dict_get_slot(d, h);
 	sly_value entry = dict->elems[idx];
 	if (slot_is_free(entry)) {
-		dict->elems[idx] = cons(key, value);
+		dict->elems[idx] = cons(ss, key, value);
 		dict->len++;
 		if (((f64)dict->len / (f64)dict->cap) > DICT_LOAD_FACTOR) {
-			dict_resize(d);
+			dict_resize(ss, d);
 		}
 	} else {
 		set_cdr(entry, value);
