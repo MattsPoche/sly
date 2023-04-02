@@ -12,63 +12,65 @@ make_stack(Sly_State *ss, size_t nregs)
 }
 
 void
-dis(INSTR instr)
+dis(INSTR ins)
 {
+	struct instr *instr;
+	instr = (struct instr *)(&ins);
 	enum opcode op = GET_OP(instr);
 	switch (op) {
 	case OP_NOP: break;
 	case OP_MOVE: {
 		u8 a = GET_A(instr);
 		u8 b = GET_B(instr);
-		printf("(MOVE %d %d)\n", a, b);
+		printf("(MOVE %d %d) ;; line %d\n", a, b, instr->ln);
 	} break;
 	case OP_LOADI: {
 		u8 a = GET_A(instr);
 		i64 b = GET_Bx(instr);
-		printf("(LOADI %d %ld)\n", a, b);
+		printf("(LOADI %d %ld) ;; line %d\n", a, b, instr->ln);
 	} break;
 	case OP_LOADK: {
 		u8 a = GET_A(instr);
 		u64 b = GET_Bx(instr);
-		printf("(LOADK %d %lu)\n", a, b);
+		printf("(LOADK %d %lu) ;; line %d\n", a, b, instr->ln);
 	} break;
 	case OP_LOAD_FALSE: {
 		u8 a = GET_A(instr);
-		printf("(LOAD_FALSE %d)\n", a);
+		printf("(LOAD_FALSE %d) ;; line %d\n", a, instr->ln);
 	} break;
 	case OP_LOAD_TRUE: {
 		u8 a = GET_A(instr);
-		printf("(LOAD_TRUE %d)\n", a);
+		printf("(LOAD_TRUE %d) ;; line %d\n", a, instr->ln);
 	} break;
 	case OP_LOAD_NULL: {
 		u8 a = GET_A(instr);
-		printf("(LOAD_NULL %d)\n", a);
+		printf("(LOAD_NULL %d) ;; line %d\n", a, instr->ln);
 	} break;
 	case OP_LOAD_VOID: {
 		u8 a = GET_A(instr);
-		printf("(LOAD_VOID %d)\n", a);
+		printf("(LOAD_VOID %d) ;; line %d\n", a, instr->ln);
 	} break;
 	case OP_GETUPVAL: {
 		u8 a = GET_A(instr);
 		u8 b = GET_B(instr);
-		printf("(GETUPVAL %d %d)\n", a, b);
+		printf("(GETUPVAL %d %d) ;; line %d\n", a, b, instr->ln);
 	} break;
 	case OP_SETUPVAL: {
 		u8 a = GET_A(instr);
 		u8 b = GET_B(instr);
-		printf("(SETUPVAL %d %d)\n", a, b);
+		printf("(SETUPVAL %d %d) ;; line %d\n", a, b, instr->ln);
 	} break;
 	case OP_GETUPDICT: {
 		u8 a = GET_A(instr);
 		u8 b = GET_B(instr);
 		u8 c = GET_C(instr);
-		printf("(GETUPDICT %d %d %d)\n", a, b, c);
+		printf("(GETUPDICT %d %d %d) ;; line %d\n", a, b, c, instr->ln);
 	} break;
 	case OP_SETUPDICT: {
 		u8 a = GET_A(instr);
 		u8 b = GET_B(instr);
 		u8 c = GET_C(instr);
-		printf("(SETUPDICT %d %d %d)\n", a, b, c);
+		printf("(SETUPDICT %d %d %d) ;; line %d\n", a, b, c, instr->ln);
 	} break;
 	case OP_CONS: {
 	} break;
@@ -82,35 +84,35 @@ dis(INSTR instr)
 	} break;
 	case OP_JMP: {
 		u64 a = GET_Ax(instr);
-		printf("(JMP %lu)\n", a);
+		printf("(JMP %lu) ;; line %d\n", a, instr->ln);
 	} break;
 	case OP_FJMP: {
 		u8 a = GET_A(instr);
 		u64 b = GET_Bx(instr);
-		printf("(FJMP %d %lu)\n", a, b);
+		printf("(FJMP %d %lu) ;; line %d\n", a, b, instr->ln);
 	} break;
 	case OP_CALL: {
 		u8 a = GET_A(instr);
 		u8 b = GET_B(instr);
-		printf("(CALL %d %d)\n", a, b);
+		printf("(CALL %d %d) ;; line %d\n", a, b, instr->ln);
 	} break;
 	case OP_TAILCALL: {
 	} break;
 	case OP_RETURN: {
 		u8 a = GET_A(instr);
-		printf("(RETURN %d)\n", a);
+		printf("(RETURN %d) ;; line %d\n", a, instr->ln);
 	} break;
 	case OP_DICTREF: {
 		u8 a = GET_A(instr);
 		u8 b = GET_B(instr);
 		u8 c = GET_C(instr);
-		printf("(DICTREF %d %d %d)\n", a, b, c);
+		printf("(DICTREF %d %d %d) ;; line %d\n", a, b, c, instr->ln);
 	} break;
 	case OP_DICTSET: {
 		u8 a = GET_A(instr);
 		u8 b = GET_B(instr);
 		u8 c = GET_C(instr);
-		printf("(DICTSET %d %d %d)\n", a, b, c);
+		printf("(DICTSET %d %d %d) ;; line %d\n", a, b, c, instr->ln);
 	} break;
 	case OP_VECREF: {
 	} break;
@@ -119,11 +121,11 @@ dis(INSTR instr)
 	case OP_CLOSURE: {
 		u8 a = GET_A(instr);
 		u64 b = GET_Bx(instr);
-		printf("(CLOSURE %d, %lu)\n", a, b);
+		printf("(CLOSURE %d, %lu) ;; line %d\n", a, b, instr->ln);
 	} break;
 	case OP_DISPLAY: {
 		u8 a = GET_A(instr);
-		printf("(DISPLAY %d)\n", a);
+		printf("(DISPLAY %d) ;; line %d\n", a, instr->ln);
 	} break;
 	}
 }

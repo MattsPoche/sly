@@ -7,9 +7,11 @@ sly_value
 vm_run(Sly_State *ss)
 {
 	stack_frame *frame = ss->frame;
-	INSTR instr;
+	INSTR ibits;
+	struct instr *instr;
     for (;;) {
-		instr = next_instr();
+		ibits = next_instr();
+		instr = (struct instr *)(&ibits);
 		enum opcode i = GET_OP(instr);
 		switch (i) {
 		case OP_NOP: break;
@@ -48,12 +50,23 @@ vm_run(Sly_State *ss)
 		case OP_GETUPVAL: {
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
-			set_reg(a, get_upval(b));
+			sly_value u = get_upval(b);
+			if (ref_p(u)) {
+				set_reg(a, (sly_value)GET_PTR(u));
+			} else {
+				set_reg(a, u);
+			}
 		} break;
 		case OP_SETUPVAL: {
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
-			set_upval(a, get_reg(b));
+			sly_value u = get_upval(a);
+			if (ref_p(u)) {
+				sly_value *ref = GET_PTR(u);
+				*ref = get_reg(b);
+			} else {
+				set_upval(a, get_reg(b));
+			}
 		} break;
 		case OP_GETUPDICT: {
 			u8 a = GET_A(instr);
@@ -115,7 +128,8 @@ vm_run(Sly_State *ss)
 				size_t nargs = b - a - 1;
 				sly_value args;
 				if (clos->has_varg) {
-					sly_assert(nargs >= clos->nargs, "Error wrong number of arguments");
+					sly_assert(nargs >= clos->nargs,
+							   "Error wrong number of arguments");
 					size_t nvargs = nargs - clos->nargs;
 					sly_value vargs = SLY_NULL;
 					args = make_vector(ss, clos->nargs + 1, clos->nargs + 1);
@@ -125,7 +139,8 @@ vm_run(Sly_State *ss)
 					vector_set(args, clos->nargs, vargs);
 					nargs = clos->nargs;
 				} else {
-					sly_assert(nargs == clos->nargs, "Error wrong number of arguments");
+					sly_assert(nargs == clos->nargs,
+							   "Error wrong number of arguments");
 					args = make_vector(ss, clos->nargs, clos->nargs);
 				}
 				for (size_t i = 0; i < nargs; ++i) {
@@ -137,7 +152,8 @@ vm_run(Sly_State *ss)
 				closure *clos = GET_PTR(val);
 				prototype *proto = GET_PTR(clos->proto);
 				size_t nargs = b - a - 1;
-				sly_assert(nargs == proto->nargs, "Error wrong number of arguments");
+				sly_assert(nargs == proto->nargs,
+						   "Error wrong number of arguments");
 				stack_frame *nframe = make_stack(ss, proto->nregs);
 				nframe->U = copy_vector(ss, clos->upvals);
 				nframe->U = make_vector(ss, 0, 1);
@@ -282,8 +298,8 @@ sly_call(Sly_State *ss, size_t nargs)
 	sly_assert(nargs + 1 <= end, "Error not enough arguments");
 	size_t begin = end - (nargs + 1);
 	ss->code = make_vector(ss, 0, 2);
-	vector_append(ss, ss->code, iAB(OP_CALL, begin, end));
-	vector_append(ss, ss->code, iA(OP_RETURN, begin));
+	vector_append(ss, ss->code, iAB(OP_CALL, begin, end, -1));
+	vector_append(ss, ss->code, iA(OP_RETURN, begin, -1));
 	sly_value R = ss->frame->R;
 	sly_value code = ss->frame->code;
 	size_t pc = ss->frame->pc;

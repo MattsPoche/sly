@@ -192,6 +192,8 @@ comp_define(Sly_State *ss, sly_value form, int reg)
 { /* (define <symbol> <expr>) */
 	struct compile *cc = ss->cc;
 	sly_value stx = car(form);
+	syntax *syn = GET_PTR(stx);
+	int line_number = syn->tok.ln;
 	sly_value var = syntax_to_datum(stx);
 	sly_value symtable = cc->cscope->symtable;
 	prototype *proto = GET_PTR(cc->cscope->proto);
@@ -210,8 +212,8 @@ comp_define(Sly_State *ss, sly_value form, int reg)
 			dictionary_set(ss, globals, var, SLY_VOID);
 			comp_expr(ss, car(form), reg);
 			if ((size_t)reg + 1 >= proto->nregs) proto->nregs = reg + 2;
-			vector_append(ss, proto->code, iABx(OP_LOADK, reg + 1, st_prop.reg));
-			vector_append(ss, proto->code, iABC(OP_SETUPDICT, 0, reg + 1, reg));
+			vector_append(ss, proto->code, iABx(OP_LOADK, reg + 1, st_prop.reg, line_number));
+			vector_append(ss, proto->code, iABC(OP_SETUPDICT, 0, reg + 1, reg, line_number));
 		} else {
 			dictionary_set(ss, globals, var, datum);
 		}
@@ -251,11 +253,11 @@ comp_if(Sly_State *ss, sly_value form, int reg)
 	comp_expr(ss, fbranch, reg);
 	size_t end = vector_len(proto->code);
 	if (be_res == -1) {
-		vector_set(proto->code, fjmp, iABx(OP_FJMP, reg, jmp + 1));
+		vector_set(proto->code, fjmp, iABx(OP_FJMP, reg, jmp + 1, -1));
 	} else {
-		vector_set(proto->code, fjmp, iABx(OP_FJMP, be_res, jmp + 1));
+		vector_set(proto->code, fjmp, iABx(OP_FJMP, be_res, jmp + 1, -1));
 	}
-	vector_set(proto->code, jmp,  iAx(OP_JMP, end));
+	vector_set(proto->code, jmp,  iAx(OP_JMP, end, -1));
 	return reg;
 }
 
@@ -265,6 +267,8 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 	struct compile *cc = ss->cc;
 	form = cdr(form);
 	sly_value stx = car(form);
+	syntax *syn = GET_PTR(stx);
+	int line_number = syn->tok.ln;
 	sly_value datum = syntax_to_datum(stx);
 	sly_assert(symbol_p(datum), "Error must be a variable");
 	sly_value prop = symbol_lookup_props(cc, datum);
@@ -275,11 +279,11 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 	if ((size_t)reg + 1 <= proto->nregs) proto->nregs = reg + 2;
 	if (st_prop.type == sym_variable) {
 		if (reg != -1 && st_prop.reg != reg) {
-			vector_append(ss, proto->code, iAB(OP_MOVE, st_prop.reg, reg));
+			vector_append(ss, proto->code, iAB(OP_MOVE, st_prop.reg, reg, line_number));
 		}
 	} else if (st_prop.type == sym_global) {
-		vector_append(ss, proto->code, iAB(OP_LOADK, reg + 1, st_prop.reg));
-		vector_append(ss, proto->code, iABC(OP_SETUPDICT, 0, reg + 1, reg));
+		vector_append(ss, proto->code, iABx(OP_LOADK, reg + 1, st_prop.reg, line_number));
+		vector_append(ss, proto->code, iABC(OP_SETUPDICT, 0, reg + 1, reg, line_number));
 	}
 	sly_assert(null_p(cdr(form)), "Error malformed set! expression");
 	return reg;
@@ -291,6 +295,8 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 	struct compile *cc = ss->cc;
 	sly_value datum;
 	datum = syntax_to_datum(form);
+	syntax *syn = GET_PTR(form);
+	int line_number = syn->tok.ln;
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	if (symbol_p(datum)) {
 		sly_value prop = symbol_lookup_props(cc, datum);
@@ -301,7 +307,7 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 		} break;
 		case sym_constant: {
 			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
-			vector_append(ss, proto->code, iABx(OP_LOADK, reg, st_prop.reg));
+			vector_append(ss, proto->code, iABx(OP_LOADK, reg, st_prop.reg, line_number));
 		} break;
 		case sym_datum: {
 		} break;
@@ -310,7 +316,7 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 		case sym_arg:
 		case sym_upval: {
 			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
-			vector_append(ss, proto->code, iAB(OP_GETUPVAL, reg, st_prop.reg));
+			vector_append(ss, proto->code, iAB(OP_GETUPVAL, reg, st_prop.reg, line_number));
 		} break;
 		case sym_global: {
 			if (!IS_GLOBAL(cc->cscope)) {
@@ -319,23 +325,23 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 				dictionary_set(ss, cc->cscope->symtable, datum, SYMPROP_TO_VALUE(st_prop));
 			}
 			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
-			vector_append(ss, proto->code, iABx(OP_LOADK, reg, st_prop.reg));
-			vector_append(ss, proto->code, iABC(OP_GETUPDICT, reg, 0, reg));
+			vector_append(ss, proto->code, iABx(OP_LOADK, reg, st_prop.reg, line_number));
+			vector_append(ss, proto->code, iABC(OP_GETUPDICT, reg, 0, reg, line_number));
 		} break;
 		}
 	} else { /* constant */
 		if (datum == SLY_FALSE) {
-			vector_append(ss, proto->code, iA(OP_LOAD_FALSE, reg));
+			vector_append(ss, proto->code, iA(OP_LOAD_FALSE, reg, line_number));
 		} else if (datum == SLY_TRUE) {
-			vector_append(ss, proto->code, iA(OP_LOAD_TRUE, reg));
+			vector_append(ss, proto->code, iA(OP_LOAD_TRUE, reg, line_number));
 		} else if (null_p(datum)) {
-			vector_append(ss, proto->code, iA(OP_LOAD_NULL, reg));
+			vector_append(ss, proto->code, iA(OP_LOAD_NULL, reg, line_number));
 		} else if (void_p(datum)) {
-			vector_append(ss, proto->code, iA(OP_LOAD_VOID, reg));
+			vector_append(ss, proto->code, iA(OP_LOAD_VOID, reg, line_number));
 		} else {
 			size_t idx = intern_constant(ss, datum);
 			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
-			vector_append(ss, proto->code, iABx(OP_LOADK, reg, idx));
+			vector_append(ss, proto->code, iABx(OP_LOADK, reg, idx, line_number));
 		}
 	}
 	return -1;
@@ -351,19 +357,19 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 	int start = reg;
 	int reg2 = comp_expr(ss, head, reg);
 	if (reg2 != -1 && reg2 != reg) {
-		vector_append(ss, proto->code, iAB(OP_MOVE, reg, reg2));
+		vector_append(ss, proto->code, iAB(OP_MOVE, reg, reg2, -1));
 	}
 	reg++;
 	while (pair_p(form)) {
 		head = car(form);
 		reg2 = comp_expr(ss, head, reg);
 		if (reg2 != -1 && reg2 != reg) {
-			vector_append(ss, proto->code, iAB(OP_MOVE, reg, reg2));
+			vector_append(ss, proto->code, iAB(OP_MOVE, reg, reg2, -1));
 		}
 		reg++;
 		form = cdr(form);
 	}
-	vector_append(ss, proto->code, iAB(OP_CALL, start, reg));
+	vector_append(ss, proto->code, iAB(OP_CALL, start, reg, -1));
 	return reg;
 }
 
@@ -406,14 +412,14 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 		reg = comp_expr(ss, car(form), reg);
 		form = cdr(form);
 	}
-	vector_append(ss, proto->code, iA(OP_RETURN, reg));
+	vector_append(ss, proto->code, iA(OP_RETURN, reg, -1));
 	cc->cscope = cc->cscope->parent;
 	reg = preg;
 	prototype *cproto = GET_PTR(cc->cscope->proto);
 	size_t i = vector_len(cproto->K);
 	vector_append(ss, cproto->K, scope->proto);
 	if ((size_t)reg >= cproto->nregs) cproto->nregs = reg + 1;
-	vector_append(ss, cproto->code, iABx(OP_CLOSURE, reg, i));
+	vector_append(ss, cproto->code, iABx(OP_CLOSURE, reg, i, -1));
 	free(scope);
 	return reg;
 }
@@ -477,9 +483,9 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			form = cdr(form);
 			int reg2 = comp_expr(ss, car(form), reg);
 			if (reg2 == -1) {
-				vector_append(ss, proto->code, iA(OP_DISPLAY, reg));
+				vector_append(ss, proto->code, iA(OP_DISPLAY, reg, -1));
 			} else {
-				vector_append(ss, proto->code, iA(OP_DISPLAY, reg2));
+				vector_append(ss, proto->code, iA(OP_DISPLAY, reg2, -1));
 			}
 			sly_assert(null_p(cdr(form)), "Error malformed display expression");
 		} break;
@@ -618,5 +624,5 @@ sly_compile(Sly_State *ss, char *file_name)
 	ast = parse_file(ss, file_name, &src);
 	proto = GET_PTR(cc->cscope->proto);
 	int r = comp_expr(ss, ast, 0);
-	vector_append(ss, proto->code, iA(OP_RETURN, r));
+	vector_append(ss, proto->code, iA(OP_RETURN, r, -1));
 }

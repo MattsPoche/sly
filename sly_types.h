@@ -9,11 +9,12 @@
 
 typedef uintptr_t sly_value;
 
-#define st_ptr         0x0
-#define st_pair        0x1
-#define st_imm         0x2
-#define st_bool        0x4
-#define TAG_MASK       0x7
+#define st_ptr   0x0
+#define st_pair  0x1
+#define st_imm   0x2
+#define st_ref   0x3
+#define st_bool  0x4
+#define TAG_MASK 0x7
 
 #define imm_int   0
 #define imm_byte  1
@@ -174,8 +175,9 @@ void intern_symbol(Sly_State *ss, sly_value sym_v);
 sly_value make_string(Sly_State *ss, char *cstr, size_t len);
 size_t string_len(sly_value str);
 sly_value string_eq(sly_value s1, sly_value s2);
-sly_value make_prototype(Sly_State *ss, sly_value uplist, sly_value constants, sly_value code,
-						 size_t nregs, size_t nargs, size_t entry, int has_varg);
+sly_value make_prototype(Sly_State *ss, sly_value uplist, sly_value constants,
+						 sly_value code, size_t nregs, size_t nargs,
+						 size_t entry, int has_varg);
 sly_value make_closure(Sly_State *ss, sly_value _proto);
 sly_value make_cclosure(Sly_State *ss, cfunc fn, size_t nargs, int has_varg);
 sly_value sly_add(Sly_State *ss, sly_value x, sly_value y);
@@ -201,6 +203,8 @@ void dictionary_remove(sly_value d, sly_value key);
 
 /* type predicates */
 #define ptr_p(v)         (((v) & TAG_MASK) == st_ptr)
+#define ref_p(v)         (((v) & TAG_MASK) == st_ref)
+#define open_p(v)        ref_p(v)
 #define GET_PTR(v)       ((void *)((v) & ~TAG_MASK))
 #define TYPEOF(v)        (((struct obj_header *)GET_PTR(v))->type)
 #define null_p(v)        ((v) == SLY_NULL)

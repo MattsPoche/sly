@@ -1,51 +1,6 @@
 #ifndef SLY_OPCODES_H_
 #define SLY_OPCODES_H_
 
-/*
-64 bit instruction
-| 7 6 5 4 3 2 1 0 | 7 6 5 4 3 2 1 0 | 7 6 5 4 3 2 1 0 | 7 6 5 4 3 2 1 0 | 7 6 5 4 3 2 1 0 | 7 6 5 4 3 2 1 0 | 7 6 5 4 3 2 1 0 | 7 6 5 4 3 2 1 0 |
-|      G          |        F        |      E          |      D          |       C         |      B          |      A          |      OP CODE    |
-|            Dx                                                         |                 |                 |                 |      OP CODE    |
-|            Bx                                                                                             |                 |                 |
-*/
-#define REG_MAX UCHAR_MAX
-#define OP_MASK 0xFF
-#define A_MASK  (0xFF << 8)
-#define B_MASK  (0xFF << 16)
-#define C_MASK  (0xFF << 24)
-#define D_MASK  (0xFF << 32)
-#define E_MASK  (0xFF << 40)
-#define F_MASK  (0xFF << 48)
-#define G_MASK  (0xFF << 56)
-#define Ax_MASK (~OP_MASK)
-#define Bx_MASK (~(A_MASK|OP_MASK))
-#define Cx_MASK (~(B_MASK|A_MASK|OP_MASK))
-#define Dx_MASK (~(C_MASK|B_MASK|OP_MASK))
-#define GET_OP(instr) ((enum opcode)((instr) & OP_MASK))
-#define GET_A(instr)  ((u8)(((instr) & A_MASK) >> 8))
-#define GET_B(instr)  ((u8)(((instr) & B_MASK) >> 16))
-#define GET_C(instr)  ((u8)(((instr) & C_MASK) >> 24))
-#define GET_D(instr)  ((u8)(((instr) & D_MASK) >> 32))
-#define GET_E(instr)  ((u8)(((instr) & E_MASK) >> 40))
-#define GET_F(instr)  ((u8)(((instr) & F_MASK) >> 48))
-#define GET_G(instr)  ((u8)(((instr) & G_MASK) >> 56))
-#define GET_Ax(instr) ((sly_value)(((instr) & Ax_MASK) >> 8))
-#define GET_Bx(instr) ((sly_value)(((instr) & Bx_MASK) >> 16))
-#define GET_Cx(instr) ((sly_value)(((instr) & Cx_MASK) >> 24))
-#define GET_Dx(instr) ((sly_value)(((instr) & Dx_MASK) >> 32))
-#define iA(i, a)         (((a) << 8)|(i))
-#define iAx(i, a)        iA(i, a)
-#define iAB(i, a, b)     (((b) << 16)|((a) << 8)|(i))
-#define iABx(i, a, b)    iAB(i, a, b)
-#define iADx(i, a, d)    (((d) << 32)|((a) << 8)|(i))
-#define iABC(i, a, b, c) (((c) << 24)|((b) << 16)|((a) << 8)|(i))
-#define next_instr()     vector_ref(frame->code, frame->pc++)
-#define get_const(i)    vector_ref(frame->K, (i))
-#define get_reg(i)      vector_ref(frame->R, (i))
-#define set_reg(i, v)   vector_set(frame->R, (i), (v))
-#define get_upval(i) vector_ref(frame->U, (i))
-#define set_upval(i, v) vector_set(frame->U, (i), (v))
-
 enum opcode {
 	OP_NOP = 0,
 	OP_MOVE,      // iAB   | R[A] := R[B]
@@ -88,9 +43,87 @@ typedef struct _stack_frame {
 	size_t ret_slot;
 } stack_frame;
 
+struct instr {
+	u8 b[4];
+	i32 ln;
+};
+
 typedef sly_value INSTR;
 
+#define REG_MAX UCHAR_MAX
+#define GET_OP(instr)   ((enum opcode)((instr)->b[0]))
+#define GET_A(instr)    ((instr)->b[1])
+#define GET_B(instr)    ((instr)->b[2])
+#define GET_C(instr)    ((instr)->b[3])
+#define GET_Ax(instr)   ((u64)(((*((u32 *)(&(instr)->b[0]))) & 0xffffff00) >> 8))
+#define GET_Bx(instr)   ((u64)(*((u16 *)(&(instr)->b[2]))))
+#define next_instr()    vector_ref(frame->code, frame->pc++)
+#define get_const(i)    vector_ref(frame->K, (i))
+#define get_reg(i)      vector_ref(frame->R, (i))
+#define set_reg(i, v)   vector_set(frame->R, (i), (v))
+#define get_upval(i)    vector_ref(frame->U, (i))
+#define set_upval(i, v) vector_set(frame->U, (i), (v))
+
 stack_frame *make_stack(Sly_State *ss, size_t nregs);
+
+static inline INSTR
+iA(u8 i, u8 a, int ln)
+{
+	struct instr instr;
+	instr.b[0] = i;
+	instr.b[1] = a;
+	instr.ln = ln;
+	return *((INSTR *)(&instr));
+}
+
+static inline INSTR
+iAx(u8 i, u32 ax, int ln)
+{
+	struct instr instr;
+	u32 *arg = (u32 *)(&instr.b[0]);
+	*arg = (ax & 0x00ffffff) << 8;
+	instr.b[0] = i;
+	instr.ln = ln;
+	return *((INSTR *)(&instr));
+}
+
+static inline INSTR
+iAB(u8 i, u8 a, u8 b, int ln)
+{
+	struct instr instr;
+	instr.b[0] = i;
+	instr.b[1] = a;
+	instr.b[2] = b;
+	instr.ln = ln;
+	return *((INSTR *)(&instr));
+}
+
+
+static inline INSTR
+iABx(u8 i, u8 a, u16 bx, int ln)
+{
+	struct instr instr;
+	instr.b[0] = i;
+	instr.b[1] = a;
+	u16 *arg = (u16 *)(&instr.b[2]);
+	*arg = bx;
+	instr.ln = ln;
+	return *((INSTR *)(&instr));
+}
+
+static inline INSTR
+iABC(u8 i, u8 a, u8 b, u8 c, int ln)
+{
+	struct instr instr;
+	instr.b[0] = i;
+	instr.b[1] = a;
+	instr.b[2] = b;
+	instr.b[3] = c;
+	instr.ln = ln;
+	return *((INSTR *)(&instr));
+}
+
+
 void dis(INSTR instr);
 void dis_code(sly_value code);
 void dis_all(stack_frame *frame);
