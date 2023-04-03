@@ -50,7 +50,11 @@ struct instr {
 
 typedef sly_value INSTR;
 
+#define AxMAX  0xffffff
+#define BxMAX  UINT16_MAX
 #define REG_MAX UCHAR_MAX
+#define UPV_MAX REG_MAX
+#define K_MAX   BxMAX
 #define GET_OP(instr)   ((enum opcode)((instr)->b[0]))
 #define GET_A(instr)    ((instr)->b[1])
 #define GET_B(instr)    ((instr)->b[2])
@@ -126,6 +130,6 @@ iABC(u8 i, u8 a, u8 b, u8 c, int ln)
 
 void dis(INSTR instr);
 void dis_code(sly_value code);
-void dis_all(stack_frame *frame);
+void dis_all(stack_frame *frame, int lstk);
 
 #endif /* SLY_OPCODES_H_ */

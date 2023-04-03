@@ -67,7 +67,9 @@ sly_display(sly_value v)
 		printf("%.*s", (int)s->len, (char *)s->name);
 	} else if (string_p(v)) {
 		byte_vector *s = GET_PTR(v);
-		printf("%.*s", (int)s->len, (char *)s->elems);
+		printf("\"%.*s\"", (int)s->len, (char *)s->elems);
+	} else if (prototype_p(v)) {
+		printf("<function@%p>", GET_PTR(v));
 	} else {
 		sly_assert(0, "UNEMPLEMENTED");
 	}

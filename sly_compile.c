@@ -339,6 +339,14 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 		} else if (void_p(datum)) {
 			vector_append(ss, proto->code, iA(OP_LOAD_VOID, reg, line_number));
 		} else {
+			if (int_p(datum)) {
+				i64 i = get_int(datum);
+				if (i >= INT16_MIN && i <= INT16_MAX) {
+					if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
+					vector_append(ss, proto->code, iABx(OP_LOADI, reg, i, line_number));
+					return -1;
+				}
+			}
 			size_t idx = intern_constant(ss, datum);
 			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 			vector_append(ss, proto->code, iABx(OP_LOADK, reg, idx, line_number));

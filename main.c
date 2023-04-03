@@ -257,7 +257,7 @@ sly_load_file(Sly_State *ss, char *file_name)
 	frame->pc = proto->entry;
 	ss->frame = frame;
 	printf("Running file %s\n", file_name);
-	dis_all(ss->frame);
+	dis_all(ss->frame, 1);
 	vm_run(ss);
 	ss->code = make_vector(ss, 0, 1);
 	ss->stack = make_vector(ss, 0, 16);
@@ -326,7 +326,7 @@ main(int argc, char *argv[])
 	} else {
 		sly_init_state(&ss);
 		sly_load_file(&ss, "test_rec.scm");
-		dis_all(ss.frame);
+		dis_all(ss.frame, 1);
 		sly_push_global(&ss, "fib");
 		sly_push_int(&ss, 10);
 		sly_display(sly_call(&ss, 1));
