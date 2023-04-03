@@ -143,7 +143,7 @@ vm_run(Sly_State *ss)
 							   "Error wrong number of arguments");
 					args = make_vector(ss, clos->nargs, clos->nargs);
 				}
-				for (size_t i = 0; i < clos->nargs; ++i) {
+				for (size_t i = 0; i < nargs; ++i) {
 					vector_set(args, i, get_reg(a + 1 + i));
 				}
 				sly_value r = clos->fn(ss, args);

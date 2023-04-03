@@ -228,7 +228,7 @@ comp_define(Sly_State *ss, sly_value form, int reg)
 		comp_expr(ss, car(form), st_prop.reg);
 		/* end of definition */
 		sly_assert(null_p(cdr(form)), "Compile Error malformed define");
-		return st_prop.reg;
+		return cc->cscope->prev_var;
 	}
 }
 
@@ -276,7 +276,7 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	form = cdr(form);
 	reg = comp_expr(ss, car(form), reg);
-	if ((size_t)reg + 1 <= proto->nregs) proto->nregs = reg + 2;
+	if ((size_t)reg + 1 >= proto->nregs) proto->nregs = reg + 2;
 	if (st_prop.type == sym_variable) {
 		if (reg != -1 && st_prop.reg != reg) {
 			vector_append(ss, proto->code, iAB(OP_MOVE, st_prop.reg, reg, line_number));
@@ -379,6 +379,7 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 		form = cdr(form);
 	}
 	vector_append(ss, proto->code, iAB(OP_CALL, start, reg, -1));
+	if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 	return reg;
 }
 
