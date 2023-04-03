@@ -520,7 +520,7 @@ make_closure(Sly_State *ss, sly_value _proto)
 	clos->h.type = tt_closure;
 	prototype *proto = GET_PTR(_proto);
 	clos->arg_idx = 1;
-	size_t cap = clos->arg_idx + proto->nargs;
+	size_t cap = clos->arg_idx + proto->nargs + vector_len(proto->uplist);
 	if (proto->has_varg) cap++;
 	clos->upvals = make_vector(ss, cap, cap);
 	clos->proto = _proto;

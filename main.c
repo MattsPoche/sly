@@ -4,6 +4,29 @@
 #include "gc.h"
 
 sly_value
+capture_value(stack_frame *frame, struct uplookup upinfo)
+{
+	while (frame->level != upinfo.level) {
+		frame = frame->parent;
+	}
+	if (upinfo.isup) {
+		vector *values = GET_PTR(frame->U);
+		if (ref_p(values->elems[upinfo.reg])) {
+			return values->elems[upinfo.reg];
+		} else {
+			sly_value v = (sly_value)(&values->elems[upinfo.reg]);
+			return (v & ~TAG_MASK) | st_ref;
+		}
+	} else {
+		vector *values = GET_PTR(frame->R);
+		sly_value v = (sly_value)(&values->elems[upinfo.reg]);
+		return (v & ~TAG_MASK) | st_ref;
+	}
+	sly_assert(0, "Error value not found");
+	return SLY_NULL;
+}
+
+sly_value
 vm_run(Sly_State *ss)
 {
 	stack_frame *frame = ss->frame;
@@ -23,8 +46,7 @@ vm_run(Sly_State *ss)
 		} break;
 		case OP_LOADI: {
 			u8 a = GET_A(instr);
-			i64 b = (i64)GET_Bx(instr);
-			//printf("b :: %ld\n", b);
+			i64 b = GET_sBx(instr);
 			set_reg(a, make_int(ss, b));
 		} break;
 		case OP_LOADK: {
@@ -53,7 +75,8 @@ vm_run(Sly_State *ss)
 			u8 b = GET_B(instr);
 			sly_value u = get_upval(b);
 			if (ref_p(u)) {
-				set_reg(a, (sly_value)GET_PTR(u));
+				sly_value *ref = GET_PTR(u);
+				set_reg(a, *ref);
 			} else {
 				set_reg(a, u);
 			}
@@ -153,6 +176,7 @@ vm_run(Sly_State *ss)
 				closure *clos = GET_PTR(val);
 				prototype *proto = GET_PTR(clos->proto);
 				stack_frame *nframe = make_stack(ss, proto->nregs);
+				nframe->level = frame->level + 1;
 				size_t nargs = b - a - 1;
 				nframe->U = copy_vector(ss, clos->upvals);
 				if (proto->has_varg) {
@@ -227,9 +251,17 @@ vm_run(Sly_State *ss)
 			size_t b = GET_Bx(instr);
 			sly_value _proto = get_const(b);
 			sly_value val = make_closure(ss, _proto);
-			closure *clos = GET_PTR(val);
-			vector_set(clos->upvals, 0, vector_ref(frame->U, 0));
 			set_reg(a, val);
+			closure *clos = GET_PTR(val);
+			prototype *proto = GET_PTR(_proto);
+			vector_set(clos->upvals, 0, vector_ref(frame->U, 0));
+			size_t len = vector_len(proto->uplist);
+			for (size_t i = 0; i < len; ++i) {
+				sly_value upi = vector_ref(proto->uplist, i);
+				struct uplookup upinfo = *((struct uplookup *)(&upi));
+				sly_value uv = capture_value(frame, upinfo);
+				vector_set(clos->upvals, i + 1 + proto->nargs, uv);
+			}
 		} break;
 		case OP_DISPLAY: {
 			u8 a = GET_A(instr);
@@ -238,7 +270,7 @@ vm_run(Sly_State *ss)
 		} break;
 		}
 	}
-	return 0;
+	return SLY_VOID;
 }
 
 void
@@ -265,6 +297,7 @@ sly_load_file(Sly_State *ss, char *file_name)
 	frame->K = proto->K;
 	frame->code = proto->code;
 	frame->pc = proto->entry;
+	frame->level = 0;
 	ss->frame = frame;
 	printf("Running file %s\n", file_name);
 	dis_all(ss->frame, 1);

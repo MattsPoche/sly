@@ -29,7 +29,7 @@ dis(INSTR ins)
 	} break;
 	case OP_LOADI: {
 		u8 a = GET_A(instr);
-		i64 b = GET_Bx(instr);
+		i64 b = GET_sBx(instr);
 		printf("(LOADI %d %ld)%n", a, b, &pad);
 	} break;
 	case OP_LOADK: {
@@ -124,7 +124,7 @@ dis(INSTR ins)
 	case OP_CLOSURE: {
 		u8 a = GET_A(instr);
 		u64 b = GET_Bx(instr);
-		printf("(CLOSURE %d, %lu)%n", a, b, &pad);
+		printf("(CLOSURE %d %lu)%n", a, b, &pad);
 	} break;
 	case OP_DISPLAY: {
 		u8 a = GET_A(instr);

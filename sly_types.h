@@ -107,7 +107,7 @@ typedef struct _vector {
 
 typedef struct _proto {
 	OBJ_HEADER;
-	sly_value uplist;   // <byte-vector> list of upvals
+	sly_value uplist;   // <vector> list of upval locations
 	sly_value K;        // <vector> constants
 	sly_value code;     // <vector> Byte code segment
 	size_t entry;       // entry point
