@@ -317,6 +317,7 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 		case sym_upval: {
 			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 			vector_append(ss, proto->code, iAB(OP_GETUPVAL, reg, st_prop.reg, line_number));
+			return reg;
 		} break;
 		case sym_global: {
 			if (!IS_GLOBAL(cc->cscope)) {

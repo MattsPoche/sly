@@ -56,7 +56,28 @@ sly_assert(int p, char *msg)
 void
 sly_display(sly_value v)
 {
-	if (int_p(v)) {
+	if (pair_p(v)) {
+		printf("(");
+		if (!null_p(cdr(v)) && !pair_p(cdr(v))) {
+			sly_display(car(v));
+			printf(" . ");
+			sly_display(cdr(v));
+			printf(")");
+		} else {
+			while (pair_p(v)) {
+				sly_display(car(v));
+				printf(" ");
+				v = cdr(v);
+			}
+			if (null_p(v)) {
+				printf("\b)");
+			} else {
+				printf(". ");
+				sly_display(v);
+				printf(")");
+			}
+		}
+	} else if (int_p(v)) {
 		i64 n = get_int(v);
 		printf("%ld", n);
 	} else if (float_p(v)) {
@@ -67,7 +88,7 @@ sly_display(sly_value v)
 		printf("%.*s", (int)s->len, (char *)s->name);
 	} else if (string_p(v)) {
 		byte_vector *s = GET_PTR(v);
-		printf("\"%.*s\"", (int)s->len, (char *)s->elems);
+		printf("%.*s", (int)s->len, (char *)s->elems);
 	} else if (prototype_p(v)) {
 		printf("<function@%p>", GET_PTR(v));
 	} else {
@@ -304,7 +325,6 @@ make_vector(Sly_State *ss, size_t len, size_t cap)
 {
 	sly_assert(len <= cap, "Error vector length may not exceed its capacity");
 	vector *vec = sly_alloc(ss, sizeof(*vec));
-	//sly_alloc(ss, sizeof(sly_value) * cap);
 	vec->elems = malloc(sizeof(sly_value) * cap);
 	assert(vec->elems != NULL);
 	vec->h.type = tt_vector;
@@ -471,7 +491,8 @@ make_closure(Sly_State *ss, sly_value _proto)
 	prototype *proto = GET_PTR(_proto);
 	clos->arg_idx = 1;
 	size_t cap = clos->arg_idx + proto->nargs;
-	clos->upvals = make_vector(ss, 0, cap);
+	if (proto->has_varg) cap++;
+	clos->upvals = make_vector(ss, cap, cap);
 	clos->proto = _proto;
 	return (sly_value)clos;
 }

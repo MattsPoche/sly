@@ -143,7 +143,7 @@ vm_run(Sly_State *ss)
 							   "Error wrong number of arguments");
 					args = make_vector(ss, clos->nargs, clos->nargs);
 				}
-				for (size_t i = 0; i < nargs; ++i) {
+				for (size_t i = 0; i < clos->nargs; ++i) {
 					vector_set(args, i, get_reg(a + 1 + i));
 				}
 				sly_value r = clos->fn(ss, args);
@@ -151,15 +151,24 @@ vm_run(Sly_State *ss)
 			} else if (closure_p(val)) {
 				closure *clos = GET_PTR(val);
 				prototype *proto = GET_PTR(clos->proto);
-				size_t nargs = b - a - 1;
-				sly_assert(nargs == proto->nargs,
-						   "Error wrong number of arguments");
 				stack_frame *nframe = make_stack(ss, proto->nregs);
-				nframe->U = copy_vector(ss, clos->upvals);
-				nframe->U = make_vector(ss, 0, 1);
-				vector_append(ss, nframe->U, vector_ref(clos->upvals, 0));
-				for (size_t i = 0; i < nargs; ++i) {
-					vector_append(ss, nframe->U, get_reg(a + 1 + i));
+				size_t nargs = b - a - 1;
+				nframe->U = clos->upvals;
+				if (proto->has_varg) {
+					sly_assert(nargs >= proto->nargs,
+							   "Error wrong number of arguments");
+					size_t nvargs = nargs - proto->nargs;
+					sly_value vargs = SLY_NULL;
+					for (size_t i = b - 1; nvargs--; --i) {
+						vargs = cons(ss, get_reg(i), vargs);
+					}
+					vector_set(nframe->U, clos->arg_idx + proto->nargs, vargs);
+				} else {
+					sly_assert(nargs == proto->nargs,
+							   "Error wrong number of arguments");
+				}
+				for (size_t i = 0; i < proto->nargs; ++i) {
+					vector_set(nframe->U, clos->arg_idx + i, get_reg(a + 1 + i));
 				}
 				nframe->K = proto->K;
 				nframe->code = proto->code;
@@ -218,7 +227,7 @@ vm_run(Sly_State *ss)
 			sly_value _proto = get_const(b);
 			sly_value val = make_closure(ss, _proto);
 			closure *clos = GET_PTR(val);
-			vector_append(ss, clos->upvals, vector_ref(frame->U, 0));
+			vector_set(clos->upvals, 0, vector_ref(frame->U, 0));
 			set_reg(a, val);
 		} break;
 		case OP_DISPLAY: {
