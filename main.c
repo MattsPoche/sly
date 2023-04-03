@@ -24,6 +24,7 @@ vm_run(Sly_State *ss)
 		case OP_LOADI: {
 			u8 a = GET_A(instr);
 			i64 b = (i64)GET_Bx(instr);
+			//printf("b :: %ld\n", b);
 			set_reg(a, make_int(ss, b));
 		} break;
 		case OP_LOADK: {
@@ -153,7 +154,7 @@ vm_run(Sly_State *ss)
 				prototype *proto = GET_PTR(clos->proto);
 				stack_frame *nframe = make_stack(ss, proto->nregs);
 				size_t nargs = b - a - 1;
-				nframe->U = clos->upvals;
+				nframe->U = copy_vector(ss, clos->upvals);
 				if (proto->has_varg) {
 					sly_assert(nargs >= proto->nargs,
 							   "Error wrong number of arguments");
@@ -233,7 +234,7 @@ vm_run(Sly_State *ss)
 		case OP_DISPLAY: {
 			u8 a = GET_A(instr);
 			sly_value v = get_reg(a);
-			sly_display(v);
+			sly_display(v, 0);
 		} break;
 		}
 	}
@@ -338,11 +339,11 @@ main(int argc, char *argv[])
 		dis_all(ss.frame, 1);
 		sly_push_global(&ss, "fib");
 		sly_push_int(&ss, 10);
-		sly_display(sly_call(&ss, 1));
+		sly_display(sly_call(&ss, 1), 1);
 		printf("\n");
 		sly_push_global(&ss, "fac");
 		sly_push_int(&ss, 10);
-		sly_display(sly_call(&ss, 1));
+		sly_display(sly_call(&ss, 1), 1);
 		printf("\n");
 		sly_init_state(&ss);
 	}

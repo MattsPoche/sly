@@ -53,19 +53,45 @@ sly_assert(int p, char *msg)
 	}
 }
 
-void
-sly_display(sly_value v)
+static void
+print_string_lit(sly_value val)
 {
+	byte_vector *vec = GET_PTR(val);
+	size_t len = vec->len;
+	char *str = (char *)vec->elems;
+	putchar('"');
+	for (size_t i = 0; i < len; ++i) {
+		if (str[i] == '\n') {
+			putchar('\\');
+			putchar('n');
+		} else {
+			putchar(str[i]);
+		}
+	}
+	putchar('"');
+}
+
+void
+sly_display(sly_value v, int lit)
+{
+	if (bool_p(v)) {
+		if (v == SLY_FALSE) {
+			printf("#f");
+		} else {
+			printf("#t");
+		}
+		return;
+	}
 	if (pair_p(v)) {
 		printf("(");
 		if (!null_p(cdr(v)) && !pair_p(cdr(v))) {
-			sly_display(car(v));
+			sly_display(car(v), 1);
 			printf(" . ");
-			sly_display(cdr(v));
+			sly_display(cdr(v), 1);
 			printf(")");
 		} else {
 			while (pair_p(v)) {
-				sly_display(car(v));
+				sly_display(car(v), 1);
 				printf(" ");
 				v = cdr(v);
 			}
@@ -73,7 +99,7 @@ sly_display(sly_value v)
 				printf("\b)");
 			} else {
 				printf(". ");
-				sly_display(v);
+				sly_display(v, 1);
 				printf(")");
 			}
 		}
@@ -87,8 +113,12 @@ sly_display(sly_value v)
 		symbol *s = GET_PTR(v);
 		printf("%.*s", (int)s->len, (char *)s->name);
 	} else if (string_p(v)) {
-		byte_vector *s = GET_PTR(v);
-		printf("%.*s", (int)s->len, (char *)s->elems);
+		if (lit) {
+			print_string_lit(v);
+		} else {
+			byte_vector *s = GET_PTR(v);
+			printf("%.*s", (int)s->len, (char *)s->elems);
+		}
 	} else if (prototype_p(v)) {
 		printf("<function@%p>", GET_PTR(v));
 	} else {

@@ -159,7 +159,7 @@ dis_prototype(prototype *proto, int lstk)
 		printf("Constants\n");
 		for (size_t i = 0; i < len; ++i) {
 			printf("%-10zu", i);
-			sly_display(vector_ref(proto->K, i));
+			sly_display(vector_ref(proto->K, i), 1);
 			printf("\n");
 		}
 	}
@@ -182,7 +182,7 @@ dis_all(stack_frame *frame, int lstk)
 		printf("Constants\n");
 		for (size_t i = 0; i < len; ++i) {
 			printf("%-10zu", i);
-			sly_display(vector_ref(frame->K, i));
+			sly_display(vector_ref(frame->K, i), 1);
 			printf("\n");
 		}
 	}

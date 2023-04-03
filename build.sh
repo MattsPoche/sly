@@ -28,7 +28,7 @@ case "$1" in
 		(set -x; compile) && clean && (set -x; "./$target")
 		;;
 	"test")
-		(set -x; "./$target" *.scm)
+		(set -x; "./$target" ./test/*.scm)
 		;;
 	*)
 		(set -x; compile)
