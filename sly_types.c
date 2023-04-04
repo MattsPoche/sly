@@ -53,6 +53,18 @@ sly_assert(int p, char *msg)
 	}
 }
 
+void
+sly_raise_exception(Sly_State *ss, int excpt, char *msg)
+{
+	if (ss->handle_except) {
+		ss->excpt = excpt;
+		ss->excpt_msg = msg;
+		longjmp(ss->jbuf, 1);
+	}
+	fprintf(stderr, "%s\n", msg);
+	exit(1);
+}
+
 static void
 print_string_lit(sly_value val)
 {

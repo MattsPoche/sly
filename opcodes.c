@@ -4,7 +4,9 @@
 stack_frame *
 make_stack(Sly_State *ss, size_t nregs)
 {
-	sly_assert(nregs <= REG_MAX, "Stack too big");
+	if (nregs >= REG_MAX) {
+		sly_raise_exception(ss, EXC_ALLOC, "Stack too big");
+	}
 	stack_frame *frame = sly_alloc(ss, sizeof(*frame));
 	frame->parent = NULL;
 	frame->R = make_vector(ss, nregs, nregs);

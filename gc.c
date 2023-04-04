@@ -56,7 +56,9 @@ void *
 gc_alloc(GC *gc, size_t bytes, int setinfo)
 {
 	void *ptr = mp_alloc(&gc->w, bytes);
-	/* TODO garbage collect/resize when alloc fails */
+	/* TODO garbage collect/resize when alloc fails
+	 * actually implement GC!!
+	 */
 	assert(ptr != NULL);
 	(void)mp_resize;
 	if (setinfo) {

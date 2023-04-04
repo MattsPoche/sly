@@ -4,6 +4,11 @@
 #include "gc.h"
 #include "sly_vm.h"
 
+/* TODO: refactor relevent code to use
+ * exceptions over assert.
+ * TODO: create a sly_exception type?
+ */
+
 void
 sly_init_state(Sly_State *ss)
 {
@@ -13,14 +18,19 @@ sly_init_state(Sly_State *ss)
 void
 sly_free_state(Sly_State *ss)
 {
-	free(ss->gc.w.cells);
-	free(ss->gc.f.cells);
+	if (ss->gc.w.cells) free(ss->gc.w.cells);
+	if (ss->gc.f.cells) free(ss->gc.f.cells);
+	if (ss->cc->cscope) free(ss->cc->cscope);
+	if (ss->cc)         free(ss->cc);
 }
 
 void
 sly_load_file(Sly_State *ss, char *file_name)
 {
-	sly_compile(ss, file_name);
+	if (sly_compile(ss, file_name) != 0) {
+		printf("Unable to run file %s\n", file_name);
+		return;
+	}
 	prototype *proto = GET_PTR(ss->cc->cscope->proto);
 	stack_frame *frame = make_stack(ss, proto->nregs);
 	frame->U = make_vector(ss, 12, 12);
@@ -40,6 +50,7 @@ sly_load_file(Sly_State *ss, char *file_name)
 	ss->frame = frame;
 }
 
+#if 0
 void
 sly_push_global(Sly_State *ss, char *name)
 {
@@ -71,7 +82,9 @@ sly_value
 sly_call(Sly_State *ss, size_t nargs)
 {
 	size_t end = vector_len(ss->stack);
-	sly_assert(nargs + 1 <= end, "Error not enough arguments");
+	if (nargs + 1 > end) {
+		sly_raise_exception(ss, EXC_ARGS, "Error not enough arguments");
+	}
 	size_t begin = end - (nargs + 1);
 	ss->code = make_vector(ss, 0, 2);
 	vector_append(ss, ss->code, iAB(OP_CALL, begin, end, -1));
@@ -88,18 +101,21 @@ sly_call(Sly_State *ss, size_t nargs)
 	ss->frame->pc = pc;
 	return r;
 }
+#endif
 
 int
 main(int argc, char *argv[])
 {
-	Sly_State ss;
+	Sly_State ss = {0};
 	if (argc > 1) {
 		for (int i = 1; i < argc; ++i) {
 			sly_init_state(&ss);
 			sly_load_file(&ss, argv[i]);
 			sly_free_state(&ss);
 		}
-	} else {
+	}
+#if 0
+	else {
 		sly_init_state(&ss);
 		sly_load_file(&ss, "test_rec.scm");
 		dis_all(ss.frame, 1);
@@ -113,5 +129,6 @@ main(int argc, char *argv[])
 		printf("\n");
 		sly_init_state(&ss);
 	}
+#endif
 	return 0;
 }

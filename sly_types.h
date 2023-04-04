@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <setjmp.h>
 #include "common_def.h"
 #include "lexer.h"
 #include "gc.h"
@@ -25,6 +26,28 @@ typedef uintptr_t sly_value;
 #define SLY_FALSE ((sly_value)st_bool)
 #define SLY_TRUE  ((sly_value)((UINT64_MAX & ~TAG_MASK)|st_bool))
 #define ctobool(b) ((b) ? SLY_TRUE : SLY_FALSE)
+#define HANDLE_EXCEPTION(ss, code)				\
+	do {										\
+		if (setjmp((ss)->jbuf)) {				\
+			code								\
+			END_HANDLE_EXCEPTION(ss);			\
+		}       								\
+		(ss)->handle_except = 1;				\
+	} while (0)
+#define END_HANDLE_EXCEPTION(ss)				\
+	do {										\
+		(ss)->handle_except = 0;				\
+	} while (0)
+
+enum exc_code { /* exception code */
+	EXC_NONE = 0,
+	EXC_COMPILE,
+	EXC_TYPE,
+	EXC_ARGS,
+	EXC_ALLOC,
+	EXC_HASH,
+	EXCEPTION_COUNT,
+};
 
 typedef struct _sly_state {
 	GC gc;
@@ -32,6 +55,10 @@ typedef struct _sly_state {
 	struct _stack_frame *frame;
 	sly_value code;
 	sly_value stack;
+	jmp_buf jbuf;
+	char *excpt_msg;
+	int handle_except;
+	int excpt;
 } Sly_State;
 
 #include "sly_compile.h"
@@ -140,6 +167,7 @@ typedef struct _syntax {
 } syntax;
 
 void sly_assert(int p, char *msg);
+void sly_raise_exception(Sly_State *ss, int excpt, char *msg);
 void sly_display(sly_value v, int lit);
 u64 sly_hash(sly_value v);
 int symbol_eq(sly_value o1, sly_value o2);

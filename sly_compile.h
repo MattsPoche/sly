@@ -22,6 +22,6 @@ struct compile {
 	struct scope *cscope;
 };
 
-void sly_compile(Sly_State *ss, char *file_name);
+int sly_compile(Sly_State *ss, char *file_name);
 
 #endif /* SLY_COMPILE_H_ */

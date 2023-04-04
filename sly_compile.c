@@ -5,8 +5,7 @@
 #include "sly_compile.h"
 
 /* TODO
- * [ ] Associate syntactic info with opcodes
- * [ ] Better error messages / vm traps.
+ * [ ] Associate syntactic info with opcodes (semi-done)
  */
 
 enum kw {
@@ -87,7 +86,7 @@ struct symbol_properties {
 			st_prop.reg = upidx;										\
 			st_prop.type = sym_upval;									\
 		} else {														\
-			sly_assert(0, "Compile error");								\
+			sly_raise_exception(ss, EXC_COMPILE, "Compile error");		\
 		}																\
 		dictionary_set(ss, cc->cscope->symtable, datum, SYMPROP_TO_VALUE(st_prop)); \
 	} while (0)
@@ -132,9 +131,10 @@ is_keyword(sly_value sym)
 }
 
 static sly_value
-symbol_lookup_props(struct compile *cc, sly_value sym, u32 *level, sly_value *uplist)
+symbol_lookup_props(Sly_State *ss, sly_value sym, u32 *level, sly_value *uplist)
 {
 	sly_value entry;
+	struct compile *cc = ss->cc;
 	struct scope *scope = cc->cscope;
 	while (scope) {
 		entry = dictionary_entry_ref(scope->symtable, sym);
@@ -150,7 +150,7 @@ symbol_lookup_props(struct compile *cc, sly_value sym, u32 *level, sly_value *up
 		}
 		scope = scope->parent;
 	}
-	sly_assert(0, "Error undefined symbol");
+	sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol");
 	return SLY_NULL;
 }
 
@@ -173,7 +173,9 @@ static struct scope *
 make_scope(Sly_State *ss)
 {
 	struct scope *scope = malloc(sizeof(*scope));
-	assert(scope != NULL);
+	if (scope == NULL) {
+		sly_raise_exception(ss, EXC_ALLOC, "(make_scope) malloc failed; returned NULL");
+	}
 	scope->parent = NULL;
 	scope->proto = make_prototype(ss,
 								  make_vector(ss, 0, 8),
@@ -208,7 +210,9 @@ comp_define(Sly_State *ss, sly_value form, int reg)
 	sly_value symtable = cc->cscope->symtable;
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	struct symbol_properties st_prop = {0};
-	sly_assert(symbol_p(var), "Error variable name must be a symbol");
+	if (!symbol_p(var)) {
+		sly_raise_exception(ss, EXC_COMPILE, "Error variable name must be a symbol");
+	}
 	if (IS_GLOBAL(cc->cscope)) {
 		form = cdr(form);
 		stx = car(form);
@@ -227,7 +231,9 @@ comp_define(Sly_State *ss, sly_value form, int reg)
 		} else {
 			dictionary_set(ss, globals, var, datum);
 		}
-		sly_assert(null_p(cdr(form)), "Compile Error malformed define");
+		if (!null_p(cdr(form))) {
+			sly_raise_exception(ss, EXC_COMPILE, "Compile Error malformed define");
+		}
 		return reg;
 	} else {
 		st_prop.reg = cc->cscope->prev_var++;
@@ -237,7 +243,9 @@ comp_define(Sly_State *ss, sly_value form, int reg)
 		form = cdr(form);
 		comp_expr(ss, car(form), st_prop.reg);
 		/* end of definition */
-		sly_assert(null_p(cdr(form)), "Compile Error malformed define");
+		if (!null_p(cdr(form))) {
+			sly_raise_exception(ss, EXC_COMPILE, "Compile Error malformed define");
+		}
 		return cc->cscope->prev_var;
 	}
 }
@@ -253,7 +261,9 @@ comp_if(Sly_State *ss, sly_value form, int reg)
 	form = cdr(form);
 	sly_value fbranch = car(form);
 	form = cdr(form);
-	sly_assert(null_p(form), "Compile Error malformed if expression");
+	if (!null_p(form)) {
+		sly_raise_exception(ss, EXC_COMPILE, "Compile Error malformed if expression");
+	}
 	int be_res = comp_expr(ss, boolexpr, reg);
 	size_t fjmp = vector_len(proto->code);
 	vector_append(ss, proto->code, 0);
@@ -281,10 +291,12 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 	int line_number = syn->tok.ln;
 	sly_value datum = syntax_to_datum(stx);
 	prototype *proto = GET_PTR(cc->cscope->proto);
-	sly_assert(symbol_p(datum), "Error must be a variable");
+	if (!symbol_p(datum)) {
+		sly_raise_exception(ss, EXC_COMPILE, "Error must be a variable");
+	}
 	u32 level;
 	sly_value uplist;
-	sly_value prop = symbol_lookup_props(cc, datum, &level, &uplist);
+	sly_value prop = symbol_lookup_props(ss, datum, &level, &uplist);
 	struct symbol_properties st_prop = VALUE_TO_SYMPROP(prop);
 	if (cc->cscope->level != level && st_prop.type != sym_global) { /* is non local */
 		RESOLVE_UPVAL();
@@ -310,7 +322,9 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 										   st_prop.reg + 1 + proto->nargs,
 										   reg, line_number));
 	}
-	sly_assert(null_p(cdr(form)), "Error malformed set! expression");
+	if (!null_p(cdr(form))) {
+		sly_raise_exception(ss, EXC_COMPILE, "Error malformed set! expression");
+	}
 	return reg;
 }
 
@@ -326,7 +340,7 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 	if (symbol_p(datum)) {
 		u32 level;
 		sly_value uplist;
-		sly_value prop = symbol_lookup_props(cc, datum, &level, &uplist);
+		sly_value prop = symbol_lookup_props(ss, datum, &level, &uplist);
 		struct symbol_properties st_prop = VALUE_TO_SYMPROP(prop);
 		if (cc->cscope->level != level && st_prop.type != sym_global) { /* is non local */
 			RESOLVE_UPVAL();
@@ -343,7 +357,7 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 			/* NOTE never used? */
 		} break;
 		case sym_keyword: {
-			/* NOTE error? */
+			sly_raise_exception(ss, EXC_COMPILE, "Unexpected keyword");
 		} break;
 		case sym_arg:
 			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
@@ -446,7 +460,9 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 	while (pair_p(args)) {
 		stx = car(args);
 		sym = syntax_to_datum(stx);
-		sly_assert(symbol_p(sym), "Compile error function parameter must be a symbol");
+		if (!symbol_p(sym)) {
+			sly_raise_exception(ss, EXC_COMPILE, "Compile error function parameter must be a symbol");
+		}
 		nargs++;
 		st_prop.reg = nargs;
 		dictionary_set(ss, symtable, sym, SYMPROP_TO_VALUE(st_prop));
@@ -454,7 +470,9 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 	}
 	if (!null_p(args)) {
 		sym = syntax_to_datum(args);
-		sly_assert(symbol_p(sym), "Compile error function parameter must be a symbol");
+		if (!symbol_p(sym)) {
+			sly_raise_exception(ss, EXC_COMPILE, "Compile error function parameter must be a symbol");
+		}
 		proto->has_varg = 1;
 		st_prop.reg = nargs + 1;
 		dictionary_set(ss, symtable, sym, SYMPROP_TO_VALUE(st_prop));
@@ -539,7 +557,9 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			} else {
 				vector_append(ss, proto->code, iA(OP_DISPLAY, reg2, -1));
 			}
-			sly_assert(null_p(cdr(form)), "Error malformed display expression");
+			if (!null_p(cdr(form))) {
+				sly_raise_exception(ss, EXC_COMPILE, "Error malformed display expression");
+			}
 		} break;
 		case kw_define_syntax: {
 		} break;
@@ -640,9 +660,7 @@ cnum_gt(Sly_State *ss, sly_value args)
 
 void
 init_builtins(Sly_State *ss)
-{ /* TODO The names of these symbols do not need to be added into
-   * constants if they are never referenced.
-   */
+{
 	struct compile *cc = ss->cc;
 	sly_value symtable = cc->cscope->symtable;
 	struct symbol_properties st_prop = {0};
@@ -660,13 +678,22 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN(">", cnum_gt, 2, 0);
 }
 
-void
+int
 sly_compile(Sly_State *ss, char *file_name)
 {
+	HANDLE_EXCEPTION(ss, {
+			fprintf(stderr, "Caught exception in %s ", file_name);
+			fprintf(stderr, "during compilation:\n");
+			fprintf(stderr, "%s\n", ss->excpt_msg);
+			return ss->excpt;
+		});
 	char *src;
 	sly_value ast;
 	prototype *proto;
 	ss->cc = malloc(sizeof(*ss->cc));
+	if (ss->cc == NULL) {
+		sly_raise_exception(ss, EXC_ALLOC, "(sly_compile) malloc failed; returned NULL");
+	}
 	assert(ss->cc != NULL);
 	struct compile *cc = ss->cc;
 	cc->cscope = make_scope(ss);
@@ -678,4 +705,6 @@ sly_compile(Sly_State *ss, char *file_name)
 	proto = GET_PTR(cc->cscope->proto);
 	int r = comp_expr(ss, ast, 0);
 	vector_append(ss, proto->code, iA(OP_RETURN, r, -1));
+	END_HANDLE_EXCEPTION(ss);
+	return 0;
 }

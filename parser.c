@@ -4,7 +4,7 @@
 #include "parser.h"
 
 static char *
-escape_string(char *str, size_t len)
+escape_string(Sly_State *ss, char *str, size_t len)
 {
 	char *buf = malloc(len+1);
 	assert(buf != NULL);
@@ -47,7 +47,7 @@ escape_string(char *str, size_t len)
 				buf[j] = '"';
 			} break;
 			default: {
-				sly_assert(0, "Parse Error unrecognized escape sequence");
+				sly_raise_exception(ss, EXC_COMPILE, "Parse Error unrecognized escape sequence");
 			} break;
 			}
 		} else {
@@ -110,6 +110,9 @@ parse_value(Sly_State *ss, char *cstr)
 		sly_value list = cons(ss, parse_value(ss, cstr), SLY_NULL);
 		for (;;) {
 			t = peek();
+			if (t.tag == tok_eof) {
+				sly_raise_exception(ss, EXC_COMPILE, "Parse Error expected closing bracket");
+			}
 			if (t.tag == tok_rbracket) {
 				next_token();
 				return list;
@@ -117,23 +120,25 @@ parse_value(Sly_State *ss, char *cstr)
 			if (t.tag == tok_dot) {
 				next_token();
 				append(list, parse_value(ss, cstr));
-				sly_assert(next_token().tag == tok_rbracket, "Parse Error expected closing bracket");
+				if (next_token().tag != tok_rbracket) {
+					sly_raise_exception(ss, EXC_COMPILE, "Parse Error expected closing bracket");
+				}
 				return list;
 			}
 			append(list, cons(ss, parse_value(ss, cstr), SLY_NULL));
 		}
 	} break;
 	case tok_rbracket: {
-		sly_assert(0, "Parse Error mismatched brackets");
+		sly_raise_exception(ss, EXC_COMPILE, "Parse Error mismatched bracket");
 	} break;
 	case tok_vector: {
 		sly_assert(0, "Parse Error Unemplemented");
 	} break;
 	case tok_dot: {
-		sly_assert(0, "Parse Error bad dot");
+		sly_raise_exception(ss, EXC_COMPILE, "Parse Error bad dot");
 	} break;
 	case tok_string: {
-		char *s = escape_string(&cstr[t.so+1], t.eo - t.so - 2);
+		char *s = escape_string(ss, &cstr[t.so+1], t.eo - t.so - 2);
 		sly_value stx = make_syntax(ss, t, make_string(ss, s, strlen(s)));
 		free(s);
 		return stx;
