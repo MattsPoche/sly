@@ -1,6 +1,6 @@
 #!/bin/sh
 
-cflags='-Wextra -Wall -Wswitch-enum -ggdb -std=c11'
+cflags='-Werror -Wextra -pedantic -Wall -Wswitch-enum -ggdb -std=c11'
 lflags=
 cc=gcc
 target='sly'

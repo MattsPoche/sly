@@ -120,19 +120,19 @@ vm_run(Sly_State *ss)
 			size_t b = GET_Bx(instr);
 			set_reg(a, get_const(b));
 		} break;
-		case OP_LOAD_FALSE: {
+		case OP_LOADFALSE: {
 			u8 a = GET_A(instr);
 			set_reg(a, SLY_FALSE);
 		} break;
-		case OP_LOAD_TRUE: {
+		case OP_LOADTRUE: {
 			u8 a = GET_A(instr);
 			set_reg(a, SLY_TRUE);
 		} break;
-		case OP_LOAD_NULL: {
+		case OP_LOADNULL: {
 			u8 a = GET_A(instr);
 			set_reg(a, SLY_NULL);
 		} break;
-		case OP_LOAD_VOID: {
+		case OP_LOADVOID: {
 			u8 a = GET_A(instr);
 			set_reg(a, SLY_VOID);
 		} break;

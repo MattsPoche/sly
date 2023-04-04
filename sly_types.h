@@ -40,7 +40,7 @@ typedef uintptr_t sly_value;
 	} while (0)
 
 enum exc_code { /* exception code */
-	EXC_NONE = 0,
+	EXC_GENERIC,
 	EXC_COMPILE,
 	EXC_TYPE,
 	EXC_ARGS,

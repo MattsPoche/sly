@@ -19,9 +19,6 @@ escape_string(Sly_State *ss, char *str, size_t len)
 			case 'b': {
 				buf[j] = '\b';
 			} break;
-			case 'e': {
-				buf[j] = '\e';
-			} break;
 			case 'f': {
 				buf[j] = '\f';
 			} break;
@@ -183,7 +180,7 @@ parse(Sly_State *ss, char *cstr)
 {
 	lexer_init(cstr);
 
-	sly_value code = cons(ss, make_syntax(ss, (token){}, cstr_to_symbol("begin")),
+	sly_value code = cons(ss, make_syntax(ss, (token){0}, cstr_to_symbol("begin")),
 						  SLY_NULL);
 	sly_value val;
 	while (peek().tag != tok_eof) {

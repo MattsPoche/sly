@@ -6,10 +6,10 @@ enum opcode {
 	OP_MOVE,		// iAB  | R[A] := R[B]
 	OP_LOADI,		// iABx | R[A] := <i64> Bx
 	OP_LOADK,		// iABx | R[A] := K[Bx]
-	OP_LOAD_FALSE,	// iA	| R[A] := SLY_FALSE
-	OP_LOAD_TRUE,	// iA	| R[A] := SLY_TRUE
-	OP_LOAD_NULL,	// iA	| R[A] := SLY_NULL
-	OP_LOAD_VOID,	// iA	| R[A] := SLY_VOID
+	OP_LOADFALSE,	// iA	| R[A] := SLY_FALSE
+	OP_LOADTRUE,	// iA	| R[A] := SLY_TRUE
+	OP_LOADNULL,	// iA	| R[A] := SLY_NULL
+	OP_LOADVOID,	// iA	| R[A] := SLY_VOID
 	OP_GETUPVAL,	// iAB  | R[A] := U[B]
 	OP_SETUPVAL,	// iAB  | U[A] := R[B]
 	OP_GETUPDICT,	// iABC | R[A] := <dictionary> U[B][R[C]]
@@ -72,6 +72,11 @@ typedef sly_value INSTR;
 #define set_upval(i, v) vector_set(frame->U, (i), (v))
 
 stack_frame *make_stack(Sly_State *ss, size_t nregs);
+void dis(INSTR instr);
+void dis_code(sly_value code);
+void dis_all(stack_frame *frame, int lstk);
+
+#ifdef OP_MAKE_INSTR
 
 static inline INSTR
 iA(u8 i, u8 a, int ln)
@@ -130,9 +135,6 @@ iABC(u8 i, u8 a, u8 b, u8 c, int ln)
 	return *((INSTR *)(&instr));
 }
 
-
-void dis(INSTR instr);
-void dis_code(sly_value code);
-void dis_all(stack_frame *frame, int lstk);
+#endif
 
 #endif /* SLY_OPCODES_H_ */

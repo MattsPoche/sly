@@ -1,6 +1,7 @@
 #include <assert.h>
 #include "sly_types.h"
 #include "parser.h"
+#define OP_MAKE_INSTR 1
 #include "opcodes.h"
 #include "sly_compile.h"
 
@@ -27,6 +28,9 @@ enum kw {
 	kw_syntax_rules,
 	kw_call_with_continuation,
 	kw_call_cc,
+	kw_cons,
+	kw_car,
+	kw_cdr,
 	KW_COUNT,
 };
 
@@ -111,6 +115,9 @@ static char *keywords[KW_COUNT] = {
 	[kw_syntax_rules]			= "syntax-rules",
 	[kw_call_with_continuation] = "call-with-continuation",
 	[kw_call_cc]				= "call/cc",
+	[kw_cons]					= "cons",
+	[kw_car]					= "car",
+	[kw_cdr]					= "cdr",
 };
 
 static sly_value kw_symbols[KW_COUNT];
@@ -332,11 +339,17 @@ int
 comp_atom(Sly_State *ss, sly_value form, int reg)
 {
 	struct compile *cc = ss->cc;
+	prototype *proto = GET_PTR(cc->cscope->proto);
+	int line_number = -1;
+	if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 	sly_value datum;
+	if (null_p(form)) {
+		datum = form;
+		goto datnull;
+	}
 	datum = syntax_to_datum(form);
 	syntax *syn = GET_PTR(form);
-	int line_number = syn->tok.ln;
-	prototype *proto = GET_PTR(cc->cscope->proto);
+	line_number = syn->tok.ln;
 	if (symbol_p(datum)) {
 		u32 level;
 		sly_value uplist;
@@ -350,7 +363,6 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 			return st_prop.reg;
 		} break;
 		case sym_constant: {
-			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 			vector_append(ss, proto->code, iABx(OP_LOADK, reg, st_prop.reg, line_number));
 		} break;
 		case sym_datum: {
@@ -360,14 +372,12 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 			sly_raise_exception(ss, EXC_COMPILE, "Unexpected keyword");
 		} break;
 		case sym_arg:
-			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 			vector_append(ss, proto->code, iAB(OP_GETUPVAL,
 											   reg,
 											   st_prop.reg,
 											   line_number));
 			return reg;
 		case sym_upval: {
-			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 			vector_append(ss, proto->code, iAB(OP_GETUPVAL,
 											   reg,
 											   st_prop.reg + 1 + proto->nargs,
@@ -380,20 +390,20 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 				st_prop.islocal = 1;
 				dictionary_set(ss, cc->cscope->symtable, datum, SYMPROP_TO_VALUE(st_prop));
 			}
-			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 			vector_append(ss, proto->code, iABx(OP_LOADK, reg, st_prop.reg, line_number));
 			vector_append(ss, proto->code, iABC(OP_GETUPDICT, reg, 0, reg, line_number));
 		} break;
 		}
 	} else { /* constant */
 		if (datum == SLY_FALSE) {
-			vector_append(ss, proto->code, iA(OP_LOAD_FALSE, reg, line_number));
+			vector_append(ss, proto->code, iA(OP_LOADFALSE, reg, line_number));
 		} else if (datum == SLY_TRUE) {
-			vector_append(ss, proto->code, iA(OP_LOAD_TRUE, reg, line_number));
+			vector_append(ss, proto->code, iA(OP_LOADTRUE, reg, line_number));
 		} else if (null_p(datum)) {
-			vector_append(ss, proto->code, iA(OP_LOAD_NULL, reg, line_number));
+datnull:
+			vector_append(ss, proto->code, iA(OP_LOADNULL, reg, line_number));
 		} else if (void_p(datum)) {
-			vector_append(ss, proto->code, iA(OP_LOAD_VOID, reg, line_number));
+			vector_append(ss, proto->code, iA(OP_LOADVOID, reg, line_number));
 		} else {
 			if (int_p(datum)) {
 				i64 i = get_int(datum);
@@ -417,23 +427,25 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 	struct compile *cc = ss->cc;
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	sly_value head = car(form);
+	syntax *s = GET_PTR(head);
 	form = cdr(form);
 	int start = reg;
 	int reg2 = comp_expr(ss, head, reg);
 	if (reg2 != -1 && reg2 != reg) {
-		vector_append(ss, proto->code, iAB(OP_MOVE, reg, reg2, -1));
+		vector_append(ss, proto->code, iAB(OP_MOVE, reg, reg2, s->tok.ln));
 	}
 	reg++;
 	while (pair_p(form)) {
 		head = car(form);
+		syntax *s = GET_PTR(form);
 		reg2 = comp_expr(ss, head, reg);
 		if (reg2 != -1 && reg2 != reg) {
-			vector_append(ss, proto->code, iAB(OP_MOVE, reg, reg2, -1));
+			vector_append(ss, proto->code, iAB(OP_MOVE, reg, reg2, s->tok.ln));
 		}
 		reg++;
 		form = cdr(form);
 	}
-	vector_append(ss, proto->code, iAB(OP_CALL, start, reg, -1));
+	vector_append(ss, proto->code, iAB(OP_CALL, start, reg, s->tok.ln));
 	if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 	return start + 1;
 }
@@ -506,6 +518,11 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 	if (pair_p(stx)) {
 		return comp_funcall(ss, form, reg);
 	}
+	if (!syntax_p(stx)) {
+		sly_display(stx, 1);
+		printf("\n");
+		sly_raise_exception(ss, EXC_COMPILE, "expected syntax object");
+	}
 	datum = syntax_to_datum(stx);
 	int kw;
 	if (symbol_p(datum) && (kw = is_keyword(datum)) != -1) {
@@ -519,20 +536,28 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			reg = comp_lambda(ss, form, reg);
 		} break;
 		case kw_quote: {
+			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"quote\" unemplemented");
 		} break;
 		case kw_quasiquote: {
+			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"quasiquote\" unemplemented");
 		} break;
 		case kw_unquote: {
+			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"unquote\" unemplemented");
 		} break;
 		case kw_unquote_splice: {
+			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"unquote-splice\" unemplemented");
 		} break;
 		case kw_syntax_quote: {
+			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"syntax-quote\" unemplemented");
 		} break;
 		case kw_syntax_quasiquote: {
+			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"syntax-quasiquote\" unemplemented");
 		} break;
 		case kw_syntax_unquote: {
+			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"syntax-unquote\" unemplemented");
 		} break;
 		case kw_syntax_unquote_splice: {
+			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"syntax-unquote-splice\" unemplemented");
 		} break;
 		case kw_begin: {
 			form = cdr(form);
@@ -550,23 +575,76 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 		} break;
 		case kw_display: {
 			prototype *proto = GET_PTR(cc->cscope->proto);
+			syntax *s = GET_PTR(stx);
 			form = cdr(form);
 			int reg2 = comp_expr(ss, car(form), reg);
 			if (reg2 == -1) {
-				vector_append(ss, proto->code, iA(OP_DISPLAY, reg, -1));
+				vector_append(ss, proto->code, iA(OP_DISPLAY, reg, s->tok.ln));
 			} else {
-				vector_append(ss, proto->code, iA(OP_DISPLAY, reg2, -1));
+				vector_append(ss, proto->code, iA(OP_DISPLAY, reg2, s->tok.ln));
 			}
 			if (!null_p(cdr(form))) {
 				sly_raise_exception(ss, EXC_COMPILE, "Error malformed display expression");
 			}
 		} break;
+		case kw_cons: {
+			int reg2, reg3;
+			syntax *s = GET_PTR(stx);
+			prototype *proto = GET_PTR(cc->cscope->proto);
+			form = cdr(form);
+			reg2 = comp_expr(ss, car(form), reg);
+			if (reg2 == -1) {
+				reg2 = reg;
+			}
+			form = cdr(form);
+			reg3 = comp_expr(ss, car(form), reg2 + 1);
+			if (reg3 == -1) {
+				reg3 = reg2 + 1;
+			}
+			vector_append(ss, proto->code, iABC(OP_CONS, reg, reg2, reg3, s->tok.ln));
+			if (!null_p(cdr(form))) {
+				sly_raise_exception(ss, EXC_COMPILE, "Error malformed cons expression");
+			}
+		} break;
+		case kw_car: {
+			int reg2;
+			syntax *s = GET_PTR(stx);
+			prototype *proto = GET_PTR(cc->cscope->proto);
+			form = cdr(form);
+			reg2 = comp_expr(ss, car(form), reg);
+			if (reg2 == -1) {
+				reg2 = reg;
+			}
+			vector_append(ss, proto->code, iAB(OP_CAR, reg, reg2, s->tok.ln));
+			if (!null_p(cdr(form))) {
+				sly_raise_exception(ss, EXC_COMPILE, "Error malformed cons expression");
+			}
+		} break;
+		case kw_cdr: {
+			int reg2;
+			syntax *s = GET_PTR(stx);
+			prototype *proto = GET_PTR(cc->cscope->proto);
+			form = cdr(form);
+			reg2 = comp_expr(ss, car(form), reg);
+			if (reg2 == -1) {
+				reg2 = reg;
+			}
+			vector_append(ss, proto->code, iAB(OP_CDR, reg, reg2, s->tok.ln));
+			if (!null_p(cdr(form))) {
+				sly_raise_exception(ss, EXC_COMPILE, "Error malformed cons expression");
+			}
+		} break;
 		case kw_define_syntax: {
+			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"define-syntax\" unemplemented");
 		} break;
 		case kw_syntax_rules: {
+			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"syntax-rules\" unemplemented");
 		} break;
-		case kw_call_with_continuation:
+		case kw_call_with_continuation: {
+			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"call-with-continuation\" unemplemented");
+		} break;
 		case kw_call_cc: {
+			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"call/cc\" unemplemented");
 		} break;
 		case KW_COUNT: {
 		} break;

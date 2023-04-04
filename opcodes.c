@@ -42,21 +42,21 @@ dis(INSTR ins)
 		u64 b = GET_Bx(instr);
 		printf("(LOADK %d %lu)%n", a, b, &pad);
 	} break;
-	case OP_LOAD_FALSE: {
+	case OP_LOADFALSE: {
 		u8 a = GET_A(instr);
-		printf("(LOAD_FALSE %d)%n", a, &pad);
+		printf("(LOADFALSE %d)%n", a, &pad);
 	} break;
-	case OP_LOAD_TRUE: {
+	case OP_LOADTRUE: {
 		u8 a = GET_A(instr);
-		printf("(LOAD_TRUE %d)%n", a, &pad);
+		printf("(LOADTRUE %d)%n", a, &pad);
 	} break;
-	case OP_LOAD_NULL: {
+	case OP_LOADNULL: {
 		u8 a = GET_A(instr);
-		printf("(LOAD_NULL %d)%n", a, &pad);
+		printf("(LOADNULL %d)%n", a, &pad);
 	} break;
-	case OP_LOAD_VOID: {
+	case OP_LOADVOID: {
 		u8 a = GET_A(instr);
-		printf("(LOAD_VOID %d)%n", a, &pad);
+		printf("(LOADVOID %d)%n", a, &pad);
 	} break;
 	case OP_GETUPVAL: {
 		u8 a = GET_A(instr);
@@ -81,10 +81,20 @@ dis(INSTR ins)
 		printf("(SETUPDICT %d %d %d)%n", a, b, c, &pad);
 	} break;
 	case OP_CONS: {
+		u8 a = GET_A(instr);
+		u8 b = GET_B(instr);
+		u8 c = GET_C(instr);
+		printf("(CONS %d %d %d)%n", a, b, c, &pad);
 	} break;
 	case OP_CAR: {
+		u8 a = GET_A(instr);
+		u8 b = GET_B(instr);
+		printf("(CAR %d %d)%n", a, b, &pad);
 	} break;
 	case OP_CDR: {
+		u8 a = GET_A(instr);
+		u8 b = GET_B(instr);
+		printf("(CDR %d %d)%n", a, b, &pad);
 	} break;
 	case OP_SETCAR: {
 	} break;
