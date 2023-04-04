@@ -202,13 +202,13 @@ void dictionary_remove(sly_value d, sly_value key);
 #define cstr_to_symbol(cstr) (make_symbol(ss, (cstr), strlen(cstr)))
 
 /* type predicates */
-#define ptr_p(v)         (((v) & TAG_MASK) == st_ptr)
+#define null_p(v)        ((v) == SLY_NULL)
+#define void_p(v)        ((v) == SLY_VOID)
+#define ptr_p(v)         (!void_p(v) && ((v) & TAG_MASK) == st_ptr)
 #define ref_p(v)         (((v) & TAG_MASK) == st_ref)
 #define open_p(v)        ref_p(v)
 #define GET_PTR(v)       ((void *)((v) & ~TAG_MASK))
 #define TYPEOF(v)        (((struct obj_header *)GET_PTR(v))->type)
-#define null_p(v)        ((v) == SLY_NULL)
-#define void_p(v)        ((v) == SLY_VOID)
 #define pair_p(v)        (!null_p(v) && ((v) & TAG_MASK) == st_pair)
 #define imm_p(v)         (((v) & TAG_MASK) == st_imm)
 #define bool_p(v)        (((v) & TAG_MASK) == st_bool)

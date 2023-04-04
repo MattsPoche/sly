@@ -39,6 +39,7 @@ typedef struct _stack_frame {
 	sly_value code; // <vector> byte code
 	sly_value U;	// <vector> upvalues
 	sly_value R;	// <vector> registers
+	sly_value clos; // closure
 	size_t pc;		// program counter
 	size_t ret_slot;
 	u32 level;

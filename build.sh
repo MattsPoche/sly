@@ -1,6 +1,6 @@
 #!/bin/sh
 
-cflags='-D_POSIX_C_SOURCE=200809L -Wextra -Wall -Wswitch-enum -ggdb -rdynamic -std=c11'
+cflags='-Wextra -Wall -Wswitch-enum -ggdb -std=c11'
 lflags=
 cc=gcc
 target='sly'
@@ -27,8 +27,14 @@ case "$1" in
 	"run")
 		(set -x; compile) && clean && (set -x; "./$target")
 		;;
+	"build-test")
+		(set -x; compile && "./$target" ./test/*.scm)
+		;;
 	"test")
 		(set -x; "./$target" ./test/*.scm)
+		;;
+	"tags"|"tag")
+		(set -x; ctags -e *.c *.h)
 		;;
 	*)
 		(set -x; compile)

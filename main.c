@@ -3,6 +3,21 @@
 #include "sly_compile.h"
 #include "gc.h"
 
+#define SET_FRAME_UPVALUES()											\
+	do {																\
+		nframe->U = copy_vector(ss, clos->upvals);						\
+		vector *upvec = GET_PTR(clos->upvals);							\
+		size_t upidx = clos->arg_idx + proto->nargs;					\
+		size_t len = vector_len(nframe->U);								\
+		for (size_t i = upidx; i < len; ++i) {							\
+			if (!ref_p(vector_ref(nframe->U, i))) {						\
+				sly_value ref = (sly_value)((sly_value *)(&upvec->elems[i])); \
+				ref = (ref & ~TAG_MASK) | st_ref;						\
+				vector_set(nframe->U, i, ref);							\
+			}															\
+		}																\
+	} while (0)
+
 sly_value
 capture_value(stack_frame *frame, struct uplookup upinfo)
 {
@@ -24,6 +39,57 @@ capture_value(stack_frame *frame, struct uplookup upinfo)
 	}
 	sly_assert(0, "Error value not found");
 	return SLY_NULL;
+}
+
+static inline int
+is_ref_inframe(stack_frame *frame, sly_value *ref)
+{
+	vector *ups = GET_PTR(frame->U);
+	sly_value *up_start = ups->elems;
+	sly_value *up_end = &ups->elems[ups->len];
+	sly_value *cl_start = NULL;
+	sly_value *cl_end = NULL;
+	if (!null_p(frame->clos)) {
+		closure *clos = GET_PTR(frame->clos);
+		ups = GET_PTR(clos->upvals);
+		cl_start = ups->elems;
+		cl_end = &ups->elems[ups->len];
+	}
+	vector *regs = GET_PTR(frame->R);
+	sly_value *reg_start = regs->elems;
+	sly_value *reg_end = &regs->elems[ups->len];
+	return (ref >= up_start && ref < up_end)
+		|| (ref >= cl_start && ref < cl_end)
+		|| (ref >= reg_start && ref < reg_end);
+}
+
+void
+close_upvalues(stack_frame *frame)
+{ /* If any closures are present on the stack,
+   * check the upvalues. If the upvalue is a reference
+   * that refers to a slot in the frame's upvalues or
+   * registers, close the upvalue.
+   */
+	size_t rc = vector_len(frame->R);
+	for (size_t i = 0; i < rc; ++i) {
+		sly_value _clos = vector_ref(frame->R, i);
+		if (closure_p(_clos)) {
+			closure *clos = GET_PTR(_clos);
+			prototype *proto = GET_PTR(clos->proto);
+			size_t upidx = clos->arg_idx + proto->nargs;
+			sly_value upvals = clos->upvals;
+			size_t len = vector_len(upvals);
+			for (size_t j = upidx; j < len; ++j) {
+				sly_value uv = vector_ref(upvals, j);
+				if (ref_p(uv)) {
+					sly_value *ref = GET_PTR(uv);
+					if (is_ref_inframe(frame, ref)) {
+						vector_set(upvals, j, *ref); // close upvalue;
+					}
+				}
+			}
+		}
+	}
 }
 
 sly_value
@@ -176,9 +242,10 @@ vm_run(Sly_State *ss)
 				closure *clos = GET_PTR(val);
 				prototype *proto = GET_PTR(clos->proto);
 				stack_frame *nframe = make_stack(ss, proto->nregs);
+				nframe->clos = val;
 				nframe->level = frame->level + 1;
 				size_t nargs = b - a - 1;
-				nframe->U = copy_vector(ss, clos->upvals);
+				SET_FRAME_UPVALUES();
 				if (proto->has_varg) {
 					sly_assert(nargs >= proto->nargs,
 							   "Error wrong number of arguments");
@@ -213,6 +280,7 @@ vm_run(Sly_State *ss)
 			if (frame->parent == NULL) {
 				return get_reg(a);
 			}
+			close_upvalues(frame);
 			sly_value r = get_reg(a);
 			size_t ret_slot = frame->ret_slot;
 			frame = frame->parent;
@@ -295,12 +363,14 @@ sly_load_file(Sly_State *ss, char *file_name)
 	frame->U = make_vector(ss, 12, 12);
 	vector_set(frame->U, 0, ss->cc->globals);
 	frame->K = proto->K;
+	frame->clos = SLY_NULL;
 	frame->code = proto->code;
 	frame->pc = proto->entry;
 	frame->level = 0;
 	ss->frame = frame;
 	printf("Running file %s\n", file_name);
 	dis_all(ss->frame, 1);
+	printf("Output:\n");
 	vm_run(ss);
 	ss->code = make_vector(ss, 0, 1);
 	ss->stack = make_vector(ss, 0, 16);

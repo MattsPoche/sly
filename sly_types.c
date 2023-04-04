@@ -889,7 +889,7 @@ dict_get_slot(sly_value d, u64 h)
 {
 	vector *dict = GET_PTR(d);
 	size_t idx = h % dict->cap;
-	ssize_t free_slot = -1;
+	i64 free_slot = -1;
 	size_t i = idx;
 	size_t end = dict->cap;
 	/* search from hash index to end of array */

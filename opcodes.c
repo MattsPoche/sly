@@ -8,6 +8,9 @@ make_stack(Sly_State *ss, size_t nregs)
 	stack_frame *frame = sly_alloc(ss, sizeof(*frame));
 	frame->parent = NULL;
 	frame->R = make_vector(ss, nregs, nregs);
+	for (size_t i = 0; i < nregs; ++i) {
+		vector_set(frame->R, i, SLY_VOID);
+	}
 	return frame;
 }
 
