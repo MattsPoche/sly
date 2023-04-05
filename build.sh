@@ -27,7 +27,7 @@ case "$1" in
 	"run")
 		(set -x; compile) && clean && (set -x; "./$target")
 		;;
-	"build-test")
+	"build-test"|"bt")
 		(set -x; compile && "./$target" ./test/*.scm)
 		;;
 	"test")

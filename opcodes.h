@@ -22,6 +22,7 @@ enum opcode {
 	OP_JMP,			// iAx  | PC := <u64> Ax
 	OP_FJMP,		// iABx | if R[A] == #f then PC := Bx
 	OP_CALL,		// iAB  | R[A] := R[A](A+1, ..., A+B-1)
+	OP_CALLWCC,     // iA   | R[A] := R[A](CC) ; call/cc
 	OP_TAILCALL,	// iAB  | R[A] := R[A](A+1, ..., A+B-1)
 	OP_RETURN,		// iA   | return R[A]
 	OP_DICTREF,		// iABC | R[A] := <dictionary> R[B][R[C]]

@@ -641,13 +641,23 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 		case kw_syntax_rules: {
 			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"syntax-rules\" unemplemented");
 		} break;
-		case kw_call_with_continuation: {
-			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"call-with-continuation\" unemplemented");
-		} break;
+		case kw_call_with_continuation: /* fallthrough intended */
 		case kw_call_cc: {
-			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"call/cc\" unemplemented");
+			prototype *proto = GET_PTR(cc->cscope->proto);
+			syntax *s = GET_PTR(stx);
+			form = cdr(form);
+			int reg2 = comp_expr(ss, car(form), reg);
+			if (reg2 == -1) {
+				vector_append(ss, proto->code, iA(OP_CALLWCC, reg, s->tok.ln));
+			} else {
+				vector_append(ss, proto->code, iA(OP_CALLWCC, reg2, s->tok.ln));
+			}
+			if (!null_p(cdr(form))) {
+				sly_raise_exception(ss, EXC_COMPILE, "Error malformed display expression");
+			}
 		} break;
 		case KW_COUNT: {
+			sly_raise_exception(ss, EXC_COMPILE, "(KW_COUNT) Not a real keyword");
 		} break;
 		}
 	} else {

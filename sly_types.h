@@ -85,6 +85,7 @@ enum type_tag {
 	tt_prototype,
 	tt_closure,
 	tt_cclosure,
+	tt_continuation,
 	tt_syntax,
 	TYPE_TAG_COUNT,
 };
@@ -150,6 +151,13 @@ typedef struct _clos {
 	size_t arg_idx;   // position in upvals where args are stored
 } closure;
 
+typedef struct _cont {
+	OBJ_HEADER;
+	struct _stack_frame *frame;
+	size_t pc;
+	size_t ret_slot;
+} continuation;
+
 typedef sly_value (*cfunc)(Sly_State *ss, sly_value args);
 
 typedef struct _cclos {
@@ -208,6 +216,10 @@ sly_value make_prototype(Sly_State *ss, sly_value uplist, sly_value constants,
 						 size_t entry, int has_varg);
 sly_value make_closure(Sly_State *ss, sly_value _proto);
 sly_value make_cclosure(Sly_State *ss, cfunc fn, size_t nargs, int has_varg);
+sly_value make_continuation(Sly_State *ss,
+							struct _stack_frame *frame,
+							size_t pc,
+							size_t ret_slot);
 sly_value sly_add(Sly_State *ss, sly_value x, sly_value y);
 sly_value sly_sub(Sly_State *ss, sly_value x, sly_value y);
 sly_value sly_mul(Sly_State *ss, sly_value x, sly_value y);
@@ -249,6 +261,7 @@ void dictionary_remove(sly_value d, sly_value key);
 #define prototype_p(v)   (ptr_p(v) && TYPEOF(v) == tt_prototype)
 #define closure_p(v)     (ptr_p(v) && TYPEOF(v) == tt_closure)
 #define cclosure_p(v)    (ptr_p(v) && TYPEOF(v) == tt_cclosure)
+#define continuation_p(v) (ptr_p(v) && TYPEOF(v) == tt_continuation)
 #define syntax_p(v)      (ptr_p(v) && TYPEOF(v) == tt_syntax)
 
 static inline int

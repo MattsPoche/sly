@@ -268,8 +268,41 @@ vm_run(Sly_State *ss)
 				nframe->ret_slot = a;
 				nframe->parent = frame;
 				frame = nframe;
+			} else if (continuation_p(val)) {
+				size_t nargs = b - a - 1;
+				/* TODO: continuations should take a vararg?
+				 */
+				sly_assert(nargs == 1, "Error Wrong number of arguments for continuation");
+				continuation *cc = GET_PTR(val);
+				sly_value arg = get_reg(a+1);
+				frame = cc->frame;
+				frame->pc = cc->pc;
+				vector_set(frame->R, cc->ret_slot, arg);
 			} else {
 				sly_assert(0, "Type Error expected procedure");
+			}
+		} break;
+		case OP_CALLWCC: {
+			u8 a = GET_A(instr);
+			sly_value proc = get_reg(a);
+			sly_value cc = make_continuation(ss, frame, frame->pc, a);
+			if (closure_p(proc)) {
+				closure *clos = GET_PTR(proc);
+				prototype *proto = GET_PTR(clos->proto);
+				sly_assert(proto->nargs = 1, "Error wrong number of argument");
+				stack_frame *nframe = make_stack(ss, proto->nregs);
+				nframe->clos = proc;
+				nframe->level = frame->level + 1;
+				SET_FRAME_UPVALUES();
+				vector_set(nframe->U, clos->arg_idx, cc);
+				nframe->K = proto->K;
+				nframe->code = proto->code;
+				nframe->pc = proto->entry;
+				nframe->ret_slot = a;
+				nframe->parent = frame;
+				frame = nframe;
+			} else {
+				sly_assert(0, "CALL/CC Not emplemented for procedure type");
 			}
 		} break;
 		case OP_TAILCALL: {

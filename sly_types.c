@@ -558,6 +558,17 @@ make_cclosure(Sly_State *ss, cfunc fn, size_t nargs, int has_varg)
 	return (sly_value)clos;
 }
 
+sly_value
+make_continuation(Sly_State *ss, struct _stack_frame *frame, size_t pc, size_t ret_slot)
+{
+	continuation *cc = sly_alloc(ss, sizeof(*cc));
+	cc->h.type = tt_continuation;
+	cc->frame = frame;
+	cc->pc = pc;
+	cc->ret_slot = ret_slot;
+	return (sly_value)cc;
+}
+
 static sly_value
 addfx(Sly_State *ss, f64 x, sly_value y)
 {
