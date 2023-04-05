@@ -344,10 +344,6 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 	int line_number = -1;
 	if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 	sly_value datum;
-	if (null_p(form)) {
-		datum = form;
-		goto datnull;
-	}
 	datum = syntax_to_datum(form);
 	syntax *syn = GET_PTR(form);
 	line_number = syn->tok.ln;
@@ -401,7 +397,6 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 		} else if (datum == SLY_TRUE) {
 			vector_append(ss, proto->code, iA(OP_LOADTRUE, reg, line_number));
 		} else if (null_p(datum)) {
-datnull:
 			vector_append(ss, proto->code, iA(OP_LOADNULL, reg, line_number));
 		} else if (void_p(datum)) {
 			vector_append(ss, proto->code, iA(OP_LOADVOID, reg, line_number));
@@ -483,12 +478,13 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 	}
 	if (!null_p(args)) {
 		sym = syntax_to_datum(args);
-		if (!symbol_p(sym)) {
+		if (symbol_p(sym)) {
+			proto->has_varg = 1;
+			st_prop.reg = nargs + 1;
+			dictionary_set(ss, symtable, sym, SYMPROP_TO_VALUE(st_prop));
+		} else {
 			sly_raise_exception(ss, EXC_COMPILE, "Compile error function parameter must be a symbol");
 		}
-		proto->has_varg = 1;
-		st_prop.reg = nargs + 1;
-		dictionary_set(ss, symtable, sym, SYMPROP_TO_VALUE(st_prop));
 	}
 	proto->nargs = nargs;
 	while (!null_p(form)) {
@@ -537,7 +533,18 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			reg = comp_lambda(ss, form, reg);
 		} break;
 		case kw_quote: {
-			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"quote\" unemplemented");
+			syntax *s = GET_PTR(stx);
+			form = cdr(form);
+			if (pair_p(car(form))) {
+				sly_raise_exception(ss, EXC_COMPILE, "Keyword \"quote\" unemplemented for type");
+			} else if (null_p(car(form))) {
+				reg = comp_atom(ss, make_syntax(ss, s->tok, SLY_NULL), reg);
+			} else {
+				reg = comp_atom(ss, car(form), reg);
+			}
+			if (!null_p(cdr(form))) {
+				sly_raise_exception(ss, EXC_COMPILE, "Error malformed cons expression");
+			}
 		} break;
 		case kw_quasiquote: {
 			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"quasiquote\" unemplemented");
