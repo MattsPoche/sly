@@ -273,7 +273,7 @@ vm_run(Sly_State *ss)
 			}
 		} break;
 		case OP_TAILCALL: {
-			sly_assert(0, "UNEMPLEMENTED");
+			sly_assert(0, "(OP_TAILCALL) UNEMPLEMENTED");
 		} break;
 		case OP_RETURN: {
 			u8 a = GET_A(instr);

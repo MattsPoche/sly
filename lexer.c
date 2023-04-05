@@ -25,12 +25,12 @@ static char retok[] =
 	"|^([])}])"
 	"|^(\\.)"RE_SEP
 	"|^(#\\()"
-	"|^(\".*\")"RE_SEP
+	"|^(\"([^\"]|\\\\.)*\")"RE_SEP
 	"|^(#t|#f)"RE_SEP
 	"|^(-?[0-9]+\\.[0-9]+)"RE_SEP
 	"|^(#[xX][0-9A-Fa-f]+)"RE_SEP
 	"|^(-?[0-9]+)"RE_SEP
-	"|^([^][(){};'`,[:space:]][^][(){};[:space:]]*)"RE_SEP;
+	"|^([^][(){};'`\",[:space:]][^][(){};[:space:]]*)"RE_SEP;
 
 static regmatch_t pmatch[tok_max] = {0};
 static regex_t rexpr = {0};
@@ -62,6 +62,7 @@ tok_to_string(enum token t)
 	case tok_dot: return "dot";
 	case tok_bool: return "bool";
 	case tok_string: return "string";
+	case tok__nocapture0: return "nocapture0";
 	case tok_float: return "float";
 	case tok_hex: return "hex";
 	case tok_int: return "int";
@@ -119,6 +120,7 @@ next_token(void)
 	if (r) {
 		if (r == REG_NOMATCH) {
 			printf("reg nomatch (%d, %d)\n", line_number, column_number);
+			printf("%s\n", &text[off]);
 			t.tag = tok_nomatch;
 		} else {
 			assert(!"ERROR rematch");
@@ -133,6 +135,7 @@ next_token(void)
 		}
 		if (i == tok_max) {
 			printf("reg nomatch (%d, %d)\n", line_number, column_number);
+			printf("%s\n", &text[off]);
 			t.tag = tok_nomatch;
 			return t;
 		}

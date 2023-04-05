@@ -17,6 +17,7 @@ enum token {
 	tok_dot,
 	tok_vector,
 	tok_string,
+	tok__nocapture0,
 	tok_bool,
 	tok_float,
 	tok_hex,

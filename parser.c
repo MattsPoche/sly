@@ -62,7 +62,7 @@ parse_value(Sly_State *ss, char *cstr)
 	switch (t.tag) {
 	case tok_any: {
 		printf("(parse_value) any\n");
-		sly_assert(0, "UNEMPLEMENTED");
+		sly_assert(0, "(parse_value, tok_any)UNEMPLEMENTED");
 	} break;
 	case tok_quote: {
 		sly_value stx = make_syntax(ss, t, cstr_to_symbol("quote"));
@@ -108,7 +108,7 @@ parse_value(Sly_State *ss, char *cstr)
 		for (;;) {
 			t = peek();
 			if (t.tag == tok_eof) {
-				sly_raise_exception(ss, EXC_COMPILE, "Parse Error expected closing bracket");
+				sly_raise_exception(ss, EXC_COMPILE, "Parse Error unexpected end of file");
 			}
 			if (t.tag == tok_rbracket) {
 				next_token();
@@ -140,6 +140,9 @@ parse_value(Sly_State *ss, char *cstr)
 		free(s);
 		return stx;
 	} break;
+	case tok__nocapture0: {
+		sly_raise_exception(ss, EXC_COMPILE, "Parse Error undefined token (nocapture0)");
+	} break;
 	case tok_bool: {
 		if (cstr[t.so+1] == 'f') {
 			return make_syntax(ss, t, SLY_FALSE);
@@ -163,11 +166,11 @@ parse_value(Sly_State *ss, char *cstr)
 	} break;
 	case tok_max: {
 		printf("(parse_value) max\n");
-		sly_assert(0, "UNEMPLEMENTED");
+		sly_assert(0, "(parse_value, tok_max) UNEMPLEMENTED");
 	} break;
 	case tok_nomatch: {
 		printf("(parse_value) nomatch %d, %d\n", t.so, t.eo);
-		sly_assert(0, "UNEMPLEMENTED");
+		sly_assert(0, "(parse_value, tok_nomatch) UNEMPLEMENTED");
 	} break;
 	case tok_eof: {
 	} break;

@@ -1,12 +1,11 @@
 #include <assert.h>
 #include "sly_types.h"
 #include "parser.h"
-#define OP_MAKE_INSTR 1
+#define OPCODES_INCLUDE_INLINE 1
 #include "opcodes.h"
 #include "sly_compile.h"
 
-/* TODO
- * [ ] Associate syntactic info with opcodes (semi-done)
+/* TODO [ ] Associate syntactic info with opcodes (semi-done)
  */
 
 enum kw {
@@ -157,6 +156,8 @@ symbol_lookup_props(Sly_State *ss, sly_value sym, u32 *level, sly_value *uplist)
 		}
 		scope = scope->parent;
 	}
+	sly_display(sym, 1);
+	printf("\n");
 	sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol");
 	return SLY_NULL;
 }

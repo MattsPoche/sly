@@ -76,6 +76,12 @@ print_string_lit(sly_value val)
 		if (str[i] == '\n') {
 			putchar('\\');
 			putchar('n');
+		} else if (str[i] == '"') {
+			putchar('\\');
+			putchar('"');
+		} else if (str[i] == '\\') {
+			putchar('\\');
+			putchar('\\');
 		} else {
 			putchar(str[i]);
 		}
@@ -132,9 +138,11 @@ sly_display(sly_value v, int lit)
 			printf("%.*s", (int)s->len, (char *)s->elems);
 		}
 	} else if (prototype_p(v)) {
-		printf("<function@%p>", GET_PTR(v));
+		printf("{prototype@%p}", GET_PTR(v));
+	} else if (closure_p(v)) {
+		printf("{closure@%p}", GET_PTR(v));
 	} else {
-		sly_assert(0, "UNEMPLEMENTED");
+		sly_assert(0, "(sly_display) UNEMPLEMENTED");
 	}
 }
 

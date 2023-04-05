@@ -14,7 +14,7 @@
 		1
 		(* n (fac (- n 1))))))
 
-(display "The 20th fibonacci number is: ")
+(display "The 20th \"fibonacci\" number is: ")
 (display (fib 20))(newline)
 (display "5! = ")
 (display (fac 5))(newline)

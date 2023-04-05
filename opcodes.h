@@ -76,7 +76,7 @@ void dis(INSTR instr);
 void dis_code(sly_value code);
 void dis_all(stack_frame *frame, int lstk);
 
-#ifdef OP_MAKE_INSTR
+#ifdef OPCODES_INCLUDE_INLINE
 
 static inline INSTR
 iA(u8 i, u8 a, int ln)
