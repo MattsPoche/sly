@@ -17,5 +17,6 @@ typedef float    f32;
 typedef double   f64;
 
 #define ARR_LEN(arr) (sizeof(arr) / sizeof((arr)[0]))
+#define UNUSED(var)  ((void)(var))
 
 #endif /* COMMON_DEF_H_ */

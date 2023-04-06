@@ -22,14 +22,10 @@ enum kw {
 	kw_begin,
 	kw_if,
 	kw_set,
-	kw_display,
 	kw_define_syntax,
 	kw_syntax_rules,
 	kw_call_with_continuation,
 	kw_call_cc,
-	kw_cons,
-	kw_car,
-	kw_cdr,
 	KW_COUNT,
 };
 
@@ -94,30 +90,32 @@ struct symbol_properties {
 		dictionary_set(ss, cc->cscope->symtable, datum, SYMPROP_TO_VALUE(st_prop)); \
 	} while (0)
 
-
-static char *keywords[KW_COUNT] = {
-	[kw_define]					= "define",
-	[kw_lambda]					= "lambda",
-	[kw_quote]					= "quote",
-	[kw_quasiquote]				= "quasiquote",
-	[kw_unquote]				= "unquote",
-	[kw_unquote_splice]			= "unquote-splice",
-	[kw_syntax_quote]			= "syntax-quote",
-	[kw_syntax_quasiquote]		= "syntax-quasiquote",
-	[kw_syntax_unquote]			= "syntax-unquote",
-	[kw_syntax_unquote_splice]	= "syntax-unquote-splice",
-	[kw_set]					= "set!",
-	[kw_display]				= "display",
-	[kw_begin]					= "begin",
-	[kw_if]						= "if",
-	[kw_define_syntax]			= "define-syntax",
-	[kw_syntax_rules]			= "syntax-rules",
-	[kw_call_with_continuation] = "call-with-continuation",
-	[kw_call_cc]				= "call/cc",
-	[kw_cons]					= "cons",
-	[kw_car]					= "car",
-	[kw_cdr]					= "cdr",
-};
+static char *
+keywords(int idx)
+{
+	switch ((enum kw)idx) {
+	case kw_define: return "define";
+	case kw_lambda: return "lambda";
+	case kw_quote: return "quote";
+	case kw_quasiquote: return "quasiquote";
+	case kw_unquote: return "unquote";
+	case kw_unquote_splice: return "unquote-splice";
+	case kw_syntax_quote: return "syntax-quote";
+	case kw_syntax_quasiquote: return "syntax-quasiquote";
+	case kw_syntax_unquote: return "syntax-unquote";
+	case kw_syntax_unquote_splice: return "syntax-unquote-splice";
+	case kw_set: return "set!";
+	case kw_begin: return "begin";
+	case kw_if: return "if";
+	case kw_define_syntax: return "define-syntax";
+	case kw_syntax_rules: return "syntax-rules";
+	case kw_call_with_continuation: return "call-with-continuation";
+	case kw_call_cc: return "call/cc";
+	case KW_COUNT: break;
+	}
+	sly_assert(0, "Error, No such keyword");
+	return NULL;
+}
 
 static sly_value kw_symbols[KW_COUNT];
 
@@ -200,7 +198,7 @@ init_symtable(Sly_State *ss)
 	struct symbol_properties prop = { .type = sym_keyword };
 	sly_value symtable = make_dictionary(ss);
 	for (int i = 0; i < KW_COUNT; ++i) {
-		sly_value sym = make_symbol(ss, keywords[i], strlen(keywords[i]));
+		sly_value sym = make_symbol(ss, keywords(i), strlen(keywords(i)));
 		dictionary_set(ss, symtable, sym, SYMPROP_TO_VALUE(prop));
 		kw_symbols[i] = sym;
 	}
@@ -433,7 +431,7 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 	reg++;
 	while (pair_p(form)) {
 		head = car(form);
-		syntax *s = GET_PTR(form);
+		syntax *s = GET_PTR(head);
 		reg2 = comp_expr(ss, head, reg);
 		if (reg2 != -1 && reg2 != reg) {
 			vector_append(ss, proto->code, iAB(OP_MOVE, reg, reg2, s->tok.ln));
@@ -581,67 +579,6 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 		case kw_set: {
 			comp_set(ss, form, reg);
 		} break;
-		case kw_display: {
-			prototype *proto = GET_PTR(cc->cscope->proto);
-			syntax *s = GET_PTR(stx);
-			form = cdr(form);
-			int reg2 = comp_expr(ss, car(form), reg);
-			if (reg2 == -1) {
-				vector_append(ss, proto->code, iA(OP_DISPLAY, reg, s->tok.ln));
-			} else {
-				vector_append(ss, proto->code, iA(OP_DISPLAY, reg2, s->tok.ln));
-			}
-			if (!null_p(cdr(form))) {
-				sly_raise_exception(ss, EXC_COMPILE, "Error malformed display expression");
-			}
-		} break;
-		case kw_cons: {
-			int reg2, reg3;
-			syntax *s = GET_PTR(stx);
-			prototype *proto = GET_PTR(cc->cscope->proto);
-			form = cdr(form);
-			reg2 = comp_expr(ss, car(form), reg);
-			if (reg2 == -1) {
-				reg2 = reg;
-			}
-			form = cdr(form);
-			reg3 = comp_expr(ss, car(form), reg2 + 1);
-			if (reg3 == -1) {
-				reg3 = reg2 + 1;
-			}
-			vector_append(ss, proto->code, iABC(OP_CONS, reg, reg2, reg3, s->tok.ln));
-			if (!null_p(cdr(form))) {
-				sly_raise_exception(ss, EXC_COMPILE, "Error malformed cons expression");
-			}
-		} break;
-		case kw_car: {
-			int reg2;
-			syntax *s = GET_PTR(stx);
-			prototype *proto = GET_PTR(cc->cscope->proto);
-			form = cdr(form);
-			reg2 = comp_expr(ss, car(form), reg);
-			if (reg2 == -1) {
-				reg2 = reg;
-			}
-			vector_append(ss, proto->code, iAB(OP_CAR, reg, reg2, s->tok.ln));
-			if (!null_p(cdr(form))) {
-				sly_raise_exception(ss, EXC_COMPILE, "Error malformed cons expression");
-			}
-		} break;
-		case kw_cdr: {
-			int reg2;
-			syntax *s = GET_PTR(stx);
-			prototype *proto = GET_PTR(cc->cscope->proto);
-			form = cdr(form);
-			reg2 = comp_expr(ss, car(form), reg);
-			if (reg2 == -1) {
-				reg2 = reg;
-			}
-			vector_append(ss, proto->code, iAB(OP_CDR, reg, reg2, s->tok.ln));
-			if (!null_p(cdr(form))) {
-				sly_raise_exception(ss, EXC_COMPILE, "Error malformed cons expression");
-			}
-		} break;
 		case kw_define_syntax: {
 			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"define-syntax\" unemplemented");
 		} break;
@@ -676,8 +613,8 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 sly_value
 cadd(Sly_State *ss, sly_value args)
 {
-	sly_value total = sly_add(ss, vector_ref(args, 0), vector_ref(args, 1));
-	sly_value vargs = vector_ref(args, 2);
+	sly_value vargs = vector_ref(args, 0);
+	sly_value total = make_int(ss, 0);
 	while (!null_p(vargs)) {
 		total = sly_add(ss, total, car(vargs));
 		vargs = cdr(vargs);
@@ -688,20 +625,28 @@ cadd(Sly_State *ss, sly_value args)
 sly_value
 csub(Sly_State *ss, sly_value args)
 {
-	sly_value total = sly_sub(ss, vector_ref(args, 0), vector_ref(args, 1));
-	sly_value vargs = vector_ref(args, 2);
+	sly_value vargs = vector_ref(args, 0);
+	sly_value total = make_int(ss, 0);
+	if (null_p(vargs)) {
+		return total;
+	}
+	sly_value head = car(vargs);
+	vargs = cdr(vargs);
+	if (null_p(vargs)) {
+		return sly_sub(ss, total, head);
+	}
 	while (!null_p(vargs)) {
-		total = sly_sub(ss, total, car(vargs));
+		total = sly_add(ss, total, car(vargs));
 		vargs = cdr(vargs);
 	}
-	return total;
+	return sly_sub(ss, head, total);
 }
 
 sly_value
 cmul(Sly_State *ss, sly_value args)
 {
-	sly_value total = sly_mul(ss, vector_ref(args, 0), vector_ref(args, 1));
-	sly_value vargs = vector_ref(args, 2);
+	sly_value vargs = vector_ref(args, 0);
+	sly_value total = make_int(ss, 1);
 	while (!null_p(vargs)) {
 		total = sly_mul(ss, total, car(vargs));
 		vargs = cdr(vargs);
@@ -712,13 +657,21 @@ cmul(Sly_State *ss, sly_value args)
 sly_value
 cdiv(Sly_State *ss, sly_value args)
 {
-	sly_value total = sly_div(ss, vector_ref(args, 0), vector_ref(args, 1));
-	sly_value vargs = vector_ref(args, 2);
+	sly_value vargs = vector_ref(args, 0);
+	sly_value total = make_int(ss, 1);
+	if (null_p(vargs)) {
+		sly_raise_exception(ss, EXC_GENERIC, "Divide by zero");
+	}
+	sly_value head = car(vargs);
+	vargs = cdr(vargs);
+	if (null_p(vargs)) {
+		return sly_sub(ss, total, head);
+	}
 	while (!null_p(vargs)) {
-		total = sly_div(ss, total, car(vargs));
+		total = sly_mul(ss, total, car(vargs));
 		vargs = cdr(vargs);
 	}
-	return total;
+	return sly_div(ss, head, total);
 }
 
 sly_value
@@ -736,22 +689,103 @@ cmod(Sly_State *ss, sly_value args)
 sly_value
 cnum_eq(Sly_State *ss, sly_value args)
 {
-	(void)ss;
+	UNUSED(ss);
 	return ctobool(sly_num_eq(vector_ref(args, 0), vector_ref(args, 1)));
 }
 
 sly_value
 cnum_lt(Sly_State *ss, sly_value args)
 {
-	(void)ss;
+	UNUSED(ss);
 	return ctobool(sly_num_lt(vector_ref(args, 0), vector_ref(args, 1)));
 }
 
 sly_value
 cnum_gt(Sly_State *ss, sly_value args)
 {
-	(void)ss;
+	UNUSED(ss);
 	return ctobool(sly_num_gt(vector_ref(args, 0), vector_ref(args, 1)));
+}
+
+sly_value
+cnum_leq(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	return ctobool(sly_num_lt(vector_ref(args, 0), vector_ref(args, 1))
+				   || sly_num_eq(vector_ref(args, 0), vector_ref(args, 1)));
+}
+
+sly_value
+cnum_geq(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	return ctobool(sly_num_gt(vector_ref(args, 0), vector_ref(args, 1))
+				   || sly_num_eq(vector_ref(args, 0), vector_ref(args, 1)));
+}
+
+sly_value
+cnot(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	if (vector_ref(args, 0) == SLY_FALSE) {
+		return SLY_TRUE;
+	} else {
+		return SLY_FALSE;
+	}
+}
+
+sly_value
+cnum_noteq(Sly_State *ss, sly_value args)
+{
+	vector_set(args, 0, cnum_eq(ss, args));
+	return cnot(ss, args);
+}
+
+sly_value
+ccons(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	return cons(ss, vector_ref(args, 0), vector_ref(args, 1));
+}
+
+sly_value
+ccar(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	return car(vector_ref(args, 0));
+}
+
+sly_value
+ccdr(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	return cdr(vector_ref(args, 0));
+}
+
+sly_value
+cset_car(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	sly_value v = vector_ref(args, 1);
+	set_car(vector_ref(args, 0), v);
+	return v;
+}
+
+sly_value
+cset_cdr(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	sly_value v = vector_ref(args, 1);
+	set_cdr(vector_ref(args, 0), v);
+	return v;
+}
+
+sly_value
+cdisplay(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	sly_display(vector_ref(args, 0), 0);
+	return SLY_NULL;
 }
 
 void
@@ -764,14 +798,24 @@ init_builtins(Sly_State *ss)
 	st_prop.islocal = 0;
 	st_prop.type = sym_global;
 	cc->globals = make_dictionary(ss);
-	ADD_BUILTIN("+", cadd, 2, 1);
-	ADD_BUILTIN("-", csub, 2, 1);
-	ADD_BUILTIN("*", cmul, 2, 1);
-	ADD_BUILTIN("/", cdiv, 2, 1);
+	ADD_BUILTIN("+", cadd, 0, 1);
+	ADD_BUILTIN("-", csub, 0, 1);
+	ADD_BUILTIN("*", cmul, 0, 1);
+	ADD_BUILTIN("/", cdiv, 0, 1);
 	ADD_BUILTIN("%", cmod, 2, 1);
 	ADD_BUILTIN("=", cnum_eq, 2, 0);
 	ADD_BUILTIN("<", cnum_lt, 2, 0);
 	ADD_BUILTIN(">", cnum_gt, 2, 0);
+	ADD_BUILTIN("<=", cnum_leq, 2, 0);
+	ADD_BUILTIN(">=", cnum_geq, 2, 0);
+	ADD_BUILTIN("/=", cnum_noteq, 2, 0);
+	ADD_BUILTIN("not", cnot, 1, 0);
+	ADD_BUILTIN("cons", ccons, 2, 0);
+	ADD_BUILTIN("car", ccar, 1, 0);
+	ADD_BUILTIN("cdr", ccdr, 1, 0);
+	ADD_BUILTIN("set-car!", cset_car, 2, 0);
+	ADD_BUILTIN("set-cdr!", cset_cdr, 2, 0);
+	ADD_BUILTIN("display", cdisplay, 1, 0);
 }
 
 int

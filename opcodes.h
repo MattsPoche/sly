@@ -14,23 +14,17 @@ enum opcode {
 	OP_SETUPVAL,	// iAB  | U[A] := R[B]
 	OP_GETUPDICT,	// iABC | R[A] := <dictionary> U[B][R[C]]
 	OP_SETUPDICT,	// iABC | <dictionary> U[A][R[B]] := R[C]
-	OP_CONS,		// iABC | R[A] := pair(R[B], R[C])
-	OP_CAR,			// iAB  | R[A] := car(R[B])
-	OP_CDR,			// iAB  | R[A] := cdr(R[B])
-	OP_SETCAR,		// iAB  | CAR(R[A]) := R[B]
-	OP_SETCDR,		// iAB  | CDR(R[A]) := R[B]
 	OP_JMP,			// iAx  | PC := <u64> Ax
 	OP_FJMP,		// iABx | if R[A] == #f then PC := Bx
-	OP_CALL,		// iAB  | R[A] := R[A](A+1, ..., A+B-1)
-	OP_CALLWCC,     // iA   | R[A] := R[A](CC) ; call/cc
-	OP_TAILCALL,	// iAB  | R[A] := R[A](A+1, ..., A+B-1)
+	OP_CALL,		// iAB  | R[A] := (R[A] R[A+1] ... R[A+B-1])
+	OP_CALLWCC,     // iA   | R[A] := (R[A] (current-continuation)) ; call/cc
+	OP_TAILCALL,	// iAB  | R[A] := (R[A] R[A+1] ... R[A+B-1])
 	OP_RETURN,		// iA   | return R[A]
 	OP_DICTREF,		// iABC | R[A] := <dictionary> R[B][R[C]]
 	OP_DICTSET,		// iABC | <dictionary> R[A][R[B]] := R[C]
 	OP_VECREF,		// iABC | R[A] := R[B][R[C]]
 	OP_VECSET,		// iABC | R[A][R[B]] = R[C]
 	OP_CLOSURE,		// iABx | R[A] := make_closure(<prototype> K[Bx])
-	OP_DISPLAY,		// iA   | display(R[A])
 };
 
 typedef struct _stack_frame {

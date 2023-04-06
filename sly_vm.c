@@ -172,32 +172,6 @@ vm_run(Sly_State *ss)
 			sly_value dict = get_upval(a);
 			dictionary_set(ss, dict, get_reg(b), get_reg(c));
 		} break;
-		case OP_CONS: {
-			u8 a = GET_A(instr);
-			u8 b = GET_B(instr);
-			u8 c = GET_C(instr);
-			set_reg(a, cons(ss, get_reg(b), get_reg(c)));
-		} break;
-		case OP_CAR: {
-			u8 a = GET_A(instr);
-			u8 b = GET_B(instr);
-			set_reg(a, car(get_reg(b)));
-		} break;
-		case OP_CDR: {
-			u8 a = GET_A(instr);
-			u8 b = GET_B(instr);
-			set_reg(a, cdr(get_reg(b)));
-		} break;
-		case OP_SETCAR: {
-			u8 a = GET_A(instr);
-			u8 b = GET_B(instr);
-			set_car(get_reg(a), get_reg(b));
-		} break;
-		case OP_SETCDR: {
-			u8 a = GET_A(instr);
-			u8 b = GET_B(instr);
-			set_cdr(get_reg(a), get_reg(b));
-		} break;
 		case OP_JMP: {
 			u64 a = GET_Ax(instr);
 			frame->pc = a;
@@ -363,11 +337,6 @@ vm_run(Sly_State *ss)
 				sly_value uv = capture_value(frame, upinfo);
 				vector_set(clos->upvals, i + 1 + proto->nargs, uv);
 			}
-		} break;
-		case OP_DISPLAY: {
-			u8 a = GET_A(instr);
-			sly_value v = get_reg(a);
-			sly_display(v, 0);
 		} break;
 		}
 	}

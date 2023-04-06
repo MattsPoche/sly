@@ -80,26 +80,6 @@ dis(INSTR ins)
 		u8 c = GET_C(instr);
 		printf("(SETUPDICT %d %d %d)%n", a, b, c, &pad);
 	} break;
-	case OP_CONS: {
-		u8 a = GET_A(instr);
-		u8 b = GET_B(instr);
-		u8 c = GET_C(instr);
-		printf("(CONS %d %d %d)%n", a, b, c, &pad);
-	} break;
-	case OP_CAR: {
-		u8 a = GET_A(instr);
-		u8 b = GET_B(instr);
-		printf("(CAR %d %d)%n", a, b, &pad);
-	} break;
-	case OP_CDR: {
-		u8 a = GET_A(instr);
-		u8 b = GET_B(instr);
-		printf("(CDR %d %d)%n", a, b, &pad);
-	} break;
-	case OP_SETCAR: {
-	} break;
-	case OP_SETCDR: {
-	} break;
 	case OP_JMP: {
 		u64 a = GET_Ax(instr);
 		printf("(JMP %lu)%n", a, &pad);
@@ -144,10 +124,6 @@ dis(INSTR ins)
 		u8 a = GET_A(instr);
 		u64 b = GET_Bx(instr);
 		printf("(CLOSURE %d %lu)%n", a, b, &pad);
-	} break;
-	case OP_DISPLAY: {
-		u8 a = GET_A(instr);
-		printf("(DISPLAY %d)%n", a, &pad);
 	} break;
 	}
 	if (instr->ln < 0) {
