@@ -92,6 +92,10 @@ print_string_lit(sly_value val)
 void
 sly_display(sly_value v, int lit)
 {
+	if (null_p(v)) {
+		printf("()");
+		return;
+	}
 	if (bool_p(v)) {
 		if (v == SLY_FALSE) {
 			printf("#f");
@@ -129,7 +133,11 @@ sly_display(sly_value v, int lit)
 		printf("%g", n);
 	} else if (symbol_p(v)) {
 		symbol *s = GET_PTR(v);
+#if 1
 		printf("%.*s", (int)s->len, (char *)s->name);
+#else
+		printf("%.*s#%#lx", (int)s->len, (char *)s->name, s->hash);
+#endif
 	} else if (string_p(v)) {
 		if (lit) {
 			print_string_lit(v);
@@ -137,6 +145,8 @@ sly_display(sly_value v, int lit)
 			byte_vector *s = GET_PTR(v);
 			printf("%.*s", (int)s->len, (char *)s->elems);
 		}
+	} else if (syntax_p(v)) {
+		sly_display(syntax_to_datum(v), lit);
 	} else if (prototype_p(v)) {
 		printf("{prototype@%p}", GET_PTR(v));
 	} else if (closure_p(v)) {
@@ -294,6 +304,28 @@ append(sly_value p, sly_value v)
 	set_cdr(p, v);
 }
 
+sly_value
+copy_list(Sly_State *ss, sly_value list)
+{
+	if (pair_p(list)) {
+		cons(ss, car(list), cdr(list));
+	}
+	return list;
+}
+
+int
+list_eq(sly_value o1, sly_value o2)
+{
+	while (pair_p(o1) && pair_p(o2)) {
+		if (!sly_equal(car(o1), car(o2))) {
+			return 0;
+		}
+		o1 = cdr(o1);
+		o2 = cdr(o2);
+	}
+	return sly_equal(o1, o2);
+}
+
 size_t
 list_len(sly_value list)
 {
@@ -381,6 +413,25 @@ make_vector(Sly_State *ss, size_t len, size_t cap)
 	vec->cap = cap;
 	vec->len = len;
 	return (sly_value)vec;
+}
+
+int
+vector_eq(sly_value o1, sly_value o2)
+{
+	if (vector_p(o1) && vector_p(o2)) {
+		vector *v1 = GET_PTR(o1);
+		vector *v2 = GET_PTR(o2);
+		if (v1->len != v2->len) {
+			return 0;
+		}
+		for (size_t i = 0; i < v1->len; ++i) {
+			if (!sly_equal(v1->elems[i], v2->elems[i])) {
+				return 0;
+			}
+		}
+		return 1;
+	}
+	return 0;
 }
 
 sly_value
@@ -872,6 +923,28 @@ sly_eq(sly_value o1, sly_value o2)
 	}
 	return 0;
 }
+
+int
+sly_equal(sly_value o1, sly_value o2)
+{
+	if (symbol_p(o1) && symbol_p(o2)) {
+		return symbol_eq(o1, o2);
+	}
+	if (number_p(o1) && number_p(o2)) {
+		return sly_num_eq(o1, o2);
+	}
+	if (string_p(o1) && string_p(o2)) {
+		return string_eq(o1, o2);
+	}
+	if (vector_p(o1) && vector_p(o2)) {
+		return vector_eq(o1, o2);
+	}
+	if (pair_p(o1) && pair_p(o2)) {
+		return list_eq(o1, o2);
+	}
+	return o1 == o2;
+}
+
 
 sly_value
 make_syntax(Sly_State *ss, token tok, sly_value datum)

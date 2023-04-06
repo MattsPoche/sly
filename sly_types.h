@@ -190,6 +190,8 @@ sly_value cdr(sly_value obj);
 void set_car(sly_value obj, sly_value value);
 void set_cdr(sly_value obj, sly_value value);
 sly_value tail(sly_value obj);
+sly_value copy_list(Sly_State *ss, sly_value list);
+int list_eq(sly_value o1, sly_value o2);
 void append(sly_value p, sly_value v);
 size_t list_len(sly_value list);
 sly_value list_to_vector(Sly_State *ss, sly_value list);
@@ -199,6 +201,7 @@ sly_value byte_vector_ref(Sly_State *ss, sly_value v, size_t idx);
 void byte_vector_set(sly_value v, size_t idx, sly_value value);
 size_t byte_vector_len(sly_value v);
 sly_value make_vector(Sly_State *ss, size_t len, size_t cap);
+int vector_eq(sly_value o1, sly_value o2);
 sly_value copy_vector(Sly_State *ss, sly_value v);
 sly_value vector_ref(sly_value v, size_t idx);
 void vector_set(sly_value v, size_t idx, sly_value value);
@@ -229,7 +232,8 @@ sly_value sly_mod(Sly_State *ss, sly_value x, sly_value y);
 int sly_num_eq(sly_value x, sly_value y);
 int sly_num_lt(sly_value x, sly_value y);
 int sly_num_gt(sly_value x, sly_value y);
-int sly_eq(sly_value o2, sly_value o1);
+int sly_eq(sly_value o1, sly_value o2);
+int sly_equal(sly_value o1, sly_value o2);
 sly_value make_syntax(Sly_State *ss, token tok, sly_value datum);
 sly_value syntax_to_datum(sly_value syn);
 sly_value make_dictionary(Sly_State *ss);
@@ -252,7 +256,7 @@ void dictionary_remove(sly_value d, sly_value key);
 #define pair_p(v)        (!null_p(v) && ((v) & TAG_MASK) == st_pair)
 #define imm_p(v)         (((v) & TAG_MASK) == st_imm)
 #define bool_p(v)        (((v) & TAG_MASK) == st_bool)
-#define number_p(v)      (int_p(v) || float_p(v) || byte_p(v))
+#define number_p(v)      ((!null_p(v) && (int_p(v) || float_p(v) || byte_p(v))))
 #define symbol_p(v)      (ptr_p(v) && TYPEOF(v) == tt_symbol)
 #define vector_p(v)      (ptr_p(v) && TYPEOF(v) == tt_vector)
 #define byte_vector_p(v) (ptr_p(v) && TYPEOF(v) == tt_byte_vector)

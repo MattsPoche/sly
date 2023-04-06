@@ -167,7 +167,7 @@ intern_constant(Sly_State *ss, sly_value value)
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	size_t len = vector_len(proto->K);
 	for (size_t i = 0; i < len; ++i) {
-		if (sly_eq(value, vector_ref(proto->K, i))) {
+		if (sly_equal(value, vector_ref(proto->K, i))) {
 			return i;
 		}
 	}
@@ -501,6 +501,19 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 	return reg;
 }
 
+sly_value
+strip_syntax(Sly_State *ss, sly_value form)
+{
+	if (pair_p(form)) {
+		return cons(ss, strip_syntax(ss, car(form)),
+					    strip_syntax(ss, cdr(form)));
+	}
+	if (syntax_p(form)) {
+		return syntax_to_datum(form);
+	}
+	return form;
+}
+
 int
 comp_expr(Sly_State *ss, sly_value form, int reg)
 {
@@ -533,15 +546,21 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 		case kw_quote: {
 			syntax *s = GET_PTR(stx);
 			form = cdr(form);
-			if (pair_p(car(form))) {
-				sly_raise_exception(ss, EXC_COMPILE, "Keyword \"quote\" unemplemented for type");
-			} else if (null_p(car(form))) {
-				reg = comp_atom(ss, make_syntax(ss, s->tok, SLY_NULL), reg);
-			} else {
-				reg = comp_atom(ss, car(form), reg);
-			}
 			if (!null_p(cdr(form))) {
-				sly_raise_exception(ss, EXC_COMPILE, "Error malformed cons expression");
+				sly_raise_exception(ss, EXC_COMPILE, "Error malformed quote");
+			}
+			form = car(form);
+			form = strip_syntax(ss, form);
+			prototype *proto = GET_PTR(ss->cc->cscope->proto);
+			if (null_p(form)) {
+				vector_append(ss, proto->code, iA(OP_LOADNULL, reg, s->tok.ln));
+			} else if (form == SLY_TRUE) {
+				vector_append(ss, proto->code, iA(OP_LOADTRUE, reg, s->tok.ln));
+			} else if (form == SLY_FALSE) {
+				vector_append(ss, proto->code, iA(OP_LOADFALSE, reg, s->tok.ln));
+			} else {
+				int kreg = intern_constant(ss, form);
+				vector_append(ss, proto->code, iABx(OP_LOADK, reg, kreg, s->tok.ln));
 			}
 		} break;
 		case kw_quasiquote: {
@@ -788,6 +807,13 @@ cdisplay(Sly_State *ss, sly_value args)
 	return SLY_NULL;
 }
 
+sly_value
+clist(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	return vector_ref(args, 0);
+}
+
 void
 init_builtins(Sly_State *ss)
 {
@@ -816,6 +842,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("set-car!", cset_car, 2, 0);
 	ADD_BUILTIN("set-cdr!", cset_cdr, 2, 0);
 	ADD_BUILTIN("display", cdisplay, 1, 0);
+	ADD_BUILTIN("list", clist, 0, 1);
 }
 
 int

@@ -118,7 +118,11 @@ vm_run(Sly_State *ss)
 		case OP_LOADK: {
 			u8 a = GET_A(instr);
 			size_t b = GET_Bx(instr);
-			set_reg(a, get_const(b));
+			sly_value val = get_const(b);
+			if (pair_p(val)) {
+				val = copy_list(ss, val);
+			}
+			set_reg(a, val);
 		} break;
 		case OP_LOADFALSE: {
 			u8 a = GET_A(instr);

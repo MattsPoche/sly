@@ -1,0 +1,5 @@
+(display 'poopy)(display "\n")
+(display 'list)(display "\n")
+(display (list 1 2 3 4 5 6))(display "\n")
+(display '(foo list 1 2 3 4 5 6))(display "\n")
+(display '(foo list 1 2 3 4 5 6))(display "\n")
