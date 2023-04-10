@@ -2,11 +2,12 @@
 #include "sly_types.h"
 #include "lexer.h"
 #include "parser.h"
+#include "sly_alloc.h"
 
 static char *
 escape_string(Sly_State *ss, char *str, size_t len)
 {
-	char *buf = malloc(len+1);
+	char *buf = MALLOC(len+1);
 	assert(buf != NULL);
 	size_t i, j;
 	for (i = 0, j = 0; i < len; ++i, ++j) {
@@ -137,7 +138,7 @@ parse_value(Sly_State *ss, char *cstr)
 	case tok_string: {
 		char *s = escape_string(ss, &cstr[t.so+1], t.eo - t.so - 2);
 		sly_value stx = make_syntax(ss, t, make_string(ss, s, strlen(s)));
-		free(s);
+		FREE(s);
 		return stx;
 	} break;
 	case tok__nocapture0: {
@@ -208,7 +209,7 @@ parse_file(Sly_State *ss, char *file_path, char **contents)
 {
 	FILE *file = fopen(file_path, "r");
 	size_t size = get_file_size(file);
-	char *str = malloc(size+1);
+	char *str = MALLOC(size+1);
 	assert(str != NULL);
 	fread(str, 1, size, file);
 	str[size] = '\0';

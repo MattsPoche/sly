@@ -4,6 +4,7 @@
 #define OPCODES_INCLUDE_INLINE 1
 #include "opcodes.h"
 #include "sly_compile.h"
+#include "sly_alloc.h"
 
 /* TODO [ ] Associate syntactic info with opcodes (semi-done)
  */
@@ -178,10 +179,7 @@ intern_constant(Sly_State *ss, sly_value value)
 static struct scope *
 make_scope(Sly_State *ss)
 {
-	struct scope *scope = malloc(sizeof(*scope));
-	if (scope == NULL) {
-		sly_raise_exception(ss, EXC_ALLOC, "(make_scope) malloc failed; returned NULL");
-	}
+	struct scope *scope = MALLOC(sizeof(*scope));
 	scope->parent = NULL;
 	scope->proto = make_prototype(ss,
 								  make_vector(ss, 0, 8),
@@ -497,7 +495,7 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 	vector_append(ss, cproto->K, scope->proto);
 	if ((size_t)reg >= cproto->nregs) cproto->nregs = reg + 1;
 	vector_append(ss, cproto->code, iABx(OP_CLOSURE, reg, i, -1));
-	free(scope);
+	FREE(scope);
 	return reg;
 }
 
@@ -854,10 +852,10 @@ sly_compile(Sly_State *ss, char *file_name)
 			fprintf(stderr, "%s\n", ss->excpt_msg);
 			return ss->excpt;
 		});
-	char *src;
 	sly_value ast;
 	prototype *proto;
-	ss->cc = malloc(sizeof(*ss->cc));
+	ss->cc = MALLOC(sizeof(*ss->cc));
+	ss->file_path = file_name;
 	if (ss->cc == NULL) {
 		sly_raise_exception(ss, EXC_ALLOC, "(sly_compile) malloc failed; returned NULL");
 	}
@@ -868,7 +866,7 @@ sly_compile(Sly_State *ss, char *file_name)
 	cc->cscope->symtable = init_symtable(ss);
 	cc->cscope->level = 0; /* top level */
 	init_builtins(ss);
-	ast = parse_file(ss, file_name, &src);
+	ast = parse_file(ss, file_name, &ss->source_code);
 	proto = GET_PTR(cc->cscope->proto);
 	int r = comp_expr(ss, ast, 0);
 	vector_append(ss, proto->code, iA(OP_RETURN, r, -1));

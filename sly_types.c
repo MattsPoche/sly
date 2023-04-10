@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <time.h>
 #include "sly_types.h"
+#include "sly_alloc.h"
 
 #define DICT_INIT_SIZE 32
 #define DICT_LOAD_FACTOR 0.70
@@ -218,7 +219,7 @@ make_int(Sly_State *ss, i64 i)
 		sly_value s = *((sly_value *)(&v));
 		return (s & ~TAG_MASK) | st_imm;
 	}
-	number *n = sly_alloc(ss, sizeof(*n));
+	number *n = gc_alloc(ss, sizeof(*n), 0);
 	n->h.type = tt_int;
 	n->val.as_int = i;
 	return (sly_value)n;
@@ -227,7 +228,7 @@ make_int(Sly_State *ss, i64 i)
 sly_value
 make_float(Sly_State *ss, f64 f)
 {
-	number *n = sly_alloc(ss, sizeof(*n));
+	number *n = gc_alloc(ss, sizeof(*n), 0);
 	n->h.type = tt_float;
 	n->val.as_float = f;
 	return (sly_value)n;
@@ -246,7 +247,7 @@ make_small_float(Sly_State *ss, f32  f)
 sly_value
 cons(Sly_State *ss, sly_value car, sly_value cdr)
 {
-	pair *p = gc_alloc(&ss->gc, sizeof(*p), 0);
+	pair *p = gc_alloc(ss, sizeof(*p), 0);
 	p->car = car;
 	p->cdr = cdr;
 	sly_value v = (sly_value)p;
@@ -364,8 +365,8 @@ sly_value
 make_byte_vector(Sly_State *ss, size_t len, size_t cap)
 {
 	sly_assert(len <= cap, "Error vector length may not exceed its capacity");
-	byte_vector *vec = sly_alloc(ss, sizeof(*vec));
-	vec->elems = sly_alloc(ss, cap);
+	byte_vector *vec = gc_alloc(ss, sizeof(*vec), GC_OWNER);
+	vec->elems = MALLOC(cap);
 	vec->h.type = tt_byte_vector;
 	vec->cap = cap;
 	vec->len = len;
@@ -406,8 +407,8 @@ sly_value
 make_vector(Sly_State *ss, size_t len, size_t cap)
 {
 	sly_assert(len <= cap, "Error vector length may not exceed its capacity");
-	vector *vec = sly_alloc(ss, sizeof(*vec));
-	vec->elems = malloc(sizeof(sly_value) * cap);
+	vector *vec = gc_alloc(ss, sizeof(*vec), GC_OWNER);
+	vec->elems = MALLOC(sizeof(sly_value) * cap);
 	assert(vec->elems != NULL);
 	vec->h.type = tt_vector;
 	vec->cap = cap;
@@ -500,8 +501,8 @@ make_uninterned_symbol(Sly_State *ss, char *cstr, size_t len)
 {
 	sly_assert(len <= UCHAR_MAX,
 			   "Value Error: name exceeds maximum for symbol");
-	symbol *sym = sly_alloc(ss, sizeof(*sym));
-	sym->name = sly_alloc(ss, len);
+	symbol *sym = gc_alloc(ss, sizeof(*sym), GC_OWNER);
+	sym->name = MALLOC(len);
 	sym->h.type = tt_symbol;
 	sym->len = len;
 	memcpy(sym->name, cstr, len);
@@ -571,7 +572,7 @@ sly_value
 make_prototype(Sly_State *ss, sly_value uplist, sly_value constants, sly_value code,
 			   size_t nregs, size_t nargs, size_t entry, int has_varg)
 {
-	prototype *proto = sly_alloc(ss, sizeof(*proto));
+	prototype *proto = gc_alloc(ss, sizeof(*proto), 0);
 	proto->h.type = tt_prototype;
 	proto->uplist = uplist;
 	proto->K = constants;
@@ -587,7 +588,7 @@ sly_value
 make_closure(Sly_State *ss, sly_value _proto)
 {
 	sly_assert(prototype_p(_proto), "Type Error expected prototype");
-	closure *clos = sly_alloc(ss, sizeof(*clos));
+	closure *clos = gc_alloc(ss, sizeof(*clos), 0);
 	clos->h.type = tt_closure;
 	prototype *proto = GET_PTR(_proto);
 	clos->arg_idx = 1;
@@ -601,7 +602,7 @@ make_closure(Sly_State *ss, sly_value _proto)
 sly_value
 make_cclosure(Sly_State *ss, cfunc fn, size_t nargs, int has_varg)
 {
-	cclosure *clos = sly_alloc(ss, sizeof(*clos));
+	cclosure *clos = gc_alloc(ss, sizeof(*clos), 0);
 	clos->h.type = tt_cclosure;
 	clos->fn = fn;
 	clos->nargs = nargs;
@@ -612,7 +613,7 @@ make_cclosure(Sly_State *ss, cfunc fn, size_t nargs, int has_varg)
 sly_value
 make_continuation(Sly_State *ss, struct _stack_frame *frame, size_t pc, size_t ret_slot)
 {
-	continuation *cc = sly_alloc(ss, sizeof(*cc));
+	continuation *cc = gc_alloc(ss, sizeof(*cc), 0);
 	cc->h.type = tt_continuation;
 	cc->frame = frame;
 	cc->pc = pc;
@@ -949,7 +950,7 @@ sly_equal(sly_value o1, sly_value o2)
 sly_value
 make_syntax(Sly_State *ss, token tok, sly_value datum)
 {
-	syntax *stx = sly_alloc(ss, sizeof(*stx));
+	syntax *stx = gc_alloc(ss, sizeof(*stx), 0);
 	stx->h.type = tt_syntax;
 	stx->tok = tok;
 	stx->datum = datum;
@@ -1035,8 +1036,11 @@ dict_resize(Sly_State *ss, sly_value d)
 			dictionary_set(ss, d, car(entry), cdr(entry));
 		}
 	}
-	//free(old->elems);
-	*old = *new;
+	void *tmp = old->elems;
+	old->cap = new->cap;
+	old->len = new->len;
+	old->elems = new->elems;
+	new->elems = tmp;
 }
 
 void

@@ -9,6 +9,7 @@ struct uplookup {
 };
 
 struct scope {
+	gc_header h;
 	struct scope *parent; // NULL if top-level
 	sly_value proto;      // <prototype>
 	sly_value symtable;   // <dictionary>

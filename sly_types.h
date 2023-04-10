@@ -51,6 +51,8 @@ enum exc_code { /* exception code */
 
 typedef struct _sly_state {
 	GC gc;
+	char *file_path;
+	char *source_code;
 	struct compile *cc;
 	struct _stack_frame *frame;
 	sly_value code;
@@ -87,16 +89,18 @@ enum type_tag {
 	tt_cclosure,
 	tt_continuation,
 	tt_syntax,
+	tt_stack_frame,
 	TYPE_TAG_COUNT,
 };
 
 typedef struct _pair {
+	gc_header h;
 	sly_value car;
 	sly_value cdr;
 } pair;
 
 struct obj_header {
-	gcinfo gci;
+	gc_header gci;
 	int type;
 };
 
@@ -267,6 +271,7 @@ void dictionary_remove(sly_value d, sly_value key);
 #define cclosure_p(v)    (ptr_p(v) && TYPEOF(v) == tt_cclosure)
 #define continuation_p(v) (ptr_p(v) && TYPEOF(v) == tt_continuation)
 #define syntax_p(v)      (ptr_p(v) && TYPEOF(v) == tt_syntax)
+#define heap_obj_p(v)    (ptr_p(v) || pair_p(v))
 
 static inline int
 int_p(sly_value val)
@@ -297,12 +302,6 @@ byte_p(sly_value val)
 	}
 	return TYPEOF(val) == tt_byte;
 	return 0;
-}
-
-static inline void *
-sly_alloc(Sly_State *ss, size_t size)
-{
-	return gc_alloc(&ss->gc, size, 1);
 }
 
 #endif /* SLY_TYPES_H_ */
