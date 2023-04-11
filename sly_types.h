@@ -55,6 +55,7 @@ typedef struct _sly_state {
 	char *source_code;
 	struct compile *cc;
 	struct _stack_frame *frame;
+	sly_value proto;
 	sly_value code;
 	sly_value stack;
 	jmp_buf jbuf;
@@ -76,6 +77,7 @@ struct imm_value {
 };
 
 enum type_tag {
+	tt_pair,
 	tt_byte,
 	tt_int,
 	tt_float,
@@ -90,21 +92,22 @@ enum type_tag {
 	tt_continuation,
 	tt_syntax,
 	tt_stack_frame,
-	TYPE_TAG_COUNT,
 };
 
+#define OBJ_HEADER gc_object h
+
+typedef struct _gc_object {
+	struct _gc_object *next;
+	struct _gc_object *ngray;
+	u8 color;
+	u8 type;
+} gc_object;
+
 typedef struct _pair {
-	gc_header h;
+	OBJ_HEADER;
 	sly_value car;
 	sly_value cdr;
 } pair;
-
-struct obj_header {
-	gc_header gci;
-	int type;
-};
-
-#define OBJ_HEADER struct obj_header h
 
 typedef struct _number {
 	OBJ_HEADER;
@@ -256,7 +259,7 @@ void dictionary_remove(sly_value d, sly_value key);
 #define ref_p(v)         (((v) & TAG_MASK) == st_ref)
 #define open_p(v)        ref_p(v)
 #define GET_PTR(v)       ((void *)((v) & ~TAG_MASK))
-#define TYPEOF(v)        (((struct obj_header *)GET_PTR(v))->type)
+#define TYPEOF(v)        (((gc_object *)GET_PTR(v))->type)
 #define pair_p(v)        (!null_p(v) && ((v) & TAG_MASK) == st_pair)
 #define imm_p(v)         (((v) & TAG_MASK) == st_imm)
 #define bool_p(v)        (((v) & TAG_MASK) == st_bool)

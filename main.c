@@ -81,6 +81,7 @@ sly_load_file(Sly_State *ss, char *file_name)
 		printf("Unable to run file %s\n", file_name);
 		return;
 	}
+	ss->proto = ss->cc->cscope->proto;
 	prototype *proto = GET_PTR(ss->cc->cscope->proto);
 	stack_frame *frame = make_stack(ss, proto->nregs);
 	frame->U = make_vector(ss, 12, 12);
@@ -94,8 +95,9 @@ sly_load_file(Sly_State *ss, char *file_name)
 	frame->pc = proto->entry;
 	frame->level = 0;
 	ss->frame = frame;
-	ss->gc.nocollect = 0;
-	gc_alloc(ss, 0, 0); /* trigger gc */
+	dis_all(ss->frame, 1);
+	//ss->gc.nocollect = 0;
+	gc_collect(ss);
 	printf("Running file %s\n", file_name);
 	dis_all(ss->frame, 1);
 	printf("Output:\n");

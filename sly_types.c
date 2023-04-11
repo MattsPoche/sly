@@ -153,7 +153,7 @@ sly_display(sly_value v, int lit)
 	} else if (closure_p(v)) {
 		printf("{closure@%p}", GET_PTR(v));
 	} else {
-		sly_assert(0, "(sly_display) UNEMPLEMENTED");
+		printf("(sly_display) UNEMPLEMENTED");
 	}
 }
 
@@ -219,7 +219,7 @@ make_int(Sly_State *ss, i64 i)
 		sly_value s = *((sly_value *)(&v));
 		return (s & ~TAG_MASK) | st_imm;
 	}
-	number *n = gc_alloc(ss, sizeof(*n), 0);
+	number *n = gc_alloc(ss, sizeof(*n));
 	n->h.type = tt_int;
 	n->val.as_int = i;
 	return (sly_value)n;
@@ -228,7 +228,7 @@ make_int(Sly_State *ss, i64 i)
 sly_value
 make_float(Sly_State *ss, f64 f)
 {
-	number *n = gc_alloc(ss, sizeof(*n), 0);
+	number *n = gc_alloc(ss, sizeof(*n));
 	n->h.type = tt_float;
 	n->val.as_float = f;
 	return (sly_value)n;
@@ -247,7 +247,8 @@ make_small_float(Sly_State *ss, f32  f)
 sly_value
 cons(Sly_State *ss, sly_value car, sly_value cdr)
 {
-	pair *p = gc_alloc(ss, sizeof(*p), 0);
+	pair *p = gc_alloc(ss, sizeof(*p));
+	p->h.type = tt_pair;
 	p->car = car;
 	p->cdr = cdr;
 	sly_value v = (sly_value)p;
@@ -365,7 +366,7 @@ sly_value
 make_byte_vector(Sly_State *ss, size_t len, size_t cap)
 {
 	sly_assert(len <= cap, "Error vector length may not exceed its capacity");
-	byte_vector *vec = gc_alloc(ss, sizeof(*vec), GC_OWNER);
+	byte_vector *vec = gc_alloc(ss, sizeof(*vec));
 	vec->elems = MALLOC(cap);
 	vec->h.type = tt_byte_vector;
 	vec->cap = cap;
@@ -407,7 +408,7 @@ sly_value
 make_vector(Sly_State *ss, size_t len, size_t cap)
 {
 	sly_assert(len <= cap, "Error vector length may not exceed its capacity");
-	vector *vec = gc_alloc(ss, sizeof(*vec), GC_OWNER);
+	vector *vec = gc_alloc(ss, sizeof(*vec));
 	vec->elems = MALLOC(sizeof(sly_value) * cap);
 	assert(vec->elems != NULL);
 	vec->h.type = tt_vector;
@@ -501,7 +502,7 @@ make_uninterned_symbol(Sly_State *ss, char *cstr, size_t len)
 {
 	sly_assert(len <= UCHAR_MAX,
 			   "Value Error: name exceeds maximum for symbol");
-	symbol *sym = gc_alloc(ss, sizeof(*sym), GC_OWNER);
+	symbol *sym = gc_alloc(ss, sizeof(*sym));
 	sym->name = MALLOC(len);
 	sym->h.type = tt_symbol;
 	sym->len = len;
@@ -572,7 +573,7 @@ sly_value
 make_prototype(Sly_State *ss, sly_value uplist, sly_value constants, sly_value code,
 			   size_t nregs, size_t nargs, size_t entry, int has_varg)
 {
-	prototype *proto = gc_alloc(ss, sizeof(*proto), 0);
+	prototype *proto = gc_alloc(ss, sizeof(*proto));
 	proto->h.type = tt_prototype;
 	proto->uplist = uplist;
 	proto->K = constants;
@@ -588,7 +589,7 @@ sly_value
 make_closure(Sly_State *ss, sly_value _proto)
 {
 	sly_assert(prototype_p(_proto), "Type Error expected prototype");
-	closure *clos = gc_alloc(ss, sizeof(*clos), 0);
+	closure *clos = gc_alloc(ss, sizeof(*clos));
 	clos->h.type = tt_closure;
 	prototype *proto = GET_PTR(_proto);
 	clos->arg_idx = 1;
@@ -602,7 +603,7 @@ make_closure(Sly_State *ss, sly_value _proto)
 sly_value
 make_cclosure(Sly_State *ss, cfunc fn, size_t nargs, int has_varg)
 {
-	cclosure *clos = gc_alloc(ss, sizeof(*clos), 0);
+	cclosure *clos = gc_alloc(ss, sizeof(*clos));
 	clos->h.type = tt_cclosure;
 	clos->fn = fn;
 	clos->nargs = nargs;
@@ -613,7 +614,7 @@ make_cclosure(Sly_State *ss, cfunc fn, size_t nargs, int has_varg)
 sly_value
 make_continuation(Sly_State *ss, struct _stack_frame *frame, size_t pc, size_t ret_slot)
 {
-	continuation *cc = gc_alloc(ss, sizeof(*cc), 0);
+	continuation *cc = gc_alloc(ss, sizeof(*cc));
 	cc->h.type = tt_continuation;
 	cc->frame = frame;
 	cc->pc = pc;
@@ -950,7 +951,7 @@ sly_equal(sly_value o1, sly_value o2)
 sly_value
 make_syntax(Sly_State *ss, token tok, sly_value datum)
 {
-	syntax *stx = gc_alloc(ss, sizeof(*stx), 0);
+	syntax *stx = gc_alloc(ss, sizeof(*stx));
 	stx->h.type = tt_syntax;
 	stx->tok = tok;
 	stx->datum = datum;
