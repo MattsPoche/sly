@@ -21,9 +21,9 @@ gc_alloc(struct _sly_state *ss, size_t size)
 	obj = MALLOC(size);
 	obj->color = GC_WHITE;
 	obj->next = gc->objects;
+	obj->ngray = NULL;
 	gc->objects = obj;
 	gc->obj_count++;
-	gc->bytes += size;
 	gc->tb += size;
 	if (!gc->nocollect && gc->tb > GC_THRESHOLD) {
 		gc_collect(ss);
@@ -35,7 +35,7 @@ static inline void
 mark_gray(Sly_State *ss, gc_object *obj)
 {
 	if (obj == NULL) return;
-	if (obj->color == GC_GRAY) return;
+	if (obj->color != GC_WHITE) return;
 	obj->color = GC_GRAY;
 	obj->ngray = ss->gc.grays;
 	ss->gc.grays = obj;
@@ -73,6 +73,22 @@ static void
 traverse_vector(Sly_State *ss, vector *vec)
 {
 	for (size_t i = 0; i < vec->len; ++i) {
+		sly_value v = vec->elems[i];
+		if (pair_p(v) || ptr_p(v)) {
+			mark_gray(ss, GET_PTR(v));
+		} else if (ref_p(v)) {
+			sly_value *ref = GET_PTR(v);
+			if (pair_p(*ref) || ptr_p(*ref)) {
+				mark_gray(ss, GET_PTR(*ref));
+			}
+		}
+	}
+}
+
+static void
+traverse_dictionary(Sly_State *ss, vector *vec)
+{
+	for (size_t i = 0; i < vec->cap; ++i) {
 		sly_value v = vec->elems[i];
 		if (pair_p(v) || ptr_p(v)) {
 			mark_gray(ss, GET_PTR(v));
@@ -127,8 +143,10 @@ traverse_object(Sly_State *ss, gc_object *obj)
 	case tt_string: break;
 	case tt_byte_vector: break;
 	case tt_vector:
-	case tt_dictionary:
 		traverse_vector(ss, (vector *)obj);
+		break;
+	case tt_dictionary:
+		traverse_dictionary(ss, (vector *)obj);
 		break;
 	case tt_prototype:
 		traverse_prototype(ss, (prototype *)obj);
@@ -156,6 +174,7 @@ propagate_mark(Sly_State *ss)
 	if (gc->grays) {
 		gc_object *obj = gc->grays;
 		gc->grays = obj->ngray;
+		obj->ngray = NULL;
 		traverse_object(ss, obj);
 	}
 }
@@ -167,6 +186,30 @@ mark_roots(Sly_State *ss)
 	traverse_object(ss, (gc_object *)ss->proto);
 	traverse_object(ss, (gc_object *)ss->cc->interned);
 	traverse_object(ss, (gc_object *)ss->cc->globals);
+}
+
+static void
+free_object(Sly_State *ss, gc_object *obj)
+{
+	switch (obj->type) {
+	case tt_symbol: {
+		symbol *sym = (symbol *)obj;
+		FREE(sym->name);
+	} break;
+	case tt_string:
+	case tt_byte_vector: {
+		byte_vector *bvec = (byte_vector *)obj;
+		FREE(bvec->elems);
+	} break;
+	case tt_dictionary:
+	case tt_vector: {
+		vector *vec = (vector *)obj;
+		FREE(vec->elems);
+	} break;
+	}
+	//memset(obj, -1, sizeof(*obj));
+	FREE(obj);
+	ss->gc.obj_freed++;
 }
 
 static void
@@ -184,9 +227,7 @@ sweep(Sly_State *ss)
 			} else {
 				prev->next = obj;
 			}
-			memset(tmp, -1, sizeof(*tmp));
-			FREE(tmp);
-			gc->obj_count--;
+			free_object(ss, tmp);
 		} else {
 			mark_object(obj, GC_WHITE);
 			prev = obj;
@@ -198,6 +239,7 @@ sweep(Sly_State *ss)
 void
 gc_collect(Sly_State *ss)
 {
+	printf("** GC Collecting ... **\n");
 	GC *gc = &ss->gc;
 	gc->tb = 0;
 	mark_roots(ss);
@@ -214,7 +256,6 @@ gc_free_all(Sly_State *ss)
 	while (obj) {
 		tmp = obj;
 		obj = obj->next;
-		FREE(tmp);
+		free_object(ss, tmp);
 	}
-	ss->gc.obj_count = 0;
 }

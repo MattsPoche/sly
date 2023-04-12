@@ -56,8 +56,6 @@ typedef struct _sly_state {
 	struct compile *cc;
 	struct _stack_frame *frame;
 	sly_value proto;
-	sly_value code;
-	sly_value stack;
 	jmp_buf jbuf;
 	char *excpt_msg;
 	int handle_except;
@@ -77,21 +75,21 @@ struct imm_value {
 };
 
 enum type_tag {
-	tt_pair,
-	tt_byte,
-	tt_int,
-	tt_float,
-	tt_symbol,
-	tt_byte_vector,
-	tt_vector,
-	tt_string,
-	tt_dictionary,
-	tt_prototype,
-	tt_closure,
-	tt_cclosure,
-	tt_continuation,
-	tt_syntax,
-	tt_stack_frame,
+	tt_pair,			// 0
+	tt_byte,			// 1
+	tt_int,				// 2
+	tt_float,			// 3
+	tt_symbol,			// 4
+	tt_byte_vector,		// 5
+	tt_vector,			// 6
+	tt_string,			// 7
+	tt_dictionary,		// 8
+	tt_prototype,		// 9
+	tt_closure,			// 10
+	tt_cclosure,		// 11
+	tt_continuation,	// 12
+	tt_syntax,			// 13
+	tt_stack_frame,		// 14
 };
 
 #define OBJ_HEADER gc_object h

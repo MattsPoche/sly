@@ -5,7 +5,7 @@ typedef struct _gc {
 	struct _gc_object *objects;
 	struct _gc_object *grays;
 	size_t obj_count;
-	size_t bytes;       /* total bytes allocated */
+	size_t obj_freed;
 	size_t tb;          /* threashold bytes */
 	int nocollect;
 } GC;

@@ -59,12 +59,6 @@ typedef sly_value INSTR;
 #define GET_Ax(instr)   ((u64)(((*((u32 *)(&(instr)->b[0]))) & 0xffffff00) >> 8))
 #define GET_Bx(instr)   ((u64)(*((u16 *)(&(instr)->b[2]))))
 #define GET_sBx(instr)  ((i64)(*((i16 *)(&(instr)->b[2]))))
-#define next_instr()    vector_ref(ss->frame->code, ss->frame->pc++)
-#define get_const(i)    vector_ref(ss->frame->K, (i))
-#define get_reg(i)      vector_ref(ss->frame->R, (i))
-#define set_reg(i, v)   vector_set(ss->frame->R, (i), (v))
-#define get_upval(i)    vector_ref(ss->frame->U, (i))
-#define set_upval(i, v) vector_set(ss->frame->U, (i), (v))
 
 stack_frame *make_stack(Sly_State *ss, size_t nregs);
 void dis(INSTR instr);

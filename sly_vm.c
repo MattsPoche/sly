@@ -3,6 +3,12 @@
 #include "sly_compile.h"
 #include "gc.h"
 
+#define next_instr()    vector_ref(ss->frame->code, ss->frame->pc++)
+#define get_const(_i)    vector_ref(ss->frame->K, (_i))
+#define get_reg(_i)      vector_ref(ss->frame->R, (_i))
+#define set_reg(_i, _v)   vector_set(ss->frame->R, (_i), (_v))
+#define get_upval(_i)    vector_ref(ss->frame->U, (_i))
+#define set_upval(_i, _v) vector_set(ss->frame->U, (_i), (_v))
 #define SET_FRAME_UPVALUES()											\
 	do {																\
 		nframe->U = copy_vector(ss, clos->upvals);						\
@@ -187,16 +193,14 @@ vm_run(Sly_State *ss)
 			}
 		} break;
 		case OP_CALL: {
+			/* Temporarily disable GC for this instruction to prevent
+			 * the new frame and it's references from being collected
+			 * during initialization.
+			 */
+			ss->gc.nocollect = 1;
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
 			sly_value val = get_reg(a);
-			printf("\nCALL @ pc: %zu\n", ss->frame->pc-1);
-			printf("Globals:\n");
-			sly_display(vector_ref(ss->frame->U, 0), 1);
-			printf("\n");
-			printf("Register dump (%zu):\n", vector_len(ss->frame->R));
-			sly_display(ss->frame->R, 1);
-			printf("\n");
 			if (cclosure_p(val)) {
 				cclosure *clos = GET_PTR(val);
 				size_t nargs = b - a - 1;
@@ -265,6 +269,7 @@ vm_run(Sly_State *ss)
 			} else {
 				sly_assert(0, "Type Error expected procedure");
 			}
+			ss->gc.nocollect = 0;
 		} break;
 		case OP_CALLWCC: {
 			u8 a = GET_A(instr);

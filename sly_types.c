@@ -166,6 +166,8 @@ sly_display(sly_value v, int lit)
 		printf("\b)");
 	} else if (closure_p(v)) {
 		printf("{closure@%p}", GET_PTR(v));
+	} else if (cclosure_p(v)) {
+		printf("{cclosure@%p}", GET_PTR(v));
 	} else {
 		printf("<UNEMPLEMENTED %zu, %d>", v & TAG_MASK, TYPEOF(v));
 	}
@@ -1077,16 +1079,6 @@ dictionary_set(Sly_State *ss, sly_value d, sly_value key, sly_value value)
 		set_cdr(entry, value);
 	}
 }
-
-/*
-static sly_value
-dictionary_entry_ref_by_hash(sly_value d, u64 h)
-{
-	size_t idx = dict_get_slot(d, h);
-	vector *dict = GET_PTR(d);
-	return dict->elems[idx];
-}
-*/
 
 sly_value
 dictionary_entry_ref(sly_value d, sly_value key)
