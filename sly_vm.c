@@ -95,7 +95,6 @@ close_upvalues(stack_frame *frame)
 sly_value
 vm_run(Sly_State *ss)
 {
-	stack_frame *frame = ss->frame;
 	INSTR ibits;
 	struct instr *instr;
     for (;;) {
@@ -178,19 +177,26 @@ vm_run(Sly_State *ss)
 		} break;
 		case OP_JMP: {
 			u64 a = GET_Ax(instr);
-			frame->pc = a;
+			ss->frame->pc = a;
 		} break;
 		case OP_FJMP: {
 			u8 a = GET_A(instr);
 			u64 b = GET_Bx(instr);
 			if (get_reg(a) == SLY_FALSE) {
-				frame->pc = b;
+				ss->frame->pc = b;
 			}
 		} break;
 		case OP_CALL: {
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
 			sly_value val = get_reg(a);
+			printf("\nCALL @ pc: %zu\n", ss->frame->pc-1);
+			printf("Globals:\n");
+			sly_display(vector_ref(ss->frame->U, 0), 1);
+			printf("\n");
+			printf("Register dump (%zu):\n", vector_len(ss->frame->R));
+			sly_display(ss->frame->R, 1);
+			printf("\n");
 			if (cclosure_p(val)) {
 				cclosure *clos = GET_PTR(val);
 				size_t nargs = b - a - 1;
@@ -221,7 +227,7 @@ vm_run(Sly_State *ss)
 				prototype *proto = GET_PTR(clos->proto);
 				stack_frame *nframe = make_stack(ss, proto->nregs);
 				nframe->clos = val;
-				nframe->level = frame->level + 1;
+				nframe->level = ss->frame->level + 1;
 				size_t nargs = b - a - 1;
 				SET_FRAME_UPVALUES();
 				if (proto->has_varg) {
@@ -244,8 +250,8 @@ vm_run(Sly_State *ss)
 				nframe->code = proto->code;
 				nframe->pc = proto->entry;
 				nframe->ret_slot = a;
-				nframe->parent = frame;
-				frame = nframe;
+				nframe->parent = ss->frame;
+				ss->frame = nframe;
 			} else if (continuation_p(val)) {
 				size_t nargs = b - a - 1;
 				/* TODO: continuations should take a vararg?
@@ -253,9 +259,9 @@ vm_run(Sly_State *ss)
 				sly_assert(nargs == 1, "Error Wrong number of arguments for continuation");
 				continuation *cc = GET_PTR(val);
 				sly_value arg = get_reg(a+1);
-				frame = cc->frame;
-				frame->pc = cc->pc;
-				vector_set(frame->R, cc->ret_slot, arg);
+				ss->frame = cc->frame;
+				ss->frame->pc = cc->pc;
+				vector_set(ss->frame->R, cc->ret_slot, arg);
 			} else {
 				sly_assert(0, "Type Error expected procedure");
 			}
@@ -263,22 +269,22 @@ vm_run(Sly_State *ss)
 		case OP_CALLWCC: {
 			u8 a = GET_A(instr);
 			sly_value proc = get_reg(a);
-			sly_value cc = make_continuation(ss, frame, frame->pc, a);
+			sly_value cc = make_continuation(ss, ss->frame, ss->frame->pc, a);
 			if (closure_p(proc)) {
 				closure *clos = GET_PTR(proc);
 				prototype *proto = GET_PTR(clos->proto);
 				sly_assert(proto->nargs = 1, "Error wrong number of argument");
 				stack_frame *nframe = make_stack(ss, proto->nregs);
 				nframe->clos = proc;
-				nframe->level = frame->level + 1;
+				nframe->level = ss->frame->level + 1;
 				SET_FRAME_UPVALUES();
 				vector_set(nframe->U, clos->arg_idx, cc);
 				nframe->K = proto->K;
 				nframe->code = proto->code;
 				nframe->pc = proto->entry;
 				nframe->ret_slot = a;
-				nframe->parent = frame;
-				frame = nframe;
+				nframe->parent = ss->frame;
+				ss->frame = nframe;
 			} else {
 				sly_assert(0, "CALL/CC Not emplemented for procedure type");
 			}
@@ -288,13 +294,13 @@ vm_run(Sly_State *ss)
 		} break;
 		case OP_RETURN: {
 			u8 a = GET_A(instr);
-			if (frame->parent == NULL) {
+			if (ss->frame->parent == NULL) {
 				return get_reg(a);
 			}
-			close_upvalues(frame);
+			close_upvalues(ss->frame);
 			sly_value r = get_reg(a);
-			size_t ret_slot = frame->ret_slot;
-			frame = frame->parent;
+			size_t ret_slot = ss->frame->ret_slot;
+			ss->frame = ss->frame->parent;
 			set_reg(ret_slot, r);
 		} break;
 		case OP_VECREF: {
@@ -333,12 +339,12 @@ vm_run(Sly_State *ss)
 			set_reg(a, val);
 			closure *clos = GET_PTR(val);
 			prototype *proto = GET_PTR(_proto);
-			vector_set(clos->upvals, 0, vector_ref(frame->U, 0));
+			vector_set(clos->upvals, 0, vector_ref(ss->frame->U, 0));
 			size_t len = vector_len(proto->uplist);
 			for (size_t i = 0; i < len; ++i) {
 				sly_value upi = vector_ref(proto->uplist, i);
 				struct uplookup upinfo = *((struct uplookup *)(&upi));
-				sly_value uv = capture_value(frame, upinfo);
+				sly_value uv = capture_value(ss->frame, upinfo);
 				vector_set(clos->upvals, i + 1 + proto->nargs, uv);
 			}
 		} break;

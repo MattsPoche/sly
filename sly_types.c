@@ -6,8 +6,6 @@
 #define DICT_INIT_SIZE 32
 #define DICT_LOAD_FACTOR 0.70
 
-static sly_value dictionary_entry_ref_by_hash(sly_value d, u64 h);
-
 static u8
 rand_byte(void)
 {
@@ -93,6 +91,10 @@ print_string_lit(sly_value val)
 void
 sly_display(sly_value v, int lit)
 {
+	if (void_p(v)) {
+		printf("#<void>");
+		return;
+	}
 	if (null_p(v)) {
 		printf("()");
 		return;
@@ -134,11 +136,7 @@ sly_display(sly_value v, int lit)
 		printf("%g", n);
 	} else if (symbol_p(v)) {
 		symbol *s = GET_PTR(v);
-#if 1
 		printf("%.*s", (int)s->len, (char *)s->name);
-#else
-		printf("%.*s#%#lx", (int)s->len, (char *)s->name, s->hash);
-#endif
 	} else if (string_p(v)) {
 		if (lit) {
 			print_string_lit(v);
@@ -150,10 +148,26 @@ sly_display(sly_value v, int lit)
 		sly_display(syntax_to_datum(v), lit);
 	} else if (prototype_p(v)) {
 		printf("{prototype@%p}", GET_PTR(v));
+	} else if (vector_p(v)) {
+		vector *vec = GET_PTR(v);
+		printf("#(");
+		for (size_t i = 0; i < vec->len; ++i) {
+			sly_display(vec->elems[i], 1);
+			printf(" ");
+		}
+		printf("\b)");
+	} else if (dictionary_p(v)) {
+		vector *vec = GET_PTR(v);
+		printf("#dict(");
+		for (size_t i = 0; i < vec->cap; ++i) {
+			sly_display(vec->elems[i], 1);
+			printf(" ");
+		}
+		printf("\b)");
 	} else if (closure_p(v)) {
 		printf("{closure@%p}", GET_PTR(v));
 	} else {
-		printf("(sly_display) UNEMPLEMENTED");
+		printf("<UNEMPLEMENTED %zu, %d>", v & TAG_MASK, TYPEOF(v));
 	}
 }
 
@@ -514,12 +528,11 @@ make_uninterned_symbol(Sly_State *ss, char *cstr, size_t len)
 sly_value
 make_symbol(Sly_State *ss, char *cstr, size_t len)
 {
-	u64 h = hash_str(cstr, len);
+	sly_value sym = SLY_NULL;
+	sly_value str = make_string(ss, cstr, len);
 	sly_value interned = ss->cc->interned;
-	sly_value entry = dictionary_entry_ref_by_hash(interned, h);
-	sly_value str, sym = SLY_NULL;
+	sly_value entry = dictionary_entry_ref(interned, str);
 	if (slot_is_free(entry)) {
-		str = make_string(ss, cstr, len);
 		sym = make_uninterned_symbol(ss, cstr, len);
 		dictionary_set(ss, interned, str, sym);
 	} else {
@@ -991,9 +1004,10 @@ slot_is_free(sly_value slot)
 }
 
 static size_t
-dict_get_slot(sly_value d, u64 h)
+dict_get_slot(sly_value d, sly_value key)
 {
 	vector *dict = GET_PTR(d);
+	u64 h = sly_hash(key);
 	size_t idx = h % dict->cap;
 	i64 free_slot = -1;
 	size_t i = idx;
@@ -1010,7 +1024,7 @@ loop:
 			if (free_slot == -1) {
 				free_slot = i;
 			}
-		} else if (h == sly_hash(car(dict->elems[i]))) {
+		} else if (sly_equal(key, car(dict->elems[i]))) {
 			return i;
 		}
 	}
@@ -1051,8 +1065,7 @@ dictionary_set(Sly_State *ss, sly_value d, sly_value key, sly_value value)
 	sly_assert(!null_p(key), "Type Error key cannot be <null>");
 	sly_assert(!void_p(key), "Type Error key cannot be <void>");
 	vector *dict = GET_PTR(d);
-	u64 h = sly_hash(key);
-	size_t idx = dict_get_slot(d, h);
+	size_t idx = dict_get_slot(d, key);
 	sly_value entry = dict->elems[idx];
 	if (slot_is_free(entry)) {
 		dict->elems[idx] = cons(ss, key, value);
@@ -1065,6 +1078,7 @@ dictionary_set(Sly_State *ss, sly_value d, sly_value key, sly_value value)
 	}
 }
 
+/*
 static sly_value
 dictionary_entry_ref_by_hash(sly_value d, u64 h)
 {
@@ -1072,6 +1086,7 @@ dictionary_entry_ref_by_hash(sly_value d, u64 h)
 	vector *dict = GET_PTR(d);
 	return dict->elems[idx];
 }
+*/
 
 sly_value
 dictionary_entry_ref(sly_value d, sly_value key)
@@ -1079,8 +1094,9 @@ dictionary_entry_ref(sly_value d, sly_value key)
 	sly_assert(dictionary_p(d), "Type Error expected <dictionary>");
 	sly_assert(!null_p(key), "Type Error key cannot be <null>");
 	sly_assert(!void_p(key), "Type Error key cannot be <void>");
-	u64 h = sly_hash(key);
-	return dictionary_entry_ref_by_hash(d, h);
+	size_t idx = dict_get_slot(d, key);
+	vector *dict = GET_PTR(d);
+	return dict->elems[idx];
 }
 
 sly_value
@@ -1097,8 +1113,7 @@ dictionary_remove(sly_value d, sly_value key)
 	sly_assert(dictionary_p(d), "Type Error expected <dictionary>");
 	sly_assert(!null_p(key), "Type Error key cannot be <null>");
 	sly_assert(!void_p(key), "Type Error key cannot be <void>");
-	u64 h = sly_hash(key);
-	size_t idx = dict_get_slot(d, h);
+	size_t idx = dict_get_slot(d, key);
 	vector *dict = GET_PTR(d);
 	sly_assert(!slot_is_free(dict->elems[idx]), "Dictionary Key Error key not found");
 	set_car(dict->elems[idx], SLY_NULL); // null key indicates slot is free
