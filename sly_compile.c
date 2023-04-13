@@ -24,7 +24,7 @@ enum kw {
 	kw_if,
 	kw_set,
 	kw_define_syntax,
-	kw_syntax_rules,
+//	kw_syntax_rules,
 	kw_call_with_continuation,
 	kw_call_cc,
 	KW_COUNT,
@@ -32,6 +32,7 @@ enum kw {
 
 enum symbol_type {
 	sym_datum = 0,
+	sym_syntax,
 	sym_keyword,
 	sym_variable,
 	sym_arg,
@@ -109,7 +110,7 @@ keywords(int idx)
 	case kw_begin: return "begin";
 	case kw_if: return "if";
 	case kw_define_syntax: return "define-syntax";
-	case kw_syntax_rules: return "syntax-rules";
+//	case kw_syntax_rules: return "syntax-rules";
 	case kw_call_with_continuation: return "call-with-continuation";
 	case kw_call_cc: return "call/cc";
 	case KW_COUNT: break;
@@ -155,8 +156,21 @@ symbol_lookup_props(Sly_State *ss, sly_value sym, u32 *level, sly_value *uplist)
 		}
 		scope = scope->parent;
 	}
-	sly_display(sym, 1);
-	printf("\n");
+	sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol");
+	return SLY_NULL;
+}
+
+static sly_value
+lookup_macro(Sly_State *ss, sly_value sym)
+{
+	struct scope *scope = ss->cc->cscope;
+	while (scope) {
+		sly_value entry = dictionary_entry_ref(scope->macros, sym);
+		if (!slot_is_free(entry)) {
+			return cdr(entry);
+		}
+		scope = scope->parent;
+	}
 	sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol");
 	return SLY_NULL;
 }
@@ -179,7 +193,8 @@ intern_constant(Sly_State *ss, sly_value value)
 static struct scope *
 make_scope(Sly_State *ss)
 {
-	struct scope *scope = MALLOC(sizeof(*scope));
+	struct scope *scope = gc_alloc(ss, sizeof(*scope));
+	scope->h.type = tt_scope;
 	scope->parent = NULL;
 	scope->proto = make_prototype(ss,
 								  make_vector(ss, 0, 8),
@@ -188,6 +203,16 @@ make_scope(Sly_State *ss)
 								  0, 0, 0, 0);
 	scope->prev_var = 0;
 	return scope;
+}
+
+static sly_value
+make_syntax_transformer(Sly_State *ss, sly_value literals, sly_value clauses)
+{
+	syntax_transformer *st = gc_alloc(ss, sizeof(*st));
+	st->h.type = tt_syntax_transformer;
+	st->literals = literals;
+	st->clauses = clauses;
+	return (sly_value)st;
 }
 
 static sly_value
@@ -352,6 +377,9 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 			RESOLVE_UPVAL();
 		}
 		switch ((enum symbol_type)st_prop.type) {
+		case sym_syntax: {
+			sly_raise_exception(ss, EXC_COMPILE, "Unexpected keyword");
+		} break;
 		case sym_variable: {
 			return st_prop.reg;
 		} break;
@@ -359,7 +387,7 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 			vector_append(ss, proto->code, iABx(OP_LOADK, reg, st_prop.reg, line_number));
 		} break;
 		case sym_datum: {
-			/* NOTE never used? */
+			sly_assert(0, "Syntax Datum??");
 		} break;
 		case sym_keyword: {
 			sly_raise_exception(ss, EXC_COMPILE, "Unexpected keyword");
@@ -495,7 +523,6 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 	vector_append(ss, cproto->K, scope->proto);
 	if ((size_t)reg >= cproto->nregs) cproto->nregs = reg + 1;
 	vector_append(ss, cproto->code, iABx(OP_CLOSURE, reg, i, -1));
-	FREE(scope);
 	return reg;
 }
 
@@ -510,6 +537,33 @@ strip_syntax(Sly_State *ss, sly_value form)
 		return syntax_to_datum(form);
 	}
 	return form;
+}
+
+int
+match_pattern(Sly_State *ss, sly_value literals, sly_value pattern, sly_value form)
+{
+	UNUSED(ss);
+	UNUSED(literals);
+	if (pair_p(pattern) && pair_p(form)) {
+	}
+	return 0;
+}
+
+sly_value
+macro_expand(Sly_State *ss, sly_value transformer, sly_value form)
+{
+	syntax_transformer *t = GET_PTR(transformer);
+	sly_value literals = t->literals;
+	sly_value pattern, clause, clauses = t->clauses;
+	UNUSED(pattern);
+	while (!null_p(clauses)) {
+		clause = car(clauses);
+		pattern = car(clause);
+		if (match_pattern(ss, literals, cdr(clause), cdr(form))) {
+		}
+		clauses = cdr(clauses);
+	}
+	return SLY_NULL;
 }
 
 int
@@ -530,6 +584,15 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 		sly_raise_exception(ss, EXC_COMPILE, "expected syntax object");
 	}
 	datum = syntax_to_datum(stx);
+	sly_value prop = symbol_lookup_props(ss, datum, NULL, NULL);
+	if (!null_p(prop)) {
+		struct symbol_properties st_prop = VALUE_TO_SYMPROP(prop);
+		if (st_prop.type == sym_syntax) {
+			sly_value transformer = lookup_macro(ss, datum);
+			return comp_expr(ss, macro_expand(ss, transformer, form), reg);
+		}
+	}
+
 	int kw;
 	if (symbol_p(datum) && (kw = is_keyword(datum)) != -1) {
 		switch ((enum kw)kw) {
@@ -597,10 +660,22 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			comp_set(ss, form, reg);
 		} break;
 		case kw_define_syntax: {
-			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"define-syntax\" unemplemented");
-		} break;
-		case kw_syntax_rules: {
-			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"syntax-rules\" unemplemented");
+			form = cdr(form);
+			sly_value name = syntax_to_datum(car(form));
+			form = cdr(form);
+			sly_value literals = car(form);
+			sly_value clauses = cdr(form);
+			struct symbol_properties st_prop = {0};
+			st_prop.islocal = 1;
+			st_prop.type = sym_syntax;
+			dictionary_set(ss,
+						   cc->cscope->symtable,
+						   name,
+						   SYMPROP_TO_VALUE(st_prop));
+			dictionary_set(ss,
+						   cc->cscope->macros,
+						   name,
+						   make_syntax_transformer(ss, literals, clauses));
 		} break;
 		case kw_call_with_continuation: /* fallthrough intended */
 		case kw_call_cc: {
@@ -844,29 +919,26 @@ init_builtins(Sly_State *ss)
 }
 
 int
-sly_compile(Sly_State *ss, char *file_name)
+sly_compile(Sly_State *ss, sly_value ast)
 {
 	HANDLE_EXCEPTION(ss, {
-			fprintf(stderr, "Caught exception in %s ", file_name);
+			fprintf(stderr, "Caught exception in %s ", ss->file_path);
 			fprintf(stderr, "during compilation:\n");
 			fprintf(stderr, "%s\n", ss->excpt_msg);
 			return ss->excpt;
 		});
-	sly_value ast;
 	prototype *proto;
 	ss->cc = MALLOC(sizeof(*ss->cc));
-	ss->file_path = file_name;
 	if (ss->cc == NULL) {
 		sly_raise_exception(ss, EXC_ALLOC, "(sly_compile) malloc failed; returned NULL");
 	}
 	assert(ss->cc != NULL);
 	struct compile *cc = ss->cc;
 	cc->cscope = make_scope(ss);
-	cc->interned = make_dictionary(ss);
+	cc->cscope->macros = make_dictionary(ss);
 	cc->cscope->symtable = init_symtable(ss);
 	cc->cscope->level = 0; /* top level */
 	init_builtins(ss);
-	ast = parse_file(ss, file_name, &ss->source_code);
 	proto = GET_PTR(cc->cscope->proto);
 	int r = comp_expr(ss, ast, 0);
 	vector_append(ss, proto->code, iA(OP_RETURN, r, -1));

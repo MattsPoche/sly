@@ -1,9 +1,10 @@
 #include "sly_types.h"
 #include "opcodes.h"
-#include "sly_compile.h"
 #include "gc.h"
 #include "sly_vm.h"
 #include "sly_alloc.h"
+#include "parser.h"
+#include "sly_compile.h"
 
 static int allocations = 0;
 static int net_allocations = 0;
@@ -44,10 +45,6 @@ void
 sly_free_state(Sly_State *ss)
 {
 	gc_free_all(ss);
-	if (ss->cc->cscope) {
-		FREE(ss->cc->cscope);
-		ss->cc->cscope = NULL;
-	}
 	if (ss->cc) {
 		FREE(ss->cc);
 		ss->cc = NULL;
@@ -59,12 +56,18 @@ sly_free_state(Sly_State *ss)
 }
 
 sly_value
+sly_read_file(Sly_State *ss, char *file_name)
+{
+	ss->file_path = file_name;
+	ss->interned = make_dictionary(ss);
+	return parse_file(ss, file_name, &ss->source_code);
+}
+
+sly_value
 sly_load_file(Sly_State *ss, char *file_name)
 {
-	/* For now, we disable gc during compilation.
-	 * Not all references are tracked at this stage.
-	 */
-	if (sly_compile(ss, file_name) != 0) {
+	sly_value ast = sly_read_file(ss, file_name);
+	if (sly_compile(ss, ast) != 0) {
 		printf("Unable to run file %s\n", file_name);
 		return SLY_VOID;
 	}

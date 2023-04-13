@@ -8,20 +8,11 @@ struct uplookup {
 	u8 _pad[2];
 };
 
-struct scope {
-	struct scope *parent; // NULL if top-level
-	sly_value proto;      // <prototype>
-	sly_value symtable;   // <dictionary>
-	u32 level;
-	int prev_var;
-};
-
 struct compile {
-	sly_value interned; // <dictionary> (<string> . <symbol>)
 	sly_value globals;  // <dictionary>
 	struct scope *cscope;
 };
 
-int sly_compile(Sly_State *ss, char *file_name);
+int sly_compile(Sly_State *ss, sly_value ast);
 
 #endif /* SLY_COMPILE_H_ */

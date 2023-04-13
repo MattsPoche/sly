@@ -535,7 +535,7 @@ make_symbol(Sly_State *ss, char *cstr, size_t len)
 {
 	sly_value sym = SLY_NULL;
 	sly_value str = make_string(ss, cstr, len);
-	sly_value interned = ss->cc->interned;
+	sly_value interned = ss->interned;
 	sly_value entry = dictionary_entry_ref(interned, str);
 	if (slot_is_free(entry)) {
 		sym = make_uninterned_symbol(ss, cstr, len);
@@ -546,11 +546,20 @@ make_symbol(Sly_State *ss, char *cstr, size_t len)
 	return sym;
 }
 
+sly_value
+gensym(Sly_State *ss)
+{
+	static int sym_num = 100;
+	char buf[255] = {0};
+	snprintf(buf, sizeof(buf), "$| gensym#%d|", sym_num++);
+	return make_symbol(ss, buf, strlen(buf));
+}
+
 void
 intern_symbol(Sly_State *ss, sly_value sym)
 {
 	sly_assert(symbol_p(sym), "Type error expected <symbol>");
-	sly_value interned = ss->cc->interned;
+	sly_value interned = ss->interned;
 	symbol *s = GET_PTR(sym);
 	sly_value str = make_string(ss, (char *)s->name, s->len);
 	dictionary_set(ss, interned, str, sym);
@@ -973,6 +982,7 @@ make_syntax(Sly_State *ss, token tok, sly_value datum)
 	stx->h.type = tt_syntax;
 	stx->tok = tok;
 	stx->datum = datum;
+	stx->scope = NULL;
 	return (sly_value)stx;
 }
 

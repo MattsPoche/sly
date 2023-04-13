@@ -56,6 +56,7 @@ typedef struct _sly_state {
 	struct compile *cc;
 	struct _stack_frame *frame;
 	sly_value proto;
+	sly_value interned;
 	jmp_buf jbuf;
 	char *excpt_msg;
 	int handle_except;
@@ -75,21 +76,23 @@ struct imm_value {
 };
 
 enum type_tag {
-	tt_pair,			// 0
-	tt_byte,			// 1
-	tt_int,				// 2
-	tt_float,			// 3
-	tt_symbol,			// 4
-	tt_byte_vector,		// 5
-	tt_vector,			// 6
-	tt_string,			// 7
-	tt_dictionary,		// 8
-	tt_prototype,		// 9
-	tt_closure,			// 10
-	tt_cclosure,		// 11
-	tt_continuation,	// 12
-	tt_syntax,			// 13
-	tt_stack_frame,		// 14
+	tt_pair,				// 0
+	tt_byte,				// 1
+	tt_int,					// 2
+	tt_float,				// 3
+	tt_symbol,				// 4
+	tt_byte_vector,			// 5
+	tt_vector,				// 6
+	tt_string,				// 7
+	tt_dictionary,			// 8
+	tt_prototype,			// 9
+	tt_closure,				// 10
+	tt_cclosure,			// 11
+	tt_continuation,		// 12
+	tt_syntax,				// 13
+	tt_syntax_transformer,	// 14
+	tt_scope,				// 15
+	tt_stack_frame,			// 16
 };
 
 #define OBJ_HEADER gc_object h
@@ -172,12 +175,28 @@ typedef struct _cclos {
 	int has_varg;
 } cclosure;
 
+struct scope {
+	OBJ_HEADER;
+	struct scope *parent; // NULL if top-level
+	sly_value proto;      // <prototype>
+	sly_value symtable;   // <dictionary>
+	sly_value macros;
+	u32 level;
+	int prev_var;
+};
+
 typedef struct _syntax {
 	OBJ_HEADER;
 	token tok;
-	size_t __placeholder;
+	struct scope *scope;
 	sly_value datum;
 } syntax;
+
+typedef struct _syntax_transformer {
+	OBJ_HEADER;
+	sly_value literals;
+	sly_value clauses;
+} syntax_transformer;
 
 void sly_assert(int p, char *msg);
 void sly_raise_exception(Sly_State *ss, int excpt, char *msg);
@@ -214,6 +233,7 @@ size_t vector_len(sly_value v);
 void vector_append(Sly_State *ss, sly_value v, sly_value value);
 sly_value make_uninterned_symbol(Sly_State *ss, char *cstr, size_t len);
 sly_value make_symbol(Sly_State *ss, char *cstr, size_t len);
+sly_value gensym(Sly_State *ss);
 sly_value get_interned_symbol(sly_value alist, char *name, size_t len);
 void intern_symbol(Sly_State *ss, sly_value sym_v);
 sly_value make_string(Sly_State *ss, char *cstr, size_t len);

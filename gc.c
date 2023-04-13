@@ -56,6 +56,14 @@ traverse_frame(Sly_State *ss, stack_frame *frame)
 }
 
 static void
+traverse_scope(Sly_State *ss, struct scope *scope)
+{
+	if (scope->parent) mark_gray(ss, (gc_object *)scope->parent);
+	mark_gray(ss, GET_PTR(scope->proto));
+	mark_gray(ss, GET_PTR(scope->symtable));
+}
+
+static void
 traverse_pair(Sly_State *ss, pair *p)
 {
 	if (pair_p(p->car) || ptr_p(p->car)) {
@@ -112,9 +120,17 @@ static void
 traverse_syntax(Sly_State *ss, syntax *stx)
 {
 	sly_value v = stx->datum;
+	if (stx->scope) mark_gray(ss, (gc_object *)stx->scope);
 	if (pair_p(v) || ptr_p(v)) {
 		mark_gray(ss, GET_PTR(v));
 	}
+}
+
+static void
+traverse_syntax_transformer(Sly_State *ss, syntax_transformer *st)
+{
+	mark_gray(ss, GET_PTR(st->literals));
+	mark_gray(ss, GET_PTR(st->clauses));
 }
 
 static void
@@ -158,6 +174,12 @@ traverse_object(Sly_State *ss, gc_object *obj)
 	case tt_syntax:
 		traverse_syntax(ss, (syntax *)obj);
 		break;
+	case tt_syntax_transformer:
+		traverse_syntax_transformer(ss, (syntax_transformer *)obj);
+		break;
+	case tt_scope:
+		traverse_scope(ss, (struct scope *)obj);
+		break;
 	case tt_stack_frame:
 		traverse_frame(ss, (stack_frame *)obj);
 		break;
@@ -181,7 +203,7 @@ mark_roots(Sly_State *ss)
 {
 	traverse_object(ss, (gc_object *)ss->frame);
 	traverse_object(ss, (gc_object *)ss->proto);
-	traverse_object(ss, (gc_object *)ss->cc->interned);
+	traverse_object(ss, (gc_object *)ss->interned);
 	traverse_object(ss, (gc_object *)ss->cc->globals);
 }
 
@@ -204,7 +226,6 @@ free_object(Sly_State *ss, gc_object *obj)
 		FREE(vec->elems);
 	} break;
 	}
-	//memset(obj, -1, sizeof(*obj));
 	FREE(obj);
 	ss->gc.obj_freed++;
 }
