@@ -12,7 +12,7 @@ static size_t bytes_allocated = 0;
 void *
 sly_alloc(size_t size)
 {
-	void *ptr = malloc(size);
+	void *ptr = calloc(size, 1);
 	bytes_allocated += size;
 	allocations++;
 	net_allocations++;
@@ -44,9 +44,18 @@ void
 sly_free_state(Sly_State *ss)
 {
 	gc_free_all(ss);
-	if (ss->cc->cscope)  FREE(ss->cc->cscope);
-	if (ss->cc)          FREE(ss->cc);
-	if (ss->source_code) FREE(ss->source_code);
+	if (ss->cc->cscope) {
+		FREE(ss->cc->cscope);
+		ss->cc->cscope = NULL;
+	}
+	if (ss->cc) {
+		FREE(ss->cc);
+		ss->cc = NULL;
+	}
+	if (ss->source_code) {
+		FREE(ss->source_code);
+		ss->source_code = NULL;
+	}
 }
 
 sly_value
@@ -55,7 +64,6 @@ sly_load_file(Sly_State *ss, char *file_name)
 	/* For now, we disable gc during compilation.
 	 * Not all references are tracked at this stage.
 	 */
-	ss->gc.nocollect = 1;
 	if (sly_compile(ss, file_name) != 0) {
 		printf("Unable to run file %s\n", file_name);
 		return SLY_VOID;
@@ -74,7 +82,6 @@ sly_load_file(Sly_State *ss, char *file_name)
 	frame->pc = proto->entry;
 	frame->level = 0;
 	ss->frame = frame;
-	ss->gc.nocollect = 0;
 	gc_collect(ss);
 	printf("Running file %s\n", file_name);
 	dis_all(ss->frame, 1);
@@ -147,8 +154,9 @@ main(int argc, char *argv[])
 			printf("** Allocations: %d **\n", allocations);
 			printf("** Net allocations: %d **\n", net_allocations);
 			printf("** Total bytes allocated: %zu **\n", bytes_allocated);
-			printf("** GC Objects Allocated: %zu **\n", ss.gc.obj_count);
-			printf("** GC Objects Freed: %zu **\n\n", ss.gc.obj_freed);
+			printf("** GC Objects Allocated: %d **\n", ss.gc.obj_count);
+			printf("** GC Objects Freed: %d **\n", ss.gc.obj_freed);
+			printf("** GC Total Collections: %d **\n\n", ss.gc.collections);
 		}
 	}
 #if 0

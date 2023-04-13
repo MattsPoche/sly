@@ -4,11 +4,11 @@
 #include "gc.h"
 
 #define next_instr()    vector_ref(ss->frame->code, ss->frame->pc++)
-#define get_const(_i)    vector_ref(ss->frame->K, (_i))
-#define get_reg(_i)      vector_ref(ss->frame->R, (_i))
-#define set_reg(_i, _v)   vector_set(ss->frame->R, (_i), (_v))
-#define get_upval(_i)    vector_ref(ss->frame->U, (_i))
-#define set_upval(_i, _v) vector_set(ss->frame->U, (_i), (_v))
+#define get_const(i)    vector_ref(ss->frame->K, (i))
+#define get_reg(i)      vector_ref(ss->frame->R, (i))
+#define set_reg(i, v)   vector_set(ss->frame->R, (i), (v))
+#define get_upval(i)    vector_ref(ss->frame->U, (i))
+#define set_upval(i, v) vector_set(ss->frame->U, (i), (v))
 #define SET_FRAME_UPVALUES()											\
 	do {																\
 		nframe->U = copy_vector(ss, clos->upvals);						\
@@ -22,6 +22,12 @@
 				vector_set(nframe->U, i, ref);							\
 			}															\
 		}																\
+	} while (0)
+#define GC_COLLECT()							\
+	do {										\
+		if (ss->gc.tb > GC_THRESHOLD) {			\
+			gc_collect(ss);						\
+		}										\
 	} while (0)
 
 static inline sly_value
@@ -102,6 +108,7 @@ sly_value
 vm_run(Sly_State *ss)
 {
 	INSTR ibits;
+	sly_value ret_val = SLY_VOID;
 	struct instr *instr;
     for (;;) {
 		ibits = next_instr();
@@ -197,7 +204,6 @@ vm_run(Sly_State *ss)
 			 * the new frame and it's references from being collected
 			 * during initialization.
 			 */
-			ss->gc.nocollect = 1;
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
 			sly_value val = get_reg(a);
@@ -267,9 +273,11 @@ vm_run(Sly_State *ss)
 				ss->frame->pc = cc->pc;
 				vector_set(ss->frame->R, cc->ret_slot, arg);
 			} else {
+				printf("Register dump:\n");
+				sly_display(ss->frame->R, 1);
+				printf("\n");
 				sly_assert(0, "Type Error expected procedure");
 			}
-			ss->gc.nocollect = 0;
 		} break;
 		case OP_CALLWCC: {
 			u8 a = GET_A(instr);
@@ -300,7 +308,8 @@ vm_run(Sly_State *ss)
 		case OP_RETURN: {
 			u8 a = GET_A(instr);
 			if (ss->frame->parent == NULL) {
-				return get_reg(a);
+				ret_val = get_reg(a);
+				goto vm_exit;
 			}
 			close_upvalues(ss->frame);
 			sly_value r = get_reg(a);
@@ -354,6 +363,9 @@ vm_run(Sly_State *ss)
 			}
 		} break;
 		}
+		GC_COLLECT();
 	}
-	return SLY_VOID;
+vm_exit:
+	GC_COLLECT();
+	return ret_val;
 }

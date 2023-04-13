@@ -1,4 +1,3 @@
-#include <assert.h>
 #include <time.h>
 #include "sly_types.h"
 #include "sly_alloc.h"
@@ -387,6 +386,7 @@ make_byte_vector(Sly_State *ss, size_t len, size_t cap)
 	vec->h.type = tt_byte_vector;
 	vec->cap = cap;
 	vec->len = len;
+	ss->gc.tb += cap; /* add to gc threashold */
 	return (sly_value)vec;
 }
 
@@ -426,10 +426,10 @@ make_vector(Sly_State *ss, size_t len, size_t cap)
 	sly_assert(len <= cap, "Error vector length may not exceed its capacity");
 	vector *vec = gc_alloc(ss, sizeof(*vec));
 	vec->elems = MALLOC(sizeof(sly_value) * cap);
-	assert(vec->elems != NULL);
 	vec->h.type = tt_vector;
 	vec->cap = cap;
 	vec->len = len;
+	ss->gc.tb += sizeof(sly_value) * cap; /* add to gc threshold */
 	return (sly_value)vec;
 }
 
@@ -490,15 +490,17 @@ vector_len(sly_value v)
 }
 
 static void
-vector_grow(sly_value v)
+vector_grow(Sly_State *ss, sly_value v)
 {
 	/* Type check befor calling.
 	 * Object must be a <vector> or <dictionary>
 	 */
 	vector *vec = GET_PTR(v);
+	ss->gc.tb += vec->cap;
 	vec->cap *= 2;
 	vec->elems = realloc(vec->elems, vec->cap * sizeof(sly_value));
-	assert(vec->elems != NULL);
+	memset(&vec->elems[vec->len], 0, (vec->cap - vec->len) * sizeof(sly_value));
+	sly_assert(vec->elems != NULL, "Realloc failed (vector_grow)");
 }
 
 void
@@ -508,7 +510,7 @@ vector_append(Sly_State *ss, sly_value v, sly_value value)
 	sly_assert(vector_p(v), "Type Error: Expected vector");
 	vector *vec = GET_PTR(v);
 	if (vec->len >= vec->cap) {
-		vector_grow(v);
+		vector_grow(ss, v);
 	}
 	vec->elems[vec->len++] = value;
 }
@@ -524,6 +526,7 @@ make_uninterned_symbol(Sly_State *ss, char *cstr, size_t len)
 	sym->len = len;
 	memcpy(sym->name, cstr, len);
 	sym->hash = hash_symbol(cstr, len);
+	ss->gc.tb += len;
 	return (sly_value)sym;
 }
 

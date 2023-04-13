@@ -4,10 +4,10 @@
 typedef struct _gc {
 	struct _gc_object *objects;
 	struct _gc_object *grays;
-	size_t obj_count;
-	size_t obj_freed;
 	size_t tb;          /* threashold bytes */
-	int nocollect;
+	int obj_count;
+	int obj_freed;
+	int collections;
 } GC;
 
 struct _sly_state;
@@ -15,7 +15,7 @@ struct _sly_state;
 #define GC_GRAY 0
 #define GC_WHITE 1
 #define GC_BLACK 2
-#define GC_THRESHOLD ((1 << 10) * 10) /* 10 KiB */
+#define GC_THRESHOLD (1 << 10) /* 1 KiB */
 
 void gc_init(GC *gc);
 void *gc_alloc(struct _sly_state *ss, size_t size);

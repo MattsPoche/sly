@@ -25,9 +25,6 @@ gc_alloc(struct _sly_state *ss, size_t size)
 	gc->objects = obj;
 	gc->obj_count++;
 	gc->tb += size;
-	if (!gc->nocollect && gc->tb > GC_THRESHOLD) {
-		gc_collect(ss);
-	}
 	return obj;
 }
 
@@ -239,9 +236,9 @@ sweep(Sly_State *ss)
 void
 gc_collect(Sly_State *ss)
 {
-	printf("** GC Collecting ... **\n");
 	GC *gc = &ss->gc;
 	gc->tb = 0;
+	gc->collections++;
 	mark_roots(ss);
 	while (gc->grays) {
 		propagate_mark(ss);
@@ -258,4 +255,5 @@ gc_free_all(Sly_State *ss)
 		obj = obj->next;
 		free_object(ss, tmp);
 	}
+	ss->gc.objects = NULL;
 }
