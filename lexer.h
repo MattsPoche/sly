@@ -3,29 +3,29 @@
 
 enum token {
 	tok_any = 0,
-	tok_quote,
-	tok_quasiquote,
-	tok_unquote,
-	tok_unquote_splice,
-	tok_syntax_quote,
-	tok_syntax_quasiquote,
-	tok_syntax_unquote,
-	tok_syntax_unquote_splice,
-	tok_comment,
-	tok_lbracket,
-	tok_rbracket,
-	tok_dot,
-	tok_vector,
-	tok_string,
-	tok__nocapture0,
-	tok_bool,
-	tok_float,
-	tok_hex,
-	tok_int,
-	tok_sym,
-	tok_max,
-	tok_nomatch,
-	tok_eof,
+	tok_quote,					// 1
+	tok_quasiquote,				// 2
+	tok_unquote,				// 3
+	tok_unquote_splice,			// 4
+	tok_syntax_quote,			// 5
+	tok_syntax_quasiquote,		// 6
+	tok_syntax_unquote,			// 7
+	tok_syntax_unquote_splice,	// 8
+	tok_comment,				// 9
+	tok_lbracket,				// 10
+	tok_rbracket,				// 11
+	tok_dot,					// 12
+	tok_vector,					// 13
+	tok_string,					// 14
+	tok__nocapture0,			// 15
+	tok_bool,					// 16
+	tok_float,					// 17
+	tok_hex,					// 18
+	tok_int,					// 19
+	tok_sym,					// 20
+	tok_max,					// 21
+	tok_nomatch,				// 22
+	tok_eof,					// 23
 };
 
 typedef struct _token {

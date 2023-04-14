@@ -1,11 +1,11 @@
-(define newline (lambda () (display "\n")))
+(define (newline)
+  (display "\n"))
 
-(define make-iter
+(define (make-iter)
+  (define i -1)
   (lambda ()
-	(define i -1)
-	(lambda ()
-	  (set! i (+ i 1))
-	  i)))
+	(set! i (+ i 1))
+	i))
 (define iter1 (make-iter))
 (define iter2 (make-iter))
 (display "iter1 -> ")(display (iter1))(newline) ;; 0

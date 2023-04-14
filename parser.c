@@ -82,7 +82,7 @@ parse_value(Sly_State *ss, char *cstr)
 		return cons(ss, stx, cons(ss, parse_value(ss, cstr), SLY_NULL));
 	} break;
 	case tok_syntax_quote: {
-		sly_value stx = make_syntax(ss, t, cstr_to_symbol("syntax-unquote"));
+		sly_value stx = make_syntax(ss, t, cstr_to_symbol("syntax-quote"));
 		return cons(ss, stx, cons(ss, parse_value(ss, cstr), SLY_NULL));
 	} break;
 	case tok_syntax_quasiquote: {

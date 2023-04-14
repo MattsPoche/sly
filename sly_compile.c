@@ -27,6 +27,7 @@ enum kw {
 //	kw_syntax_rules,
 	kw_call_with_continuation,
 	kw_call_cc,
+	kw_include,
 	KW_COUNT,
 };
 
@@ -113,6 +114,7 @@ keywords(int idx)
 //	case kw_syntax_rules: return "syntax-rules";
 	case kw_call_with_continuation: return "call-with-continuation";
 	case kw_call_cc: return "call/cc";
+	case kw_include: return "include";
 	case KW_COUNT: break;
 	}
 	sly_assert(0, "Error, No such keyword");
@@ -230,12 +232,28 @@ init_symtable(Sly_State *ss)
 
 int
 comp_define(Sly_State *ss, sly_value form, int reg)
-{ /* (define <symbol> <expr>) */
+{ /* (define <variable> <expr>)
+   * or
+   * (define (<procedure> . <params>)
+   *   <body> <*body> ...)
+   */
 	struct compile *cc = ss->cc;
 	sly_value stx = car(form);
 	syntax *syn = GET_PTR(stx);
 	int line_number = syn->tok.ln;
-	sly_value var = syntax_to_datum(stx);
+	sly_value var;
+	if (pair_p(stx)) { /* function definition */
+		var = syntax_to_datum(car(stx));
+		sly_value params = cdr(stx);
+		/* build lambda form */
+		form = cons(ss,
+					cons(ss,
+						 make_syntax(ss, (token){0}, make_symbol(ss, "lambda", 6)),
+						 cons(ss, params, cdr(form))), SLY_NULL);
+	} else {
+		var = syntax_to_datum(stx);
+		form = cdr(form);
+	}
 	sly_value symtable = cc->cscope->symtable;
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	struct symbol_properties st_prop = {0};
@@ -243,7 +261,6 @@ comp_define(Sly_State *ss, sly_value form, int reg)
 		sly_raise_exception(ss, EXC_COMPILE, "Error variable name must be a symbol");
 	}
 	if (IS_GLOBAL(cc->cscope)) {
-		form = cdr(form);
 		stx = car(form);
 		sly_value globals  = cc->globals;
 		sly_value datum = syntax_p(stx) ? syntax_to_datum(stx) : stx;
@@ -269,7 +286,6 @@ comp_define(Sly_State *ss, sly_value form, int reg)
 		st_prop.islocal = 1;
 		st_prop.type = sym_variable;
 		dictionary_set(ss, symtable, var, SYMPROP_TO_VALUE(st_prop));
-		form = cdr(form);
 		comp_expr(ss, car(form), st_prop.reg);
 		/* end of definition */
 		if (!null_p(cdr(form))) {
@@ -634,7 +650,15 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"unquote-splice\" unemplemented");
 		} break;
 		case kw_syntax_quote: {
-			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"syntax-quote\" unemplemented");
+			syntax *s = GET_PTR(stx);
+			form = cdr(form);
+			if (!null_p(cdr(form))) {
+				sly_raise_exception(ss, EXC_COMPILE, "Error malformed quote");
+			}
+			form = car(form);
+			prototype *proto = GET_PTR(ss->cc->cscope->proto);
+			int kreg = intern_constant(ss, form);
+			vector_append(ss, proto->code, iABx(OP_LOADK, reg, kreg, s->tok.ln));
 		} break;
 		case kw_syntax_quasiquote: {
 			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"syntax-quasiquote\" unemplemented");
@@ -691,6 +715,16 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			if (!null_p(cdr(form))) {
 				sly_raise_exception(ss, EXC_COMPILE, "Error malformed display expression");
 			}
+		} break;
+		case kw_include: { /* TODO: Hasn't been tested */
+			char *src;
+			char path[255] = {0};
+			form = cdr(form);
+			byte_vector *bv = GET_PTR(syntax_to_datum(car(form)));
+			memcpy(path, bv->elems, bv->len);
+			sly_value ast = parse_file(ss, path, &src);
+			FREE(src);
+			comp_expr(ss, ast, reg);
 		} break;
 		case KW_COUNT: {
 			sly_raise_exception(ss, EXC_COMPILE, "(KW_COUNT) Not a real keyword");
@@ -921,6 +955,8 @@ init_builtins(Sly_State *ss)
 int
 sly_compile(Sly_State *ss, sly_value ast)
 {
+	sly_display(ast, 1);
+	printf("\n");
 	HANDLE_EXCEPTION(ss, {
 			fprintf(stderr, "Caught exception in %s ", ss->file_path);
 			fprintf(stderr, "during compilation:\n");

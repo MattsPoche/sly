@@ -144,9 +144,11 @@ sly_display(sly_value v, int lit)
 			printf("%.*s", (int)s->len, (char *)s->elems);
 		}
 	} else if (syntax_p(v)) {
+		printf("#<syntax ");
 		sly_display(syntax_to_datum(v), lit);
+		printf(">");
 	} else if (prototype_p(v)) {
-		printf("{prototype@%p}", GET_PTR(v));
+		printf("#<prototype@%p>", GET_PTR(v));
 	} else if (vector_p(v)) {
 		vector *vec = GET_PTR(v);
 		printf("#(");
@@ -159,16 +161,19 @@ sly_display(sly_value v, int lit)
 		vector *vec = GET_PTR(v);
 		printf("#dict(");
 		for (size_t i = 0; i < vec->cap; ++i) {
-			sly_display(vec->elems[i], 1);
+			sly_value v = vec->elems[i];
+			if (slot_is_free(v)) {
+				sly_display(vec->elems[i], 1);
+			}
 			printf(" ");
 		}
 		printf("\b)");
 	} else if (closure_p(v)) {
-		printf("{closure@%p}", GET_PTR(v));
+		printf("#<closure@%p>", GET_PTR(v));
 	} else if (cclosure_p(v)) {
-		printf("{cclosure@%p}", GET_PTR(v));
+		printf("#<cclosure@%p>", GET_PTR(v));
 	} else {
-		printf("<UNEMPLEMENTED %zu, %d>", v & TAG_MASK, TYPEOF(v));
+		printf("#<UNEMPLEMENTED %zu, %d>", v & TAG_MASK, TYPEOF(v));
 	}
 }
 

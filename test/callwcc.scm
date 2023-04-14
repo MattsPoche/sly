@@ -1,11 +1,10 @@
 (define cc #f)
 
-(define test
-  (lambda ()
-	(define i 0)
-	(call/cc (lambda (k) (set! cc k)))
-	(set! i (+ i 1))
-	(display i)(display "\n")))
+(define (test)
+  (define i 0)
+  (call/cc (lambda (k) (set! cc k)))
+  (set! i (+ i 1))
+  (display i)(display "\n"))
 
 (test)
 (cc #f)

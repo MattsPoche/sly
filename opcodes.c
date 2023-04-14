@@ -131,8 +131,7 @@ dis(INSTR ins)
 	if (instr->ln < 0) {
 		printf("\n");
 	} else {
-		pad = 20 - pad;
-		printf("%*s;; line %d\n", pad, "", instr->ln + 1);
+		printf("%*s;; line %d\n", 20 - pad, "", instr->ln + 1);
 	}
 }
 
@@ -140,8 +139,10 @@ void
 dis_code(sly_value code)
 {
 	size_t len = vector_len(code);
+	int pad;
 	for (size_t i = 0; i < len; ++i) {
-		printf("%-10zu", i);
+		printf("[%zu]%n", i, &pad);
+		printf("%*s", 10 - pad, "");
 		dis(vector_ref(code, i));
 	}
 }

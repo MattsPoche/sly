@@ -1,15 +1,12 @@
-(define nl (lambda () (display "\n")))
+(define (nl) (display "\n"))
 
-(define make-pair
-  (lambda (fst snd)
-	(lambda (f)
-	  (f fst snd))))
+(define (make-pair fst snd)
+  (lambda (f)
+	(f fst snd)))
 
-(define fst
-  (lambda (x y) x))
+(define (fst x y) x)
 
-(define snd
-  (lambda (x y) y))
+(define (snd x y) y)
 
 (define p1 (make-pair 69 420))
 (define p2 (make-pair "hello" "world"))
