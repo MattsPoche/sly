@@ -23,12 +23,15 @@
 			}															\
 		}																\
 	} while (0)
-#define GC_COLLECT()							\
+#define GARBAGE_COLLECT()						\
 	do {										\
-		if (ss->gc.tb > GC_THRESHOLD) {			\
+		if (ss->gc.bytes > ss->gc.treshold) {	\
 			gc_collect(ss);						\
 		}										\
 	} while (0)
+
+/* TODO: Implement run-time eval
+ */
 
 static inline sly_value
 capture_value(stack_frame *frame, struct uplookup upinfo)
@@ -363,9 +366,9 @@ vm_run(Sly_State *ss)
 			}
 		} break;
 		}
-		GC_COLLECT();
+		GARBAGE_COLLECT();
 	}
 vm_exit:
-	GC_COLLECT();
+	GARBAGE_COLLECT();
 	return ret_val;
 }

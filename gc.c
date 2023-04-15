@@ -7,6 +7,11 @@
 #include "sly_alloc.h"
 #include "opcodes.h"
 
+#define GC_WHITE 0
+#define GC_GRAY  1
+#define GC_BLACK 2
+#define GC_HEAP_GROW_FACTOR 2
+
 void
 gc_init(GC *gc)
 {
@@ -23,8 +28,7 @@ gc_alloc(struct _sly_state *ss, size_t size)
 	obj->next = gc->objects;
 	obj->ngray = NULL;
 	gc->objects = obj;
-	gc->obj_count++;
-	gc->tb += size;
+	gc->bytes += size;
 	return obj;
 }
 
@@ -210,24 +214,58 @@ mark_roots(Sly_State *ss)
 static void
 free_object(Sly_State *ss, gc_object *obj)
 {
-	switch (obj->type) {
+	switch ((enum type_tag)obj->type) {
+	case tt_pair: {
+		ss->gc.bytes -= sizeof(pair);
+	} break;
+	case tt_byte:
+	case tt_int:
+	case tt_float: {
+		ss->gc.bytes -= sizeof(number);
+	} break;
+	case tt_prototype: {
+		ss->gc.bytes -= sizeof(prototype);
+	} break;
+	case tt_closure: {
+		ss->gc.bytes -= sizeof(closure);
+	} break;
+	case tt_cclosure: {
+		ss->gc.bytes -= sizeof(cclosure);
+	} break;
+	case tt_continuation: {
+		ss->gc.bytes -= sizeof(continuation);
+	} break;
+	case tt_syntax: {
+		ss->gc.bytes -= sizeof(syntax);
+	} break;
+	case tt_syntax_transformer: {
+		ss->gc.bytes -= sizeof(syntax_transformer);
+	} break;
+	case tt_scope: {
+		ss->gc.bytes -= sizeof(struct scope);
+	} break;
+	case tt_stack_frame: {
+		ss->gc.bytes -= sizeof(stack_frame);
+	} break;
 	case tt_symbol: {
 		symbol *sym = (symbol *)obj;
+		ss->gc.bytes -= sizeof(*sym) + sym->len;
 		FREE(sym->name);
 	} break;
 	case tt_string:
 	case tt_byte_vector: {
 		byte_vector *bvec = (byte_vector *)obj;
+		ss->gc.bytes -= sizeof(*bvec) + bvec->cap;
 		FREE(bvec->elems);
 	} break;
 	case tt_dictionary:
 	case tt_vector: {
 		vector *vec = (vector *)obj;
+		ss->gc.bytes -= sizeof(*vec) + (vec->cap * sizeof(sly_value));
 		FREE(vec->elems);
 	} break;
 	}
 	FREE(obj);
-	ss->gc.obj_freed++;
 }
 
 static void
@@ -258,13 +296,13 @@ void
 gc_collect(Sly_State *ss)
 {
 	GC *gc = &ss->gc;
-	gc->tb = 0;
 	gc->collections++;
 	mark_roots(ss);
 	while (gc->grays) {
 		propagate_mark(ss);
 	}
 	sweep(ss);
+	gc->treshold = gc->bytes * GC_HEAP_GROW_FACTOR;
 }
 
 void

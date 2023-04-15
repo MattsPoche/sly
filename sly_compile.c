@@ -955,8 +955,6 @@ init_builtins(Sly_State *ss)
 int
 sly_compile(Sly_State *ss, sly_value ast)
 {
-	sly_display(ast, 1);
-	printf("\n");
 	HANDLE_EXCEPTION(ss, {
 			fprintf(stderr, "Caught exception in %s ", ss->file_path);
 			fprintf(stderr, "during compilation:\n");
