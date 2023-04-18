@@ -162,21 +162,6 @@ symbol_lookup_props(Sly_State *ss, sly_value sym, u32 *level, sly_value *uplist)
 	return SLY_NULL;
 }
 
-static sly_value
-lookup_macro(Sly_State *ss, sly_value sym)
-{
-	struct scope *scope = ss->cc->cscope;
-	while (scope) {
-		sly_value entry = dictionary_entry_ref(scope->macros, sym);
-		if (!slot_is_free(entry)) {
-			return cdr(entry);
-		}
-		scope = scope->parent;
-	}
-	sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol");
-	return SLY_NULL;
-}
-
 static size_t
 intern_constant(Sly_State *ss, sly_value value)
 {
@@ -556,33 +541,6 @@ strip_syntax(Sly_State *ss, sly_value form)
 }
 
 int
-match_pattern(Sly_State *ss, sly_value literals, sly_value pattern, sly_value form)
-{
-	UNUSED(ss);
-	UNUSED(literals);
-	if (pair_p(pattern) && pair_p(form)) {
-	}
-	return 0;
-}
-
-sly_value
-macro_expand(Sly_State *ss, sly_value transformer, sly_value form)
-{
-	syntax_transformer *t = GET_PTR(transformer);
-	sly_value literals = t->literals;
-	sly_value pattern, clause, clauses = t->clauses;
-	UNUSED(pattern);
-	while (!null_p(clauses)) {
-		clause = car(clauses);
-		pattern = car(clause);
-		if (match_pattern(ss, literals, cdr(clause), cdr(form))) {
-		}
-		clauses = cdr(clauses);
-	}
-	return SLY_NULL;
-}
-
-int
 comp_expr(Sly_State *ss, sly_value form, int reg)
 {
 	struct compile *cc = ss->cc;
@@ -600,15 +558,6 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 		sly_raise_exception(ss, EXC_COMPILE, "expected syntax object");
 	}
 	datum = syntax_to_datum(stx);
-	sly_value prop = symbol_lookup_props(ss, datum, NULL, NULL);
-	if (!null_p(prop)) {
-		struct symbol_properties st_prop = VALUE_TO_SYMPROP(prop);
-		if (st_prop.type == sym_syntax) {
-			sly_value transformer = lookup_macro(ss, datum);
-			return comp_expr(ss, macro_expand(ss, transformer, form), reg);
-		}
-	}
-
 	int kw;
 	if (symbol_p(datum) && (kw = is_keyword(datum)) != -1) {
 		switch ((enum kw)kw) {
@@ -921,6 +870,13 @@ clist(Sly_State *ss, sly_value args)
 	return vector_ref(args, 0);
 }
 
+sly_value
+cgensym(Sly_State *ss, sly_value args)
+{
+	UNUSED(args);
+	return gensym(ss);
+}
+
 void
 init_builtins(Sly_State *ss)
 {
@@ -950,6 +906,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("set-cdr!", cset_cdr, 2, 0);
 	ADD_BUILTIN("display", cdisplay, 1, 0);
 	ADD_BUILTIN("list", clist, 0, 1);
+	ADD_BUILTIN("gensym", cgensym, 0, 0);
 }
 
 int

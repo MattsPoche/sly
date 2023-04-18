@@ -568,7 +568,7 @@ gensym(Sly_State *ss)
 {
 	static int sym_num = 100;
 	char buf[255] = {0};
-	snprintf(buf, sizeof(buf), "$| gensym#%d|", sym_num++);
+	snprintf(buf, sizeof(buf), "# g%d", sym_num++);
 	return make_symbol(ss, buf, strlen(buf));
 }
 

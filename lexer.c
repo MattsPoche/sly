@@ -9,7 +9,7 @@
 #include "lexer.h"
 
 #define LINE_SIZE 1024
-#define RE_SEP "[][(){};[:space:]]"
+#define RE_SEP "([][(){};[:space:]]|$)"
 
 static char retok[] =
 	"^(')."														// 1
@@ -24,13 +24,13 @@ static char retok[] =
 	"|^([[({])"													// 10
 	"|^([])}])"													// 11
 	"|^(\\.)"RE_SEP												// 12
-	"|^(#\\()"													// 13
+	"|^(#\\()"RE_SEP										    // 13
 	"|^(\"([^\"]|\\\\.)*\")"RE_SEP								// 14
 	"|^(#t|#f)"RE_SEP											// 15
 	"|^(-?[0-9]+\\.[0-9]+)"RE_SEP								// 16
 	"|^(#[xX][0-9A-Fa-f]+)"RE_SEP								// 17
 	"|^(-?[0-9]+)"RE_SEP										// 18
-	"|^([^][(){};'`\",[:space:]][^][(){};[:space:]]*)("RE_SEP"|$)";	// 19
+	"|^([^][(){};'`\"#,[:space:]][^][(){};[:space:]]*)"RE_SEP;	// 19
 
 static regmatch_t pmatch[tok_max] = {0};
 static regex_t rexpr = {0};
@@ -62,7 +62,6 @@ tok_to_string(enum token t)
 	case tok_dot: return "dot";
 	case tok_bool: return "bool";
 	case tok_string: return "string";
-	case tok__nocapture0: return "nocapture0";
 	case tok_float: return "float";
 	case tok_hex: return "hex";
 	case tok_int: return "int";
@@ -70,6 +69,15 @@ tok_to_string(enum token t)
 	case tok_max: return "max";
 	case tok_nomatch: return "nomatch";
 	case tok_eof: return "eof";
+	case tok__nocap0: return "nocapture0";
+	case tok__nocap1: return "nocapture1";
+	case tok__nocap2: return "nocapture2";
+	case tok__nocap3: return "nocapture3";
+	case tok__nocap4: return "nocapture4";
+	case tok__nocap5: return "nocapture5";
+	case tok__nocap6: return "nocapture6";
+	case tok__nocap7: return "nocapture7";
+	case tok__nocap8: return "nocapture8";
 	default: return NULL;
 	}
 }

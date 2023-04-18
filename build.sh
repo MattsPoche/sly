@@ -1,14 +1,17 @@
 #!/bin/sh
 
 cflags='-Werror -Wextra -pedantic -Wall -Wswitch-enum -ggdb -std=c11 -DUSE_SLY_ALLOC'
-lflags='-lreadline'
 cc=gcc
 target='sly'
 
 set -e
 
+compile_noreadline() {
+	"$cc" $cflags $lflags -DNO_READLINE -o "$target" *.c
+}
+
 compile() {
-	"$cc" $cflags $lflags -o "$target" *.c
+	"$cc" $cflags `pkg-config --cflags --libs readline` -o "$target" *.c
 }
 
 clean() {
@@ -25,10 +28,10 @@ case "$1" in
 		clean_all
 		;;
 	"run")
-		(set -x; compile) && clean && (set -x; "./$target")
+		(set -x; compile_noreadline) && clean && (set -x; "./$target")
 		;;
 	"build-test"|"bt")
-		(set -x; compile && "./$target" ./test/*.scm)
+		(set -x; compile_noreadline && "./$target" ./test/*.scm)
 		;;
 	"test")
 		(set -x; "./$target" ./test/*.scm)
@@ -37,7 +40,7 @@ case "$1" in
 		(set -x; ctags -e *.c *.h)
 		;;
 	*)
-		(set -x; compile)
+		(set -x; compile_noreadline)
 		clean
 		;;
 esac

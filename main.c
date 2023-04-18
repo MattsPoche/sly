@@ -1,6 +1,9 @@
 #include <stdio.h>
+#include <ctype.h>
+#ifndef NO_READLINE
 #include <readline/readline.h>
 #include <readline/history.h>
+#endif
 #include "sly_types.h"
 #include "gc.h"
 #include "sly_vm.h"
@@ -100,6 +103,16 @@ sly_load_file(Sly_State *ss, char *file_name)
 char *
 rl_gets(char *prompt)
 {
+#ifdef NO_READLINE
+	static char line[255] = {0};
+	printf("%s", prompt);
+	fgets(line, sizeof(line), stdin);
+	size_t len = strlen(line);
+	if (line[len-1] == '\n') {
+		line[len-1] = '\0';
+	}
+	return line;
+#else
 	static char *line = NULL;
 	if (line) {
 		free(line);
@@ -110,6 +123,7 @@ rl_gets(char *prompt)
 		add_history(line);
 	}
 	return line;
+#endif
 }
 
 void
@@ -137,14 +151,26 @@ sly_repl(Sly_State *ss)
 	for (;;) {
 		char *line = rl_gets("> ");
 		if (line == NULL) continue;
+		for (; isspace((int)(*line)); line++);
+		if (*line == '\0') continue;
+		if (*line == ',') {
+			if (strcmp(line, ",quit") == 0
+				|| strcmp(line, ",q") == 0) {
+				break;
+			} else if (strcmp(line, ",dis") == 0) {
+				dis_all(frame, 1);
+				continue;
+			} else {
+				printf("Unknown command\n");
+				continue;
+			}
+		}
 		comp_expr(ss, parse(ss, line), 0);
 		vector_append(ss, frame->code, iA(OP_RETURN, 0, -1));
 		frame->R = make_vector(ss, proto->nregs, proto->nregs);
 		gc_collect(ss);
 		sly_value v = vm_run(ss);
-		if (sly_equal(v, make_symbol(ss, "quit", 4))) {
-			break;
-		} else if (!void_p(v)) {
+		if (!void_p(v)) {
 			sly_display(v, 1);
 			printf("\n");
 		}

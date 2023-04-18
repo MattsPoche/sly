@@ -141,9 +141,6 @@ parse_value(Sly_State *ss, char *cstr)
 		FREE(s);
 		return stx;
 	} break;
-	case tok__nocapture0: {
-		sly_raise_exception(ss, EXC_COMPILE, "Parse Error undefined token (nocapture0)");
-	} break;
 	case tok_bool: {
 		if (cstr[t.so+1] == 'f') {
 			return make_syntax(ss, t, SLY_FALSE);
@@ -174,6 +171,17 @@ parse_value(Sly_State *ss, char *cstr)
 		sly_assert(0, "(parse_value, tok_nomatch) UNEMPLEMENTED");
 	} break;
 	case tok_eof: {
+	} break;
+	case tok__nocap0:
+	case tok__nocap1:
+	case tok__nocap2:
+	case tok__nocap3:
+	case tok__nocap4:
+	case tok__nocap5:
+	case tok__nocap6:
+	case tok__nocap7:
+	case tok__nocap8: {
+		sly_raise_exception(ss, EXC_COMPILE, "Parse Error undefined token (nocapture0)");
 	} break;
 	}
 	return SLY_NULL;
