@@ -231,6 +231,7 @@ sly_value vector_ref(sly_value v, size_t idx);
 void vector_set(sly_value v, size_t idx, sly_value value);
 size_t vector_len(sly_value v);
 void vector_append(Sly_State *ss, sly_value v, sly_value value);
+sly_value vector_pop(Sly_State *ss, sly_value v);
 sly_value make_uninterned_symbol(Sly_State *ss, char *cstr, size_t len);
 sly_value make_symbol(Sly_State *ss, char *cstr, size_t len);
 sly_value gensym(Sly_State *ss);
@@ -281,7 +282,7 @@ void dictionary_remove(sly_value d, sly_value key);
 #define pair_p(v)        (!null_p(v) && ((v) & TAG_MASK) == st_pair)
 #define imm_p(v)         (((v) & TAG_MASK) == st_imm)
 #define bool_p(v)        (((v) & TAG_MASK) == st_bool)
-#define number_p(v)      ((!null_p(v) && (int_p(v) || float_p(v) || byte_p(v))))
+#define number_p(v)      (int_p(v) || float_p(v) || byte_p(v))
 #define symbol_p(v)      (ptr_p(v) && TYPEOF(v) == tt_symbol)
 #define vector_p(v)      (ptr_p(v) && TYPEOF(v) == tt_vector)
 #define byte_vector_p(v) (ptr_p(v) && TYPEOF(v) == tt_byte_vector)
@@ -297,6 +298,7 @@ void dictionary_remove(sly_value d, sly_value key);
 static inline int
 int_p(sly_value val)
 {
+	if (null_p(val) || void_p(val)) return 0;
 	if (imm_p(val)) {
 		struct imm_value *v = (struct imm_value *)(&val);
 		return v->type == imm_int;
@@ -307,6 +309,7 @@ int_p(sly_value val)
 static inline int
 float_p(sly_value val)
 {
+	if (null_p(val) || void_p(val)) return 0;
 	if (imm_p(val)) {
 		struct imm_value *v = (struct imm_value *)(&val);
 		return v->type == imm_float;
@@ -317,6 +320,7 @@ float_p(sly_value val)
 static inline int
 byte_p(sly_value val)
 {
+	if (null_p(val) || void_p(val)) return 0;
 	if (imm_p(val)) {
 		struct imm_value *v = (struct imm_value *)(&val);
 		return v->type == imm_byte;

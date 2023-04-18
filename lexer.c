@@ -30,7 +30,7 @@ static char retok[] =
 	"|^(-?[0-9]+\\.[0-9]+)"RE_SEP								// 16
 	"|^(#[xX][0-9A-Fa-f]+)"RE_SEP								// 17
 	"|^(-?[0-9]+)"RE_SEP										// 18
-	"|^([^][(){};'`\",[:space:]][^][(){};[:space:]]*)"RE_SEP;	// 19
+	"|^([^][(){};'`\",[:space:]][^][(){};[:space:]]*)("RE_SEP"|$)";	// 19
 
 static regmatch_t pmatch[tok_max] = {0};
 static regex_t rexpr = {0};

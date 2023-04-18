@@ -310,7 +310,7 @@ vm_run(Sly_State *ss)
 		} break;
 		case OP_RETURN: {
 			u8 a = GET_A(instr);
-			if (ss->frame->parent == NULL) {
+			if (ss->frame->level == 0) {
 				ret_val = get_reg(a);
 				goto vm_exit;
 			}

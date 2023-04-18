@@ -512,13 +512,24 @@ vector_grow(Sly_State *ss, sly_value v)
 void
 vector_append(Sly_State *ss, sly_value v, sly_value value)
 {
-	(void)ss;
+	UNUSED(ss);
 	sly_assert(vector_p(v), "Type Error: Expected vector");
 	vector *vec = GET_PTR(v);
 	if (vec->len >= vec->cap) {
 		vector_grow(ss, v);
 	}
 	vec->elems[vec->len++] = value;
+}
+
+sly_value
+vector_pop(Sly_State *ss, sly_value v)
+{
+	UNUSED(ss);
+	sly_assert(vector_p(v), "Type Error: Expected vector");
+	vector *vec = GET_PTR(v);
+	sly_assert(vec->len > 0, "Type Error: Expected vector");
+	vec->len--;
+	return vec->elems[vec->len];
 }
 
 sly_value

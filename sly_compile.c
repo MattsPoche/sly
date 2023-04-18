@@ -911,7 +911,7 @@ cdisplay(Sly_State *ss, sly_value args)
 {
 	UNUSED(ss);
 	sly_display(vector_ref(args, 0), 0);
-	return SLY_NULL;
+	return SLY_VOID;
 }
 
 sly_value

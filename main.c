@@ -1,10 +1,14 @@
+#include <stdio.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 #include "sly_types.h"
-#include "opcodes.h"
 #include "gc.h"
 #include "sly_vm.h"
 #include "sly_alloc.h"
 #include "parser.h"
 #include "sly_compile.h"
+#define OPCODES_INCLUDE_INLINE 1
+#include "opcodes.h"
 
 static int allocations = 0;
 static int net_allocations = 0;
@@ -93,6 +97,60 @@ sly_load_file(Sly_State *ss, char *file_name)
 	return vm_run(ss);
 }
 
+char *
+rl_gets(char *prompt)
+{
+	static char *line = NULL;
+	if (line) {
+		free(line);
+		line = NULL;
+	}
+	line = readline(prompt);
+	if (line && line[0]) {
+		add_history(line);
+	}
+	return line;
+}
+
+void
+sly_repl(Sly_State *ss)
+{
+	ss->file_path = "repl-env";
+	ss->interned = make_dictionary(ss);
+	sly_compile(ss, parse(ss, "(display \"Hello, welcome to Sly\\n\")"));
+	ss->proto = ss->cc->cscope->proto;
+	prototype *proto = GET_PTR(ss->cc->cscope->proto);
+	stack_frame *frame = make_stack(ss, proto->nregs);
+	frame->U = make_vector(ss, 12, 12);
+	for (size_t i = 0; i < 12; ++i) {
+		vector_set(frame->U, i, SLY_VOID);
+	}
+	vector_set(frame->U, 0, ss->cc->globals);
+	frame->K = proto->K;
+	frame->clos = SLY_NULL;
+	frame->code = proto->code;
+	frame->pc = proto->entry;
+	frame->level = 0;
+	ss->frame = frame;
+	gc_collect(ss);
+	vm_run(ss);
+	for (;;) {
+		char *line = rl_gets("> ");
+		if (line == NULL) continue;
+		comp_expr(ss, parse(ss, line), 0);
+		vector_append(ss, frame->code, iA(OP_RETURN, 0, -1));
+		frame->R = make_vector(ss, proto->nregs, proto->nregs);
+		gc_collect(ss);
+		sly_value v = vm_run(ss);
+		if (sly_equal(v, make_symbol(ss, "quit", 4))) {
+			break;
+		} else if (!void_p(v)) {
+			sly_display(v, 1);
+			printf("\n");
+		}
+	}
+}
+
 #if 0
 void
 sly_push_global(Sly_State *ss, char *name)
@@ -160,22 +218,9 @@ main(int argc, char *argv[])
 			printf("** Total bytes allocated: %zu **\n", bytes_allocated);
 			printf("** GC Total Collections: %d **\n\n", ss.gc.collections);
 		}
-	}
-#if 0
-	else {
+	} else {
 		sly_init_state(&ss);
-		sly_load_file(&ss, "test_rec.scm");
-		dis_all(ss.frame, 1);
-		sly_push_global(&ss, "fib");
-		sly_push_int(&ss, 10);
-		sly_display(sly_call(&ss, 1), 1);
-		printf("\n");
-		sly_push_global(&ss, "fac");
-		sly_push_int(&ss, 10);
-		sly_display(sly_call(&ss, 1), 1);
-		printf("\n");
-		sly_init_state(&ss);
+		sly_repl(&ss);
 	}
-#endif
 	return 0;
 }

@@ -13,6 +13,7 @@ struct compile {
 	struct scope *cscope;
 };
 
+int comp_expr(Sly_State *ss, sly_value form, int reg);
 int sly_compile(Sly_State *ss, sly_value ast);
 
 #endif /* SLY_COMPILE_H_ */

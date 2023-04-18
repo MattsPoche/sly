@@ -209,6 +209,7 @@ mark_roots(Sly_State *ss)
 	traverse_object(ss, (gc_object *)ss->proto);
 	traverse_object(ss, (gc_object *)ss->interned);
 	traverse_object(ss, (gc_object *)ss->cc->globals);
+	traverse_object(ss, (gc_object *)ss->cc->cscope);
 }
 
 static void
