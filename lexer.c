@@ -24,7 +24,7 @@ static char retok[] =
 	"|^([[({])"													// 10
 	"|^([])}])"													// 11
 	"|^(\\.)"RE_SEP												// 12
-	"|^(#\\()"RE_SEP										    // 13
+	"|^(#\\()."      										    // 13
 	"|^(\"([^\"]|\\\\.)*\")"RE_SEP								// 14
 	"|^(#t|#f)"RE_SEP											// 15
 	"|^(-?[0-9]+\\.[0-9]+)"RE_SEP								// 16
@@ -77,7 +77,6 @@ tok_to_string(enum token t)
 	case tok__nocap5: return "nocapture5";
 	case tok__nocap6: return "nocapture6";
 	case tok__nocap7: return "nocapture7";
-	case tok__nocap8: return "nocapture8";
 	default: return NULL;
 	}
 }

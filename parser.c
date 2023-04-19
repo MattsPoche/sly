@@ -60,6 +60,7 @@ static sly_value
 parse_value(Sly_State *ss, char *cstr)
 {
 	token t = next_token();
+	sly_value list;
 	switch (t.tag) {
 	case tok_any: {
 		printf("(parse_value) any\n");
@@ -105,7 +106,8 @@ parse_value(Sly_State *ss, char *cstr)
 			next_token();
 			return SLY_NULL;
 		}
-		sly_value list = cons(ss, parse_value(ss, cstr), SLY_NULL);
+		list = cons(ss, parse_value(ss, cstr), SLY_NULL);
+build_list:
 		for (;;) {
 			t = peek();
 			if (t.tag == tok_eof) {
@@ -130,7 +132,9 @@ parse_value(Sly_State *ss, char *cstr)
 		sly_raise_exception(ss, EXC_COMPILE, "Parse Error mismatched bracket");
 	} break;
 	case tok_vector: {
-		sly_assert(0, "Parse Error Unemplemented");
+		sly_value stx = make_syntax(ss, t, cstr_to_symbol("make-vector"));
+		list = cons(ss, stx, SLY_NULL);
+		goto build_list;
 	} break;
 	case tok_dot: {
 		sly_raise_exception(ss, EXC_COMPILE, "Parse Error bad dot");
@@ -179,8 +183,7 @@ parse_value(Sly_State *ss, char *cstr)
 	case tok__nocap4:
 	case tok__nocap5:
 	case tok__nocap6:
-	case tok__nocap7:
-	case tok__nocap8: {
+	case tok__nocap7: {
 		sly_raise_exception(ss, EXC_COMPILE, "Parse Error undefined token (nocapture0)");
 	} break;
 	}

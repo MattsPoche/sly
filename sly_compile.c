@@ -880,6 +880,45 @@ cgensym(Sly_State *ss, sly_value args)
 	return gensym(ss);
 }
 
+sly_value
+cmake_vector(Sly_State *ss, sly_value args)
+{
+	sly_value list = vector_ref(args, 0);
+	sly_value vec = make_vector(ss, 0, 12);
+	while (!null_p(list)) {
+		vector_append(ss, vec, car(list));
+		list = cdr(list);
+	}
+	return vec;
+}
+
+sly_value
+cvector_ref(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	sly_value vec = vector_ref(args, 0);
+	sly_value idx = vector_ref(args, 1);
+	return vector_ref(vec, get_int(idx));
+}
+
+sly_value
+cvector_set(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	sly_value vec = vector_ref(args, 0);
+	sly_value idx = vector_ref(args, 1);
+	sly_value val = vector_ref(args, 2);
+	vector_set(vec, get_int(idx), val);
+	return val;
+}
+
+sly_value
+cvector_length(Sly_State *ss, sly_value args)
+{
+	sly_value vec = vector_ref(args, 0);
+	return make_int(ss, vector_len(vec));
+}
+
 void
 init_builtins(Sly_State *ss)
 {
@@ -910,6 +949,10 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("display", cdisplay, 1, 0);
 	ADD_BUILTIN("list", clist, 0, 1);
 	ADD_BUILTIN("gensym", cgensym, 0, 0);
+	ADD_BUILTIN("make-vector", cmake_vector, 0, 1);
+	ADD_BUILTIN("vector-ref", cvector_ref, 2, 0);
+	ADD_BUILTIN("vector-set", cvector_set, 3, 0);
+	ADD_BUILTIN("vector-length", cvector_length, 1, 0);
 }
 
 int
