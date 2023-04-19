@@ -126,6 +126,43 @@ rl_gets(char *prompt)
 #endif
 }
 
+sly_value eval_expr(Sly_State *ss, sly_value expr);
+
+sly_value
+call_cclosure(Sly_State *ss, sly_value sv_clos, sly_value arglist)
+{
+	cclosure *clos = GET_PTR(sv_clos);
+	sly_value argv = make_vector(ss, 0, clos->nargs + clos->has_varg);
+	size_t nargs = clos->nargs;
+	while (nargs--) {
+		vector_append(ss, argv, eval_expr(ss, car(arglist)));
+		arglist = cdr(arglist);
+	}
+}
+
+sly_value
+eval_expr(Sly_State *ss, sly_value expr)
+{
+	sly_value globals = ss->cc->globals;
+	if (pair_p(expr)) {
+		sly_value fn = eval_expr(ss, car(expr));
+		sly_value arglist = cdr(expr);
+		if (cclosure_p(fn)) {
+			return call_cclosure(ss, fn, arglist);
+		}
+		return fn;
+	} else if (syntax_p(expr)) {
+		expr = syntax_to_datum(expr);
+		if (symbol_p(expr)) {
+			return dictionary_ref(globals, expr);
+		} else {
+			return expr;
+		}
+	} else {
+		return expr;
+	}
+}
+
 void
 sly_repl(Sly_State *ss)
 {
@@ -165,15 +202,18 @@ sly_repl(Sly_State *ss)
 				continue;
 			}
 		}
-		comp_expr(ss, parse(ss, line), 0);
+		sly_value ast = parse(ss, line);
+		/*
+		comp_expr(ss, ast, 0);
 		vector_append(ss, frame->code, iA(OP_RETURN, 0, -1));
 		frame->R = make_vector(ss, proto->nregs, proto->nregs);
-		gc_collect(ss);
-		sly_value v = vm_run(ss);
+		*/
+		sly_value v = eval_expr(ss, car(cdr(ast)));
 		if (!void_p(v)) {
 			sly_display(v, 1);
 			printf("\n");
 		}
+		gc_collect(ss);
 	}
 }
 

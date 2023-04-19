@@ -28,10 +28,10 @@ case "$1" in
 		clean_all
 		;;
 	"run")
-		(set -x; compile_noreadline) && clean && (set -x; "./$target")
+		(set -x; compile) && clean && (set -x; "./$target")
 		;;
 	"build-test"|"bt")
-		(set -x; compile_noreadline && "./$target" ./test/*.scm)
+		(set -x; compile && "./$target" ./test/*.scm)
 		;;
 	"test")
 		(set -x; "./$target" ./test/*.scm)
@@ -40,7 +40,7 @@ case "$1" in
 		(set -x; ctags -e *.c *.h)
 		;;
 	*)
-		(set -x; compile_noreadline)
+		(set -x; compile)
 		clean
 		;;
 esac
