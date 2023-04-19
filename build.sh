@@ -6,6 +6,16 @@ target='sly'
 
 set -e
 
+opt="$1"
+comp='compile'
+
+if [ "$1" = '--no-rl' ]
+then
+	comp='compile_noreadline'
+	opt="$2"
+fi
+
+
 compile_noreadline() {
 	"$cc" $cflags $lflags -DNO_READLINE -o "$target" *.c
 }
@@ -23,15 +33,15 @@ clean_all() {
 	rm -f "$target"
 }
 
-case "$1" in
+case "$opt" in
 	"clean")
 		clean_all
 		;;
 	"run")
-		(set -x; compile) && clean && (set -x; "./$target")
+		(set -x; "$comp") && clean && (set -x; "./$target")
 		;;
 	"build-test"|"bt")
-		(set -x; compile && "./$target" ./test/*.scm)
+		(set -x; "$comp" && "./$target" ./test/*.scm)
 		;;
 	"test")
 		(set -x; "./$target" ./test/*.scm)
@@ -40,7 +50,7 @@ case "$1" in
 		(set -x; ctags -e *.c *.h)
 		;;
 	*)
-		(set -x; compile)
+		(set -x; "$comp")
 		clean
 		;;
 esac

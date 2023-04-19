@@ -10,8 +10,8 @@
 #include "sly_alloc.h"
 #include "parser.h"
 #include "sly_compile.h"
-#define OPCODES_INCLUDE_INLINE 1
 #include "opcodes.h"
+#include "eval.h"
 
 static int allocations = 0;
 static int net_allocations = 0;
@@ -97,7 +97,7 @@ sly_load_file(Sly_State *ss, char *file_name)
 	dis_all(ss->frame, 1);
 	printf("Running file ... %s\n", file_name);
 	printf("Output:\n");
-	return vm_run(ss);
+	return vm_run(ss, 1);
 }
 
 char *
@@ -126,43 +126,6 @@ rl_gets(char *prompt)
 #endif
 }
 
-sly_value eval_expr(Sly_State *ss, sly_value expr);
-
-sly_value
-call_cclosure(Sly_State *ss, sly_value sv_clos, sly_value arglist)
-{
-	cclosure *clos = GET_PTR(sv_clos);
-	sly_value argv = make_vector(ss, 0, clos->nargs + clos->has_varg);
-	size_t nargs = clos->nargs;
-	while (nargs--) {
-		vector_append(ss, argv, eval_expr(ss, car(arglist)));
-		arglist = cdr(arglist);
-	}
-}
-
-sly_value
-eval_expr(Sly_State *ss, sly_value expr)
-{
-	sly_value globals = ss->cc->globals;
-	if (pair_p(expr)) {
-		sly_value fn = eval_expr(ss, car(expr));
-		sly_value arglist = cdr(expr);
-		if (cclosure_p(fn)) {
-			return call_cclosure(ss, fn, arglist);
-		}
-		return fn;
-	} else if (syntax_p(expr)) {
-		expr = syntax_to_datum(expr);
-		if (symbol_p(expr)) {
-			return dictionary_ref(globals, expr);
-		} else {
-			return expr;
-		}
-	} else {
-		return expr;
-	}
-}
-
 void
 sly_repl(Sly_State *ss)
 {
@@ -184,7 +147,7 @@ sly_repl(Sly_State *ss)
 	frame->level = 0;
 	ss->frame = frame;
 	gc_collect(ss);
-	vm_run(ss);
+	vm_run(ss, 1);
 	for (;;) {
 		char *line = rl_gets("> ");
 		if (line == NULL) continue;
@@ -202,73 +165,14 @@ sly_repl(Sly_State *ss)
 				continue;
 			}
 		}
-		sly_value ast = parse(ss, line);
-		/*
-		comp_expr(ss, ast, 0);
-		vector_append(ss, frame->code, iA(OP_RETURN, 0, -1));
-		frame->R = make_vector(ss, proto->nregs, proto->nregs);
-		*/
-		sly_value v = eval_expr(ss, car(cdr(ast)));
+		sly_value v = eval_expr(ss, parse(ss, line));
 		if (!void_p(v)) {
 			sly_display(v, 1);
 			printf("\n");
 		}
-		gc_collect(ss);
+		GARBAGE_COLLECT(ss);
 	}
 }
-
-#if 0
-void
-sly_push_global(Sly_State *ss, char *name)
-{
-	stack_frame *frame = ss->frame;
-	sly_value globals = vector_ref(frame->U, 0);
-	sly_value key = make_symbol(ss, name, strlen(name));
-	vector_append(ss, ss->stack, dictionary_ref(globals, key));
-}
-
-void
-sly_push_int(Sly_State *ss, i64 i)
-{
-	vector_append(ss, ss->stack, make_int(ss, i));
-}
-
-void
-sly_push_symbol(Sly_State *ss, char *name)
-{
-	vector_append(ss, ss->stack, make_symbol(ss, name, strlen(name)));
-}
-
-void
-sly_push_cstr(Sly_State *ss, char *str)
-{
-	vector_append(ss, ss->stack, make_string(ss, str, strlen(str)));
-}
-
-sly_value
-sly_call(Sly_State *ss, size_t nargs)
-{
-	size_t end = vector_len(ss->stack);
-	if (nargs + 1 > end) {
-		sly_raise_exception(ss, EXC_ARGS, "Error not enough arguments");
-	}
-	size_t begin = end - (nargs + 1);
-	ss->code = make_vector(ss, 0, 2);
-	vector_append(ss, ss->code, iAB(OP_CALL, begin, end, -1));
-	vector_append(ss, ss->code, iA(OP_RETURN, begin, -1));
-	sly_value R = ss->frame->R;
-	sly_value code = ss->frame->code;
-	size_t pc = ss->frame->pc;
-	ss->frame->R = ss->stack;
-	ss->frame->code = ss->code;
-	ss->frame->pc = 0;
-	sly_value r = vm_run(ss);
-	ss->frame->R = R;
-	ss->frame->code = code;
-	ss->frame->pc = pc;
-	return r;
-}
-#endif
 
 int
 main(int argc, char *argv[])

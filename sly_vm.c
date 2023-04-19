@@ -23,15 +23,6 @@
 			}															\
 		}																\
 	} while (0)
-#define GARBAGE_COLLECT()						\
-	do {										\
-		if (ss->gc.bytes > ss->gc.treshold) {	\
-			gc_collect(ss);						\
-		}										\
-	} while (0)
-
-/* TODO: Implement run-time eval
- */
 
 static inline sly_value
 capture_value(stack_frame *frame, struct uplookup upinfo)
@@ -108,7 +99,24 @@ close_upvalues(stack_frame *frame)
 }
 
 sly_value
-vm_run(Sly_State *ss)
+form_closure(Sly_State *ss, sly_value _proto)
+{
+	sly_value _clos = make_closure(ss, _proto);
+	closure *clos = GET_PTR(_clos);
+	prototype *proto = GET_PTR(_proto);
+	vector_set(clos->upvals, 0, vector_ref(ss->frame->U, 0));
+	size_t len = vector_len(proto->uplist);
+	for (size_t i = 0; i < len; ++i) {
+		sly_value upi = vector_ref(proto->uplist, i);
+		struct uplookup upinfo = *((struct uplookup *)(&upi));
+		sly_value uv = capture_value(ss->frame, upinfo);
+		vector_set(clos->upvals, i + 1 + proto->nargs, uv);
+	}
+	return _clos;
+}
+
+sly_value
+vm_run(Sly_State *ss, int run_gc)
 {
 	INSTR ibits;
 	sly_value ret_val = SLY_VOID;
@@ -203,10 +211,6 @@ vm_run(Sly_State *ss)
 			}
 		} break;
 		case OP_CALL: {
-			/* Temporarily disable GC for this instruction to prevent
-			 * the new frame and it's references from being collected
-			 * during initialization.
-			 */
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
 			sly_value val = get_reg(a);
@@ -352,23 +356,16 @@ vm_run(Sly_State *ss)
 			u8 a = GET_A(instr);
 			size_t b = GET_Bx(instr);
 			sly_value _proto = get_const(b);
-			sly_value val = make_closure(ss, _proto);
-			set_reg(a, val);
-			closure *clos = GET_PTR(val);
-			prototype *proto = GET_PTR(_proto);
-			vector_set(clos->upvals, 0, vector_ref(ss->frame->U, 0));
-			size_t len = vector_len(proto->uplist);
-			for (size_t i = 0; i < len; ++i) {
-				sly_value upi = vector_ref(proto->uplist, i);
-				struct uplookup upinfo = *((struct uplookup *)(&upi));
-				sly_value uv = capture_value(ss->frame, upinfo);
-				vector_set(clos->upvals, i + 1 + proto->nargs, uv);
-			}
+			set_reg(a, form_closure(ss, _proto));
 		} break;
 		}
-		GARBAGE_COLLECT();
+		if (run_gc) {
+			GARBAGE_COLLECT(ss);
+		}
 	}
 vm_exit:
-	GARBAGE_COLLECT();
+	if (run_gc) {
+		GARBAGE_COLLECT(ss);
+	}
 	return ret_val;
 }

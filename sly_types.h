@@ -26,6 +26,7 @@ typedef uintptr_t sly_value;
 #define SLY_FALSE ((sly_value)st_bool)
 #define SLY_TRUE  ((sly_value)((UINT64_MAX & ~TAG_MASK)|st_bool))
 #define ctobool(b) ((b) ? SLY_TRUE : SLY_FALSE)
+#define booltoc(b) ((b) == SLY_FALSE ? 0 : 1)
 #define HANDLE_EXCEPTION(ss, code)				\
 	do {										\
 		if (setjmp((ss)->jbuf)) {				\

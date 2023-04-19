@@ -127,7 +127,7 @@ int comp_expr(Sly_State *ss, sly_value form, int reg);
 int comp_atom(Sly_State *ss, sly_value form, int reg);
 static sly_value init_symtable(Sly_State *ss);
 
-static int
+int
 is_keyword(sly_value sym)
 {
 	for (int i = 0; i < KW_COUNT; ++i) {
