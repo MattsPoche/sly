@@ -25,22 +25,22 @@
 	} while (0)
 
 static inline sly_value
-capture_value(stack_frame *frame, struct uplookup upinfo)
+capture_value(stack_frame *frame, union uplookup upinfo)
 {
-	while (frame->level != upinfo.level) {
+	while (frame->level != upinfo.u.level) {
 		frame = frame->parent;
 	}
-	if (upinfo.isup) {
+	if (upinfo.u.isup) {
 		vector *values = GET_PTR(frame->U);
-		if (ref_p(values->elems[upinfo.reg])) {
-			return values->elems[upinfo.reg];
+		if (ref_p(values->elems[upinfo.u.reg])) {
+			return values->elems[upinfo.u.reg];
 		} else {
-			sly_value v = (sly_value)(&values->elems[upinfo.reg]);
+			sly_value v = (sly_value)(&values->elems[upinfo.u.reg]);
 			return (v & ~TAG_MASK) | st_ref;
 		}
 	} else {
 		vector *values = GET_PTR(frame->R);
-		sly_value v = (sly_value)(&values->elems[upinfo.reg]);
+		sly_value v = (sly_value)(&values->elems[upinfo.u.reg]);
 		return (v & ~TAG_MASK) | st_ref;
 	}
 	sly_assert(0, "Error value not found");
@@ -108,7 +108,8 @@ form_closure(Sly_State *ss, sly_value _proto)
 	size_t len = vector_len(proto->uplist);
 	for (size_t i = 0; i < len; ++i) {
 		sly_value upi = vector_ref(proto->uplist, i);
-		struct uplookup upinfo = *((struct uplookup *)(&upi));
+		union uplookup upinfo;
+		upinfo.v = upi;
 		sly_value uv = capture_value(ss->frame, upinfo);
 		vector_set(clos->upvals, i + 1 + proto->nargs, uv);
 	}
@@ -118,12 +119,10 @@ form_closure(Sly_State *ss, sly_value _proto)
 sly_value
 vm_run(Sly_State *ss, int run_gc)
 {
-	INSTR ibits;
 	sly_value ret_val = SLY_VOID;
-	struct instr *instr;
+	union instr instr;
     for (;;) {
-		ibits = next_instr();
-		instr = (struct instr *)(&ibits);
+		instr.v = next_instr();
 		enum opcode i = GET_OP(instr);
 		switch (i) {
 		case OP_NOP: break;

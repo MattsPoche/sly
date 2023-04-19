@@ -21,8 +21,8 @@ make_stack(Sly_State *ss, size_t nregs)
 void
 dis(INSTR ins)
 {
-	struct instr *instr;
-	instr = (struct instr *)(&ins);
+	union instr instr;
+	instr.v = ins;
 	enum opcode op = GET_OP(instr);
 	int pad = 0;
 	switch (op) {
@@ -128,10 +128,10 @@ dis(INSTR ins)
 		printf("(CLOSURE %d %lu)%n", a, b, &pad);
 	} break;
 	}
-	if (instr->ln < 0) {
+	if (instr.i.ln < 0) {
 		printf("\n");
 	} else {
-		printf("%*s;; line %d\n", 20 - pad, "", instr->ln + 1);
+		printf("%*s;; line %d\n", 20 - pad, "", instr.i.ln + 1);
 	}
 }
 

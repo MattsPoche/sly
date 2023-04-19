@@ -42,55 +42,56 @@ enum symbol_type {
 	sym_constant,
 };
 
-struct symbol_properties {
-	u8 type;
-	u8 islocal;
-	u8 _pad[2];
-	i32 reg;
+union symbol_properties {
+	sly_value v;
+	struct {
+		u8 type;
+		u8 islocal;
+		u8 _pad[2];
+		i32 reg;
+	} p;
 };
 
-#define SYMPROP_TO_VALUE(prop) (*((sly_value *)(&prop)))
-#define VALUE_TO_SYMPROP(val)  (*((struct symbol_properties *)(&(prop))))
 #define IS_GLOBAL(scope)       ((scope)->parent == NULL)
 #define ADD_BUILTIN(name, fn, nargs, has_vargs)							\
 	do {																\
 		sym = make_symbol(ss, name, strlen(name));						\
-		dictionary_set(ss, symtable, sym, SYMPROP_TO_VALUE(st_prop));	\
+		dictionary_set(ss, symtable, sym, st_prop.v);					\
 		dictionary_set(ss, cc->globals, sym, make_cclosure(ss, fn, nargs, has_vargs)); \
 	} while (0)
 #define RESOLVE_UPVAL()													\
 	do {																\
-		if (st_prop.type == sym_upval) {								\
+		if (st_prop.p.type == sym_upval) {								\
 			u8 upidx = vector_len(proto->uplist);						\
-			vector_append(ss, proto->uplist, vector_ref(uplist, st_prop.reg)); \
-			st_prop.islocal = 0;										\
-			st_prop.reg = upidx;										\
-		} else if (st_prop.type == sym_arg) {							\
+			vector_append(ss, proto->uplist, vector_ref(uplist, st_prop.p.reg)); \
+			st_prop.p.islocal = 0;										\
+			st_prop.p.reg = upidx;										\
+		} else if (st_prop.p.type == sym_arg) {							\
 			u8 upidx = vector_len(proto->uplist);						\
-			struct uplookup upinfo = {0};								\
-			upinfo.isup = 1;											\
-			upinfo.level = level;										\
-			upinfo.reg = st_prop.reg;									\
+			union uplookup upinfo = {0};								\
+			upinfo.u.isup = 1;											\
+			upinfo.u.level = level;										\
+			upinfo.u.reg = st_prop.p.reg;								\
 			sly_value upi = *((sly_value *)(&upinfo));					\
 			vector_append(ss, proto->uplist, upi);						\
-			st_prop.islocal = 0;										\
-			st_prop.reg = upidx;										\
-			st_prop.type = sym_upval;									\
-		} else if (st_prop.type == sym_variable) {						\
+			st_prop.p.islocal = 0;										\
+			st_prop.p.reg = upidx;										\
+			st_prop.p.type = sym_upval;									\
+		} else if (st_prop.p.type == sym_variable) {					\
 			u8 upidx = vector_len(proto->uplist);						\
-			struct uplookup upinfo = {0};								\
-			upinfo.isup = 0;											\
-			upinfo.level = level;										\
-			upinfo.reg = st_prop.reg;									\
+			union uplookup upinfo = {0};								\
+			upinfo.u.isup = 0;											\
+			upinfo.u.level = level;										\
+			upinfo.u.reg = st_prop.p.reg;								\
 			sly_value upi = *((sly_value *)(&upinfo));					\
 			vector_append(ss, proto->uplist, upi);						\
-			st_prop.islocal = 0;										\
-			st_prop.reg = upidx;										\
-			st_prop.type = sym_upval;									\
+			st_prop.p.islocal = 0;										\
+			st_prop.p.reg = upidx;										\
+			st_prop.p.type = sym_upval;									\
 		} else {														\
 			sly_raise_exception(ss, EXC_COMPILE, "Compile error");		\
 		}																\
-		dictionary_set(ss, cc->cscope->symtable, datum, SYMPROP_TO_VALUE(st_prop)); \
+		dictionary_set(ss, cc->cscope->symtable, datum, st_prop.v);		\
 	} while (0)
 
 static char *
@@ -205,11 +206,11 @@ make_syntax_transformer(Sly_State *ss, sly_value literals, sly_value clauses)
 static sly_value
 init_symtable(Sly_State *ss)
 {
-	struct symbol_properties prop = { .type = sym_keyword };
+	union symbol_properties prop = { .p = { .type = sym_keyword } };
 	sly_value symtable = make_dictionary(ss);
 	for (int i = 0; i < KW_COUNT; ++i) {
 		sly_value sym = make_symbol(ss, keywords(i), strlen(keywords(i)));
-		dictionary_set(ss, symtable, sym, SYMPROP_TO_VALUE(prop));
+		dictionary_set(ss, symtable, sym, prop.v);
 		kw_symbols[i] = sym;
 	}
 	return symtable;
@@ -241,7 +242,7 @@ comp_define(Sly_State *ss, sly_value form, int reg)
 	}
 	sly_value symtable = cc->cscope->symtable;
 	prototype *proto = GET_PTR(cc->cscope->proto);
-	struct symbol_properties st_prop = {0};
+	union symbol_properties st_prop = {0};
 	if (!symbol_p(var)) {
 		sly_raise_exception(ss, EXC_COMPILE, "Error variable name must be a symbol");
 	}
@@ -249,15 +250,15 @@ comp_define(Sly_State *ss, sly_value form, int reg)
 		stx = car(form);
 		sly_value globals  = cc->globals;
 		sly_value datum = syntax_p(stx) ? syntax_to_datum(stx) : stx;
-		st_prop.islocal = 0;
-		st_prop.type = sym_global;
-		st_prop.reg = intern_constant(ss, var);
-		dictionary_set(ss, symtable, var, SYMPROP_TO_VALUE(st_prop));
+		st_prop.p.islocal = 0;
+		st_prop.p.type = sym_global;
+		st_prop.p.reg = intern_constant(ss, var);
+		dictionary_set(ss, symtable, var, st_prop.v);
 		if (pair_p(datum) || symbol_p(datum)) {
 			dictionary_set(ss, globals, var, SLY_VOID);
 			comp_expr(ss, car(form), reg);
 			if ((size_t)reg + 1 >= proto->nregs) proto->nregs = reg + 2;
-			vector_append(ss, proto->code, iABx(OP_LOADK, reg + 1, st_prop.reg, line_number));
+			vector_append(ss, proto->code, iABx(OP_LOADK, reg + 1, st_prop.p.reg, line_number));
 			vector_append(ss, proto->code, iABC(OP_SETUPDICT, 0, reg + 1, reg, line_number));
 		} else {
 			dictionary_set(ss, globals, var, datum);
@@ -267,11 +268,11 @@ comp_define(Sly_State *ss, sly_value form, int reg)
 		}
 		return reg;
 	} else {
-		st_prop.reg = cc->cscope->prev_var++;
-		st_prop.islocal = 1;
-		st_prop.type = sym_variable;
-		dictionary_set(ss, symtable, var, SYMPROP_TO_VALUE(st_prop));
-		comp_expr(ss, car(form), st_prop.reg);
+		st_prop.p.reg = cc->cscope->prev_var++;
+		st_prop.p.islocal = 1;
+		st_prop.p.type = sym_variable;
+		dictionary_set(ss, symtable, var, st_prop.v);
+		comp_expr(ss, car(form), st_prop.p.reg);
 		/* end of definition */
 		if (!null_p(cdr(form))) {
 			sly_raise_exception(ss, EXC_COMPILE, "Compile Error malformed define");
@@ -324,32 +325,33 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 	if (!symbol_p(datum)) {
 		sly_raise_exception(ss, EXC_COMPILE, "Error must be a variable");
 	}
-	u32 level;
-	sly_value uplist;
+	u32 level = 0;
+	sly_value uplist = SLY_NULL;
 	sly_value prop = symbol_lookup_props(ss, datum, &level, &uplist);
-	struct symbol_properties st_prop = VALUE_TO_SYMPROP(prop);
-	if (cc->cscope->level != level && st_prop.type != sym_global) { /* is non local */
+	union symbol_properties st_prop;
+	st_prop.v = prop;
+	if (cc->cscope->level != level && st_prop.p.type != sym_global) { /* is non local */
 		RESOLVE_UPVAL();
 	}
 	form = cdr(form);
 	reg = comp_expr(ss, car(form), reg);
 	if ((size_t)reg + 1 >= proto->nregs) proto->nregs = reg + 2;
-	if (st_prop.type == sym_variable) {
-		if (reg != -1 && st_prop.reg != reg) {
-			vector_append(ss, proto->code, iAB(OP_MOVE, st_prop.reg, reg, line_number));
+	if (st_prop.p.type == sym_variable) {
+		if (reg != -1 && st_prop.p.reg != reg) {
+			vector_append(ss, proto->code, iAB(OP_MOVE, st_prop.p.reg, reg, line_number));
 		}
-	} else if (st_prop.type == sym_global) {
-		st_prop.reg = intern_constant(ss, datum);
+	} else if (st_prop.p.type == sym_global) {
+		st_prop.p.reg = intern_constant(ss, datum);
 		if (!IS_GLOBAL(cc->cscope)) {
-			st_prop.islocal = 1;
-			dictionary_set(ss, cc->cscope->symtable, datum, SYMPROP_TO_VALUE(st_prop));
+			st_prop.p.islocal = 1;
+			dictionary_set(ss, cc->cscope->symtable, datum, st_prop.v);
 		}
 		if ((size_t)reg + 1 >= proto->nregs) proto->nregs = reg + 2;
-		vector_append(ss, proto->code, iABx(OP_LOADK, reg + 1, st_prop.reg, line_number));
+		vector_append(ss, proto->code, iABx(OP_LOADK, reg + 1, st_prop.p.reg, line_number));
 		vector_append(ss, proto->code, iABC(OP_SETUPDICT, 0, reg + 1, reg, line_number));
-	} else if (st_prop.type == sym_upval) {
+	} else if (st_prop.p.type == sym_upval) {
 		vector_append(ss, proto->code, iAB(OP_SETUPVAL,
-										   st_prop.reg + 1 + proto->nargs,
+										   st_prop.p.reg + 1 + proto->nargs,
 										   reg, line_number));
 	}
 	if (!null_p(cdr(form))) {
@@ -370,22 +372,23 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 	syntax *syn = GET_PTR(form);
 	line_number = syn->tok.ln;
 	if (symbol_p(datum)) {
-		u32 level;
-		sly_value uplist;
+		u32 level = 0;
+		sly_value uplist = SLY_NULL;
 		sly_value prop = symbol_lookup_props(ss, datum, &level, &uplist);
-		struct symbol_properties st_prop = VALUE_TO_SYMPROP(prop);
-		if (cc->cscope->level != level && st_prop.type != sym_global) { /* is non local */
+		union symbol_properties st_prop;
+		st_prop.v = prop;
+		if (cc->cscope->level != level && st_prop.p.type != sym_global) { /* is non local */
 			RESOLVE_UPVAL();
 		}
-		switch ((enum symbol_type)st_prop.type) {
+		switch ((enum symbol_type)st_prop.p.type) {
 		case sym_syntax: {
 			sly_raise_exception(ss, EXC_COMPILE, "Unexpected keyword");
 		} break;
 		case sym_variable: {
-			return st_prop.reg;
+			return st_prop.p.reg;
 		} break;
 		case sym_constant: {
-			vector_append(ss, proto->code, iABx(OP_LOADK, reg, st_prop.reg, line_number));
+			vector_append(ss, proto->code, iABx(OP_LOADK, reg, st_prop.p.reg, line_number));
 		} break;
 		case sym_datum: {
 			sly_assert(0, "Syntax Datum??");
@@ -396,23 +399,23 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 		case sym_arg:
 			vector_append(ss, proto->code, iAB(OP_GETUPVAL,
 											   reg,
-											   st_prop.reg,
+											   st_prop.p.reg,
 											   line_number));
 			return reg;
 		case sym_upval: {
 			vector_append(ss, proto->code, iAB(OP_GETUPVAL,
 											   reg,
-											   st_prop.reg + 1 + proto->nargs,
+											   st_prop.p.reg + 1 + proto->nargs,
 											   line_number));
 			return reg;
 		} break;
 		case sym_global: {
-			st_prop.reg = intern_constant(ss, datum);
+			st_prop.p.reg = intern_constant(ss, datum);
 			if (!IS_GLOBAL(cc->cscope)) {
-				st_prop.islocal = 1;
-				dictionary_set(ss, cc->cscope->symtable, datum, SYMPROP_TO_VALUE(st_prop));
+				st_prop.p.islocal = 1;
+				dictionary_set(ss, cc->cscope->symtable, datum, st_prop.v);
 			}
-			vector_append(ss, proto->code, iABx(OP_LOADK, reg, st_prop.reg, line_number));
+			vector_append(ss, proto->code, iABx(OP_LOADK, reg, st_prop.p.reg, line_number));
 			vector_append(ss, proto->code, iABC(OP_GETUPDICT, reg, 0, reg, line_number));
 		} break;
 		}
@@ -486,9 +489,9 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 	sly_value symtable = scope->symtable;
 	sly_value stx, sym, args = car(form);
 	form = cdr(form);
-	struct symbol_properties st_prop = {0};
-	st_prop.type = sym_arg;
-	st_prop.islocal = 1;
+	union symbol_properties st_prop;
+	st_prop.p.type = sym_arg;
+	st_prop.p.islocal = 1;
 	size_t nargs = 0;
 	while (pair_p(args)) {
 		stx = car(args);
@@ -497,16 +500,16 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 			sly_raise_exception(ss, EXC_COMPILE, "Compile error function parameter must be a symbol");
 		}
 		nargs++;
-		st_prop.reg = nargs;
-		dictionary_set(ss, symtable, sym, SYMPROP_TO_VALUE(st_prop));
+		st_prop.p.reg = nargs;
+		dictionary_set(ss, symtable, sym, st_prop.v);
 		args = cdr(args);
 	}
 	if (!null_p(args)) {
 		sym = syntax_to_datum(args);
 		if (symbol_p(sym)) {
 			proto->has_varg = 1;
-			st_prop.reg = nargs + 1;
-			dictionary_set(ss, symtable, sym, SYMPROP_TO_VALUE(st_prop));
+			st_prop.p.reg = nargs + 1;
+			dictionary_set(ss, symtable, sym, st_prop.v);
 		} else {
 			sly_raise_exception(ss, EXC_COMPILE, "Compile error function parameter must be a symbol");
 		}
@@ -638,13 +641,13 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			form = cdr(form);
 			sly_value literals = car(form);
 			sly_value clauses = cdr(form);
-			struct symbol_properties st_prop = {0};
-			st_prop.islocal = 1;
-			st_prop.type = sym_syntax;
+			union symbol_properties st_prop = {0};
+			st_prop.p.islocal = 1;
+			st_prop.p.type = sym_syntax;
 			dictionary_set(ss,
 						   cc->cscope->symtable,
 						   name,
-						   SYMPROP_TO_VALUE(st_prop));
+						   st_prop.v);
 			dictionary_set(ss,
 						   cc->cscope->macros,
 						   name,
@@ -882,10 +885,10 @@ init_builtins(Sly_State *ss)
 {
 	struct compile *cc = ss->cc;
 	sly_value symtable = cc->cscope->symtable;
-	struct symbol_properties st_prop = {0};
+	union symbol_properties st_prop;
 	sly_value sym;
-	st_prop.islocal = 0;
-	st_prop.type = sym_global;
+	st_prop.p.islocal = 0;
+	st_prop.p.type = sym_global;
 	cc->globals = make_dictionary(ss);
 	ADD_BUILTIN("+", cadd, 0, 1);
 	ADD_BUILTIN("-", csub, 0, 1);

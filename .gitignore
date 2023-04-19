@@ -2,3 +2,5 @@ TAGS
 sly
 sly.exe*
 *.txt
+*.d
+*.o

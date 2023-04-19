@@ -84,7 +84,7 @@ eval_list(Sly_State *ss, sly_value expr)
 			sly_assert(null_p(cdr(tail)), "Error (eval_list): bad syntax, expected end of expr");
 			return car(tail);
 		} else if (symbol_eq(datum, cstr_to_symbol("begin"))) {
-			sly_value val;
+			sly_value val = SLY_VOID;
 			while (!null_p(tail)) {
 				val = eval_expr(ss, car(tail));
 				tail = cdr(tail);

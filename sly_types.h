@@ -66,14 +66,17 @@ typedef struct _sly_state {
 
 #include "sly_compile.h"
 
-struct imm_value {
-	u8 _padding[3];
-	u8 type;
-	union {
-		u32 as_uint;
-		i32 as_int;
-		f32 as_float;
-	} val;
+union imm_value {
+	sly_value v;
+	struct {
+		u8 _padding[3];
+		u8 type;
+		union {
+			u32 as_uint;
+			i32 as_int;
+			f32 as_float;
+		} val;
+	} i;
 };
 
 enum type_tag {
@@ -301,8 +304,9 @@ int_p(sly_value val)
 {
 	if (null_p(val) || void_p(val)) return 0;
 	if (imm_p(val)) {
-		struct imm_value *v = (struct imm_value *)(&val);
-		return v->type == imm_int;
+		union imm_value v;
+		v.v = val;
+		return v.i.type == imm_int;
 	}
 	return TYPEOF(val) == tt_int;
 }
@@ -312,8 +316,9 @@ float_p(sly_value val)
 {
 	if (null_p(val) || void_p(val)) return 0;
 	if (imm_p(val)) {
-		struct imm_value *v = (struct imm_value *)(&val);
-		return v->type == imm_float;
+		union imm_value v;
+		v.v = val;
+		return v.i.type == imm_float;
 	}
 	return TYPEOF(val) == tt_float;
 }
@@ -323,8 +328,9 @@ byte_p(sly_value val)
 {
 	if (null_p(val) || void_p(val)) return 0;
 	if (imm_p(val)) {
-		struct imm_value *v = (struct imm_value *)(&val);
-		return v->type == imm_byte;
+		union imm_value v;
+		v.v = val;
+		return v.i.type == imm_byte;
 	}
 	return TYPEOF(val) == tt_byte;
 	return 0;

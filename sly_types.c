@@ -209,8 +209,9 @@ get_int(sly_value v)
 {
 	sly_assert(int_p(v), "Type Error: Expected Integer");
 	if (imm_p(v)) {
-		struct imm_value *i = (struct imm_value *)(&v);
-		return i->val.as_int;
+		union imm_value i;
+		i.v = v;
+		return i.i.val.as_int;
 	}
 	number *i = GET_PTR(v);
 	return i->val.as_int;
@@ -221,8 +222,9 @@ get_float(sly_value v)
 {
 	sly_assert(float_p(v), "Type Error: Expected Float");
 	if (imm_p(v)) {
-		struct imm_value *i = (struct imm_value *)(&v);
-		return i->val.as_float;
+		union imm_value i;
+		i.v = v;
+		return i.i.val.as_float;
 	}
 	number *i = GET_PTR(v);
 	return i->val.as_float;
@@ -233,10 +235,10 @@ make_int(Sly_State *ss, i64 i)
 {
 	if (i >= INT32_MIN && i <= INT32_MAX) {
 		/* small int */
-		struct imm_value v;
-		v.type = imm_int;
-		v.val.as_int = i;
-		sly_value s = *((sly_value *)(&v));
+		union imm_value v;
+		v.i.type = imm_int;
+		v.i.val.as_int = i;
+		sly_value s = v.v;
 		return (s & ~TAG_MASK) | st_imm;
 	}
 	number *n = gc_alloc(ss, sizeof(*n));
@@ -255,13 +257,14 @@ make_float(Sly_State *ss, f64 f)
 }
 
 sly_value
-make_small_float(Sly_State *ss, f32  f)
+make_small_float(Sly_State *ss, f32 f)
 {
 	(void)ss;
-	struct imm_value v;
-	v.type = imm_int;
-	v.val.as_float = f;
-	return *((sly_value *)(&v));
+	union imm_value v;
+	v.i.type = imm_int;
+	v.i.val.as_float = f;
+	sly_value n = v.v;
+	return (n & ~TAG_MASK) | st_imm;
 }
 
 sly_value

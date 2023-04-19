@@ -1,11 +1,14 @@
 #ifndef SLY_COMPILE_H_
 #define SLY_COMPILE_H_
 
-struct uplookup {
-	u32 level;  /* scope level */
-	u8 isup;    /* points to upval (or function arg) */
-	u8 reg;     /* register */
-	u8 _pad[2];
+union uplookup {
+	sly_value v;
+	struct {
+		u32 level;  /* scope level */
+		u8 isup;    /* points to upval (or function arg) */
+		u8 reg;     /* register */
+		u8 _pad[2];
+	} u;
 };
 
 struct compile {
