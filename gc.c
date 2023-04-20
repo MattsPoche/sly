@@ -141,6 +141,7 @@ traverse_continuation(Sly_State *ss, continuation *cont)
 static void
 traverse_object(Sly_State *ss, gc_object *obj)
 {
+	if (obj == NULL) return;
 	mark_object(obj, GC_BLACK);
 	switch ((enum type_tag)obj->type) {
 	case tt_pair:
@@ -195,12 +196,18 @@ propagate_mark(Sly_State *ss)
 static void
 mark_roots(Sly_State *ss)
 {
-	traverse_object(ss, (gc_object *)ss->frame);
-	traverse_object(ss, (gc_object *)ss->eval_frame);
-	traverse_object(ss, (gc_object *)ss->proto);
-	traverse_object(ss, (gc_object *)ss->interned);
-	traverse_object(ss, (gc_object *)ss->cc->globals);
-	traverse_object(ss, (gc_object *)ss->cc->cscope);
+	if (ss->frame)
+		traverse_object(ss, (gc_object *)ss->frame);
+	if (ss->eval_frame)
+		traverse_object(ss, (gc_object *)ss->eval_frame);
+	if (ss->proto)
+		traverse_object(ss, (gc_object *)ss->proto);
+	if (ss->interned)
+		traverse_object(ss, (gc_object *)ss->interned);
+	if (ss->cc->globals)
+		traverse_object(ss, (gc_object *)ss->cc->globals);
+	if (ss->cc->cscope)
+		traverse_object(ss, (gc_object *)ss->cc->cscope);
 }
 
 static void

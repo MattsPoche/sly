@@ -12,7 +12,7 @@ OBJECTS=$(CSOURCE:%.c=%.o)
 all: deps $(TARGET)
 
 test: $(TARGET)
-	$< test/*
+	./$< test/*
 
 clean:
 	rm -f $(OBJECTS) $(TARGET) $(TARGET).d
@@ -30,6 +30,6 @@ release:
 	$(CC) $(RELEASE) $(DEFS) -o $(TARGET) $(CSOURCE)
 
 release-test: release
-	$(TARGET) test/*
+	./$(TARGET) test/*
 
 -include $(TARGET).d

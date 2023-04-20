@@ -128,7 +128,7 @@ static sly_value kw_symbols[KW_COUNT];
 
 int comp_expr(Sly_State *ss, sly_value form, int reg);
 int comp_atom(Sly_State *ss, sly_value form, int reg);
-static sly_value init_symtable(Sly_State *ss);
+static void init_symtable(Sly_State *ss, sly_value symtable);
 
 int
 is_keyword(sly_value sym)
@@ -202,6 +202,8 @@ make_scope(Sly_State *ss)
 	struct scope *scope = gc_alloc(ss, sizeof(*scope));
 	scope->h.type = tt_scope;
 	scope->parent = NULL;
+	scope->macros = make_dictionary(ss);
+	scope->symtable = make_dictionary(ss);
 	scope->proto = make_prototype(ss,
 								  make_vector(ss, 0, 8),
 								  make_vector(ss, 0, 8),
@@ -211,17 +213,15 @@ make_scope(Sly_State *ss)
 	return scope;
 }
 
-static sly_value
-init_symtable(Sly_State *ss)
+static void
+init_symtable(Sly_State *ss, sly_value symtable)
 {
 	union symbol_properties prop = { .p = { .type = sym_keyword } };
-	sly_value symtable = make_dictionary(ss);
 	for (int i = 0; i < KW_COUNT; ++i) {
 		sly_value sym = make_symbol(ss, keywords(i), strlen(keywords(i)));
 		dictionary_set(ss, symtable, sym, prop.v);
 		kw_symbols[i] = sym;
 	}
-	return symtable;
 }
 
 int
@@ -484,24 +484,29 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 	struct compile *cc = ss->cc;
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	sly_value head = car(form);
-	syntax *s = GET_PTR(head);
 	form = cdr(form);
-	if (symbol_p(s->datum)) {
-		u32 level = 0;
-		sly_value uplist = SLY_NULL;
-		union symbol_properties st_prop;
-		st_prop.v = symbol_lookup_props(ss, s->datum, &level, &uplist);
-		if (st_prop.p.issyntax) {
-			/* call macro */
-			sly_value macro = lookup_macro(ss, s->datum);
-			form = call_closure_no_eval(ss, macro, cons(ss, form, SLY_NULL));
-			return comp_expr(ss, form, reg);
+	token tok;
+	tok.ln = -1;
+	if (syntax_p(head)) {
+		syntax *s = GET_PTR(head);
+		tok = s->tok;
+		if (symbol_p(s->datum)) {
+			u32 level = 0;
+			sly_value uplist = SLY_NULL;
+			union symbol_properties st_prop;
+			st_prop.v = symbol_lookup_props(ss, s->datum, &level, &uplist);
+			if (st_prop.p.issyntax) {
+				/* call macro */
+				sly_value macro = lookup_macro(ss, s->datum);
+				form = call_closure_no_eval(ss, macro, cons(ss, form, SLY_NULL));
+				return comp_expr(ss, form, reg);
+			}
 		}
 	}
 	int start = reg;
 	int reg2 = comp_expr(ss, head, reg);
 	if (reg2 != -1 && reg2 != reg) {
-		vector_append(ss, proto->code, iAB(OP_MOVE, reg, reg2, s->tok.ln));
+		vector_append(ss, proto->code, iAB(OP_MOVE, reg, reg2, tok.ln));
 	}
 	reg++;
 	while (pair_p(form)) {
@@ -514,7 +519,7 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 		reg++;
 		form = cdr(form);
 	}
-	vector_append(ss, proto->code, iAB(OP_CALL, start, reg, s->tok.ln));
+	vector_append(ss, proto->code, iAB(OP_CALL, start, reg, tok.ln));
 	if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 	return start + 1;
 }
@@ -524,7 +529,7 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 {
 	struct compile *cc = ss->cc;
 	struct scope *scope = make_scope(ss);
-	scope->symtable = init_symtable(ss);
+	//init_symtable(ss, scope->symtable);
 	scope->parent = cc->cscope;
 	scope->level = cc->cscope->level + 1;
 	cc->cscope = scope;
@@ -955,7 +960,7 @@ init_builtins(Sly_State *ss)
 {
 	struct compile *cc = ss->cc;
 	sly_value symtable = cc->cscope->symtable;
-	union symbol_properties st_prop;
+	union symbol_properties st_prop = {0};
 	sly_value sym;
 	st_prop.p.islocal = 0;
 	st_prop.p.type = sym_global;
@@ -1003,8 +1008,7 @@ sly_compile(Sly_State *ss, sly_value ast)
 	assert(ss->cc != NULL);
 	struct compile *cc = ss->cc;
 	cc->cscope = make_scope(ss);
-	cc->cscope->macros = make_dictionary(ss);
-	cc->cscope->symtable = init_symtable(ss);
+	init_symtable(ss, cc->cscope->symtable);
 	cc->cscope->level = 0; /* top level */
 	init_builtins(ss);
 	proto = GET_PTR(cc->cscope->proto);
