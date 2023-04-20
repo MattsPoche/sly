@@ -64,6 +64,7 @@ union instr {
 #define GET_sBx(instr)  ((i64)(*((i16 *)(&(instr).i.b[2]))))
 
 stack_frame *make_stack(Sly_State *ss, size_t nregs);
+stack_frame *make_eval_stack(Sly_State *ss);
 void dis(INSTR instr);
 void dis_code(sly_value code);
 void dis_all(stack_frame *frame, int lstk);

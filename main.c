@@ -45,7 +45,7 @@ sly_init_state(Sly_State *ss)
 	allocations = 0;
 	net_allocations = 0;
 	bytes_allocated = 0;
-	gc_init(&ss->gc);
+	memset(ss, 0, sizeof(*ss));
 }
 
 void
@@ -146,6 +146,7 @@ sly_repl(Sly_State *ss)
 	frame->pc = proto->entry;
 	frame->level = 0;
 	ss->frame = frame;
+	ss->eval_frame = make_eval_stack(ss);
 	gc_collect(ss);
 	vm_run(ss, 1);
 	for (;;) {

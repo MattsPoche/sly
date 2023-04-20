@@ -536,6 +536,17 @@ vector_pop(Sly_State *ss, sly_value v)
 }
 
 sly_value
+vector_discard_values(Sly_State *ss, sly_value v)
+{
+	UNUSED(ss);
+	sly_assert(vector_p(v), "Type Error: Expected vector");
+	vector *vec = GET_PTR(v);
+	vec->len = 0;
+	memset(vec->elems, 0, vec->cap * sizeof(sly_value));
+	return SLY_VOID;
+}
+
+sly_value
 make_uninterned_symbol(Sly_State *ss, char *cstr, size_t len)
 {
 	sly_assert(len <= UCHAR_MAX,

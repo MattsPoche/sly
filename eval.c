@@ -6,28 +6,64 @@
 #include "opcodes.h"
 #include "eval.h"
 
-static sly_value
+sly_value
 call_closure(Sly_State *ss, sly_value clos, sly_value arglist)
 {
-	stack_frame *frame = ss->frame;
-	size_t pc = frame->pc;
-	sly_value code = frame->code;
-	sly_value R = frame->R;
-	frame->R = make_vector(ss, 0, 12);
-	frame->code = make_vector(ss, 0, 2);
-	frame->pc = 0;
-	vector_append(ss, frame->R, clos);
+	stack_frame *frame = NULL;
+	if (ss->frame) {
+		frame = ss->frame;
+		ss->frame = ss->eval_frame;
+		ss->frame->K = frame->K;
+		ss->frame->U = frame->U;
+	} else {
+		ss->frame = ss->eval_frame;
+		ss->frame->K = make_vector(ss, 0, 12);
+		ss->frame->U = make_vector(ss, 1, 1);
+		vector_set(ss->frame->U, 0, ss->cc->globals);
+	}
+	vector_discard_values(ss, ss->frame->code);
+	vector_discard_values(ss, ss->frame->R);
+	ss->frame->pc = 0;
+	vector_append(ss, ss->frame->R, clos);
 	while (!null_p(arglist)) {
-		vector_append(ss, frame->R, eval_expr(ss, car(arglist)));
+		vector_append(ss, ss->frame->R, eval_expr(ss, car(arglist)));
 		arglist = cdr(arglist);
 	}
-	size_t len = vector_len(frame->R);
-	vector_append(ss, frame->code, iAB(OP_CALL, 0, len, -1));
-	vector_append(ss, frame->code, iA(OP_RETURN, 0, -1));
+	size_t len = vector_len(ss->frame->R);
+	vector_append(ss, ss->frame->code, iAB(OP_CALL, 0, len, -1));
+	vector_append(ss, ss->frame->code, iA(OP_RETURN, 0, -1));
 	sly_value val = vm_run(ss, 0);
-	frame->R = R;
-	frame->code = code;
-	frame->pc = pc;
+	ss->frame = frame;
+	return val;
+}
+
+sly_value
+call_closure_no_eval(Sly_State *ss, sly_value clos, sly_value arglist)
+{
+	stack_frame *frame = NULL;
+	if (ss->frame) {
+		frame = ss->frame;
+		ss->frame = ss->eval_frame;
+		ss->frame->K = frame->K;
+		ss->frame->U = frame->U;
+	} else {
+		ss->frame = ss->eval_frame;
+		ss->frame->K = make_vector(ss, 0, 12);
+		ss->frame->U = make_vector(ss, 1, 1);
+		vector_set(ss->frame->U, 0, ss->cc->globals);
+	}
+	vector_discard_values(ss, ss->frame->code);
+	vector_discard_values(ss, ss->frame->R);
+	ss->frame->pc = 0;
+	vector_append(ss, ss->frame->R, clos);
+  	while (!null_p(arglist)) {
+		vector_append(ss, ss->frame->R, car(arglist));
+		arglist = cdr(arglist);
+	}
+	size_t len = vector_len(ss->frame->R);
+	vector_append(ss, ss->frame->code, iAB(OP_CALL, 0, len, -1));
+	vector_append(ss, ss->frame->code, iA(OP_RETURN, 0, -1));
+	sly_value val = vm_run(ss, 0);
 	ss->frame = frame;
 	return val;
 }

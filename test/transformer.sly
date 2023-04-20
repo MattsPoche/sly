@@ -1,0 +1,14 @@
+(define-syntax (set2! form)
+  (define fst (car form))
+  (define snd (car (cdr form)))
+  (define expr (car (cdr (cdr form))))
+  (list
+   #'begin
+   (list #'set! fst expr)
+   (list #'set! snd expr)))
+
+(define foo #f)
+(define bar #f)
+(set2! foo bar (+ 69 420))
+(display "foo: ")(display foo)(display "\n")
+(display "bar: ")(display bar)(display "\n")

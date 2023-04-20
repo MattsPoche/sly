@@ -4,6 +4,8 @@
 #define OPCODES_INCLUDE_INLINE 1
 #include "opcodes.h"
 #include "sly_compile.h"
+#include "eval.h"
+#include "sly_vm.h"
 #include "sly_alloc.h"
 
 /* TODO [ ] Associate syntactic info with opcodes (semi-done)
@@ -33,7 +35,6 @@ enum kw {
 
 enum symbol_type {
 	sym_datum = 0,
-	sym_syntax,
 	sym_keyword,
 	sym_variable,
 	sym_arg,
@@ -47,7 +48,8 @@ union symbol_properties {
 	struct {
 		u8 type;
 		u8 islocal;
-		u8 _pad[2];
+		u8 issyntax;
+		u8 _pad[1];
 		i32 reg;
 	} p;
 };
@@ -163,6 +165,22 @@ symbol_lookup_props(Sly_State *ss, sly_value sym, u32 *level, sly_value *uplist)
 	return SLY_NULL;
 }
 
+static sly_value
+lookup_macro(Sly_State *ss, sly_value sym)
+{
+	struct scope *scope = ss->cc->cscope;
+	sly_value entry;
+	while (scope) {
+		entry = dictionary_entry_ref(scope->macros, sym);
+		if (!slot_is_free(entry)) {
+			return cdr(entry);
+		}
+		scope = scope->parent;
+	}
+	sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol");
+	return SLY_NULL;
+}
+
 static size_t
 intern_constant(Sly_State *ss, sly_value value)
 {
@@ -194,16 +212,6 @@ make_scope(Sly_State *ss)
 }
 
 static sly_value
-make_syntax_transformer(Sly_State *ss, sly_value literals, sly_value clauses)
-{
-	syntax_transformer *st = gc_alloc(ss, sizeof(*st));
-	st->h.type = tt_syntax_transformer;
-	st->literals = literals;
-	st->clauses = clauses;
-	return (sly_value)st;
-}
-
-static sly_value
 init_symtable(Sly_State *ss)
 {
 	union symbol_properties prop = { .p = { .type = sym_keyword } };
@@ -217,7 +225,7 @@ init_symtable(Sly_State *ss)
 }
 
 int
-comp_define(Sly_State *ss, sly_value form, int reg)
+comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 { /* (define <variable> <expr>)
    * or
    * (define (<procedure> . <params>)
@@ -257,6 +265,21 @@ comp_define(Sly_State *ss, sly_value form, int reg)
 		if (pair_p(datum) || symbol_p(datum)) {
 			dictionary_set(ss, globals, var, SLY_VOID);
 			comp_expr(ss, car(form), reg);
+			if (is_syntax) {
+				st_prop.p.issyntax = 1;
+				dictionary_set(ss, symtable, var, st_prop.v);
+				size_t len = vector_len(proto->K);
+				sly_value p = vector_ref(proto->K, len-1);
+				if (ss->eval_frame == NULL) {
+					ss->eval_frame = make_eval_stack(ss);
+					ss->eval_frame->U = make_vector(ss, 1, 1);
+					vector_set(ss->eval_frame->U, 0, globals);
+				}
+				ss->frame = ss->eval_frame;
+				sly_value clos = form_closure(ss, p);
+				ss->eval_frame = ss->frame;
+				dictionary_set(ss, cc->cscope->macros, var, clos);
+			}
 			if ((size_t)reg + 1 >= proto->nregs) proto->nregs = reg + 2;
 			vector_append(ss, proto->code, iABx(OP_LOADK, reg + 1, st_prop.p.reg, line_number));
 			vector_append(ss, proto->code, iABC(OP_SETUPDICT, 0, reg + 1, reg, line_number));
@@ -273,6 +296,19 @@ comp_define(Sly_State *ss, sly_value form, int reg)
 		st_prop.p.type = sym_variable;
 		dictionary_set(ss, symtable, var, st_prop.v);
 		comp_expr(ss, car(form), st_prop.p.reg);
+		if (is_syntax) {
+			st_prop.p.issyntax = 1;
+			dictionary_set(ss, symtable, var, st_prop.v);
+			size_t len = vector_len(proto->K);
+			sly_value p = vector_ref(proto->K, len-1);
+			if (ss->eval_frame == NULL) {
+				ss->eval_frame = make_eval_stack(ss);
+			}
+			ss->frame = ss->eval_frame;
+			sly_value clos = form_closure(ss, p);
+			ss->eval_frame = ss->frame;
+			dictionary_set(ss, cc->cscope->macros, var, clos);
+		}
 		/* end of definition */
 		if (!null_p(cdr(form))) {
 			sly_raise_exception(ss, EXC_COMPILE, "Compile Error malformed define");
@@ -381,9 +417,6 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 			RESOLVE_UPVAL();
 		}
 		switch ((enum symbol_type)st_prop.p.type) {
-		case sym_syntax: {
-			sly_raise_exception(ss, EXC_COMPILE, "Unexpected keyword");
-		} break;
 		case sym_variable: {
 			return st_prop.p.reg;
 		} break;
@@ -453,6 +486,18 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 	sly_value head = car(form);
 	syntax *s = GET_PTR(head);
 	form = cdr(form);
+	if (symbol_p(s->datum)) {
+		u32 level = 0;
+		sly_value uplist = SLY_NULL;
+		union symbol_properties st_prop;
+		st_prop.v = symbol_lookup_props(ss, s->datum, &level, &uplist);
+		if (st_prop.p.issyntax) {
+			/* call macro */
+			sly_value macro = lookup_macro(ss, s->datum);
+			form = call_closure_no_eval(ss, macro, cons(ss, form, SLY_NULL));
+			return comp_expr(ss, form, reg);
+		}
+	}
 	int start = reg;
 	int reg2 = comp_expr(ss, head, reg);
 	if (reg2 != -1 && reg2 != reg) {
@@ -566,7 +611,7 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 		switch ((enum kw)kw) {
 		case kw_define: {
 			form = cdr(form);
-			reg = comp_define(ss, form, reg);
+			reg = comp_define(ss, form, reg, 0);
 		} break;
 		case kw_lambda: {
 			form = cdr(form);
@@ -593,13 +638,13 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			}
 		} break;
 		case kw_quasiquote: {
-			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"quasiquote\" unemplemented");
+			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"quasiquote\" unimplemented");
 		} break;
 		case kw_unquote: {
-			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"unquote\" unemplemented");
+			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"unquote\" unimplemented");
 		} break;
 		case kw_unquote_splice: {
-			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"unquote-splice\" unemplemented");
+			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"unquote-splice\" unimplemented");
 		} break;
 		case kw_syntax_quote: {
 			syntax *s = GET_PTR(stx);
@@ -613,13 +658,13 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			vector_append(ss, proto->code, iABx(OP_LOADK, reg, kreg, s->tok.ln));
 		} break;
 		case kw_syntax_quasiquote: {
-			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"syntax-quasiquote\" unemplemented");
+			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"syntax-quasiquote\" unimplemented");
 		} break;
 		case kw_syntax_unquote: {
-			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"syntax-unquote\" unemplemented");
+			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"syntax-unquote\" unimplemented");
 		} break;
 		case kw_syntax_unquote_splice: {
-			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"syntax-unquote-splice\" unemplemented");
+			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"syntax-unquote-splice\" unimplemented");
 		} break;
 		case kw_begin: {
 			form = cdr(form);
@@ -637,21 +682,7 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 		} break;
 		case kw_define_syntax: {
 			form = cdr(form);
-			sly_value name = syntax_to_datum(car(form));
-			form = cdr(form);
-			sly_value literals = car(form);
-			sly_value clauses = cdr(form);
-			union symbol_properties st_prop = {0};
-			st_prop.p.islocal = 1;
-			st_prop.p.type = sym_syntax;
-			dictionary_set(ss,
-						   cc->cscope->symtable,
-						   name,
-						   st_prop.v);
-			dictionary_set(ss,
-						   cc->cscope->macros,
-						   name,
-						   make_syntax_transformer(ss, literals, clauses));
+			reg = comp_define(ss, form, reg, 1);
 		} break;
 		case kw_call_with_continuation: /* fallthrough intended */
 		case kw_call_cc: {

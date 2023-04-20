@@ -56,6 +56,7 @@ typedef struct _sly_state {
 	char *source_code;
 	struct compile *cc;
 	struct _stack_frame *frame;
+	struct _stack_frame *eval_frame;
 	sly_value proto;
 	sly_value interned;
 	jmp_buf jbuf;
@@ -94,9 +95,8 @@ enum type_tag {
 	tt_cclosure,			// 11
 	tt_continuation,		// 12
 	tt_syntax,				// 13
-	tt_syntax_transformer,	// 14
-	tt_scope,				// 15
-	tt_stack_frame,			// 16
+	tt_scope,				// 14
+	tt_stack_frame,			// 15
 };
 
 #define OBJ_HEADER gc_object h
@@ -196,12 +196,6 @@ typedef struct _syntax {
 	sly_value datum;
 } syntax;
 
-typedef struct _syntax_transformer {
-	OBJ_HEADER;
-	sly_value literals;
-	sly_value clauses;
-} syntax_transformer;
-
 void sly_assert(int p, char *msg);
 void sly_raise_exception(Sly_State *ss, int excpt, char *msg);
 void sly_display(sly_value v, int lit);
@@ -236,6 +230,7 @@ void vector_set(sly_value v, size_t idx, sly_value value);
 size_t vector_len(sly_value v);
 void vector_append(Sly_State *ss, sly_value v, sly_value value);
 sly_value vector_pop(Sly_State *ss, sly_value v);
+sly_value vector_discard_values(Sly_State *ss, sly_value v);
 sly_value make_uninterned_symbol(Sly_State *ss, char *cstr, size_t len);
 sly_value make_symbol(Sly_State *ss, char *cstr, size_t len);
 sly_value gensym(Sly_State *ss);

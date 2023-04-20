@@ -131,13 +131,6 @@ traverse_syntax(Sly_State *ss, syntax *stx)
 }
 
 static void
-traverse_syntax_transformer(Sly_State *ss, syntax_transformer *st)
-{
-	mark_gray(ss, GET_PTR(st->literals));
-	mark_gray(ss, GET_PTR(st->clauses));
-}
-
-static void
 traverse_continuation(Sly_State *ss, continuation *cont)
 {
 	if (cont->frame) {
@@ -178,9 +171,6 @@ traverse_object(Sly_State *ss, gc_object *obj)
 	case tt_syntax:
 		traverse_syntax(ss, (syntax *)obj);
 		break;
-	case tt_syntax_transformer:
-		traverse_syntax_transformer(ss, (syntax_transformer *)obj);
-		break;
 	case tt_scope:
 		traverse_scope(ss, (struct scope *)obj);
 		break;
@@ -206,6 +196,7 @@ static void
 mark_roots(Sly_State *ss)
 {
 	traverse_object(ss, (gc_object *)ss->frame);
+	traverse_object(ss, (gc_object *)ss->eval_frame);
 	traverse_object(ss, (gc_object *)ss->proto);
 	traverse_object(ss, (gc_object *)ss->interned);
 	traverse_object(ss, (gc_object *)ss->cc->globals);
@@ -238,9 +229,6 @@ free_object(Sly_State *ss, gc_object *obj)
 	} break;
 	case tt_syntax: {
 		ss->gc.bytes -= sizeof(syntax);
-	} break;
-	case tt_syntax_transformer: {
-		ss->gc.bytes -= sizeof(syntax_transformer);
 	} break;
 	case tt_scope: {
 		ss->gc.bytes -= sizeof(struct scope);
