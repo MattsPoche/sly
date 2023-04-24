@@ -1,5 +1,3 @@
-;; -*- mode: scheme; -*-
-
 (define-syntax (set2! form)
   (define fst (car form))
   (define snd (car (cdr form)))

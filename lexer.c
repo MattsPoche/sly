@@ -24,13 +24,14 @@ static char retok[] =
 	"|^([[({])"													// 10
 	"|^([])}])"													// 11
 	"|^(\\.)"RE_SEP												// 12
-	"|^(#\\()."      										    // 13
-	"|^(\"([^\"]|\\\\.)*\")"RE_SEP								// 14
-	"|^(#t|#f)"RE_SEP											// 15
-	"|^(-?[0-9]+\\.[0-9]+)"RE_SEP								// 16
-	"|^(#[xX][0-9A-Fa-f]+)"RE_SEP								// 17
-	"|^(-?[0-9]+)"RE_SEP										// 18
-	"|^([^][(){};'`\"#,[:space:]][^][(){};[:space:]]*)"RE_SEP;	// 19
+	"|^(#\\()"      										    // 13
+	"|^(λ|\\\\)"RE_SEP											// 14
+	"|^(\"([^\"]|\\\\.)*\")"RE_SEP								// 15
+	"|^(#t|#f)"RE_SEP											// 16
+	"|^(-?[0-9]+\\.[0-9]+)"RE_SEP								// 17
+	"|^(#[xX][0-9A-Fa-f]+)"RE_SEP								// 18
+	"|^(-?[0-9]+)"RE_SEP										// 19
+	"|^([^][(){};'`\"#,[:space:]][^][(){};[:space:]]*)"RE_SEP;	// 20
 
 static regmatch_t pmatch[tok_max] = {0};
 static regex_t rexpr = {0};
@@ -61,6 +62,7 @@ tok_to_string(enum token t)
 	case tok_vector: return "vector";
 	case tok_dot: return "dot";
 	case tok_bool: return "bool";
+	case tok_lambda: return "λ";
 	case tok_string: return "string";
 	case tok_float: return "float";
 	case tok_hex: return "hex";
@@ -77,6 +79,7 @@ tok_to_string(enum token t)
 	case tok__nocap5: return "nocapture5";
 	case tok__nocap6: return "nocapture6";
 	case tok__nocap7: return "nocapture7";
+	case tok__nocap8: return "nocapture8";
 	default: return NULL;
 	}
 }

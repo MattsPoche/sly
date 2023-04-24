@@ -129,6 +129,7 @@ build_list:
 		}
 	} break;
 	case tok_rbracket: {
+		printf("DEBUG:\n%s\n", &cstr[t.so]);
 		sly_raise_exception(ss, EXC_COMPILE, "Parse Error mismatched bracket");
 	} break;
 	case tok_vector: {
@@ -138,6 +139,9 @@ build_list:
 	} break;
 	case tok_dot: {
 		sly_raise_exception(ss, EXC_COMPILE, "Parse Error bad dot");
+	} break;
+	case tok_lambda: {
+		return make_syntax(ss, t, cstr_to_symbol("lambda"));
 	} break;
 	case tok_string: {
 		char *s = escape_string(ss, &cstr[t.so+1], t.eo - t.so - 2);
@@ -183,7 +187,8 @@ build_list:
 	case tok__nocap4:
 	case tok__nocap5:
 	case tok__nocap6:
-	case tok__nocap7: {
+	case tok__nocap7:
+	case tok__nocap8: {
 		sly_raise_exception(ss, EXC_COMPILE, "Parse Error undefined token (nocapture0)");
 	} break;
 	}

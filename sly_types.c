@@ -1,6 +1,7 @@
 #include <time.h>
 #include "sly_types.h"
 #include "sly_alloc.h"
+#include "opcodes.h"
 
 #define DICT_INIT_SIZE 32
 #define DICT_LOAD_FACTOR 0.70
@@ -487,6 +488,12 @@ vector_set(sly_value v, size_t idx, sly_value value)
 {
 	sly_assert(vector_p(v), "Type Error: Expected vector");
 	vector *vec = GET_PTR(v);
+	if (idx >= vec->len) {
+		printf("idx :: %zu\n", idx);
+		printf("vec->len :: %zu\n", vec->len);
+		printf("vec->cap :: %zu\n", vec->cap);
+		sly_assert(0, "Error: Index out of bounds");
+	}
 	vec->elems[idx] = value;
 }
 
@@ -1020,7 +1027,16 @@ make_syntax(Sly_State *ss, token tok, sly_value datum)
 sly_value
 syntax_to_datum(sly_value syn)
 {
-	sly_assert(syntax_p(syn), "Type Error expected <syntax>");
+	if (!syntax_p(syn)) {
+		if (closure_p(syn)) {
+			closure *clos = GET_PTR(syn);
+			prototype* proto = GET_PTR(clos->proto);
+			dis_code(proto->code);
+			sly_display(proto->K, 1);
+			printf("\n");
+		}
+		sly_assert(0, "Type Error expected <syntax>");
+	}
 	syntax *s = GET_PTR(syn);
 	return s->datum;
 }

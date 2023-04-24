@@ -17,6 +17,8 @@ static int allocations = 0;
 static int net_allocations = 0;
 static size_t bytes_allocated = 0;
 
+static int debug_info = 0;
+
 void *
 sly_alloc(size_t size)
 {
@@ -74,7 +76,9 @@ sly_value
 sly_load_file(Sly_State *ss, char *file_name)
 {
 	sly_value ast = sly_read_file(ss, file_name);
-	printf("Compiling file %s ...\n", file_name);
+	if (debug_info) {
+		printf("Compiling file %s ...\n", file_name);
+	}
 	if (sly_compile(ss, ast) != 0) {
 		printf("Unable to run file %s\n", file_name);
 		return SLY_VOID;
@@ -94,8 +98,10 @@ sly_load_file(Sly_State *ss, char *file_name)
 	frame->level = 0;
 	ss->frame = frame;
 	gc_collect(ss);
-	dis_all(ss->frame, 1);
-	printf("Running file ... %s\n", file_name);
+	if (debug_info) {
+		dis_all(ss->frame, 1);
+	}
+	printf("Running file: %s\n", file_name);
 	printf("Output:\n");
 	return vm_run(ss, 1);
 }
@@ -175,19 +181,41 @@ sly_repl(Sly_State *ss)
 	}
 }
 
+char *
+next_arg(int *argc, char **argv[])
+{
+	if (argc == 0) {
+		return NULL;
+	}
+	char *arg = **argv;
+	(*argc)--;
+	(*argv)++;
+	return arg;
+}
+
 int
 main(int argc, char *argv[])
 {
 	Sly_State ss = {0};
-	if (argc > 1) {
-		for (int i = 1; i < argc; ++i) {
+	char *arg = next_arg(&argc, &argv);
+	if (argc) {
+		while (argc) {
+			arg = next_arg(&argc, &argv);
+			if (strcmp(arg, "-I") == 0) {
+				debug_info = 1;
+				continue;
+			}
 			sly_init_state(&ss);
-			sly_load_file(&ss, argv[i]);
+			sly_load_file(&ss, arg);
 			sly_free_state(&ss);
-			printf("** Allocations: %d **\n", allocations);
-			printf("** Net allocations: %d **\n", net_allocations);
-			printf("** Total bytes allocated: %zu **\n", bytes_allocated);
-			printf("** GC Total Collections: %d **\n\n", ss.gc.collections);
+			if (debug_info) {
+				printf("** Allocations: %d **\n", allocations);
+				printf("** Net allocations: %d **\n", net_allocations);
+				printf("** Total bytes allocated: %zu **\n", bytes_allocated);
+				printf("** GC Total Collections: %d **\n\n", ss.gc.collections);
+			} else {
+				printf("\n");
+			}
 		}
 	} else {
 		sly_init_state(&ss);

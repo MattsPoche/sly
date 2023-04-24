@@ -17,22 +17,24 @@ enum token {
 	tok_dot,					// 12
 	tok__nocap0,
 	tok_vector,					// 13
-	tok_string,					// 14
+	tok_lambda,					// 14
 	tok__nocap1,
-	tok__nocap2,	     		// 15
-	tok_bool,					// 16
-	tok__nocap3,
-	tok_float,					// 17
+	tok_string,					// 15
+	tok__nocap2,
+	tok__nocap3,	     		// 16
+	tok_bool,					// 17
 	tok__nocap4,
-	tok_hex,					// 18
+	tok_float,					// 18
 	tok__nocap5,
-	tok_int,					// 19
+	tok_hex,					// 19
 	tok__nocap6,
-	tok_sym,					// 20
+	tok_int,					// 20
 	tok__nocap7,
-	tok_max,					// 21
-	tok_nomatch,				// 22
-	tok_eof,					// 23
+	tok_sym,					// 21
+	tok__nocap8,
+	tok_max,					// 22
+	tok_nomatch,				// 23
+	tok_eof,					// 24
 };
 
 typedef struct _token {

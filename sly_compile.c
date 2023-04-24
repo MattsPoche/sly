@@ -15,18 +15,11 @@ enum kw {
 	kw_define = 0,
 	kw_lambda,
 	kw_quote,
-	kw_quasiquote,
-	kw_unquote,
-	kw_unquote_splice,
 	kw_syntax_quote,
-	kw_syntax_quasiquote,
-	kw_syntax_unquote,
-	kw_syntax_unquote_splice,
 	kw_begin,
 	kw_if,
 	kw_set,
 	kw_define_syntax,
-//	kw_syntax_rules,
 	kw_call_with_continuation,
 	kw_call_cc,
 	kw_include,
@@ -35,12 +28,12 @@ enum kw {
 
 enum symbol_type {
 	sym_datum = 0,
-	sym_keyword,
-	sym_variable,
-	sym_arg,
-	sym_upval,
-	sym_global,
-	sym_constant,
+	sym_keyword,	// 1
+	sym_variable,	// 2
+	sym_arg,		// 3
+	sym_upval,		// 4
+	sym_global,		// 5
+	sym_constant,	// 6
 };
 
 union symbol_properties {
@@ -96,6 +89,24 @@ union symbol_properties {
 		dictionary_set(ss, cc->cscope->symtable, datum, st_prop.v);		\
 	} while (0)
 
+#define STORE_MACRO_CLOSURE()								\
+	do {													\
+		st_prop.p.issyntax = 1;								\
+		dictionary_set(ss, symtable, var, st_prop.v);		\
+		size_t len = vector_len(proto->K);					\
+		sly_value p = vector_ref(proto->K, len-1);			\
+		if (ss->eval_frame == NULL) {						\
+			ss->eval_frame = make_eval_stack(ss);			\
+			ss->eval_frame->U = make_vector(ss, 1, 1);		\
+			vector_set(ss->eval_frame->U, 0, globals);		\
+		}													\
+		ss->frame = ss->eval_frame;							\
+		sly_value clos = form_closure(ss, p);				\
+		ss->eval_frame = ss->frame;							\
+		dictionary_set(ss, cc->cscope->macros, var, clos);	\
+	} while (0)
+
+
 static char *
 keywords(int idx)
 {
@@ -103,18 +114,11 @@ keywords(int idx)
 	case kw_define: return "define";
 	case kw_lambda: return "lambda";
 	case kw_quote: return "quote";
-	case kw_quasiquote: return "quasiquote";
-	case kw_unquote: return "unquote";
-	case kw_unquote_splice: return "unquote-splice";
 	case kw_syntax_quote: return "syntax-quote";
-	case kw_syntax_quasiquote: return "syntax-quasiquote";
-	case kw_syntax_unquote: return "syntax-unquote";
-	case kw_syntax_unquote_splice: return "syntax-unquote-splice";
 	case kw_set: return "set!";
 	case kw_begin: return "begin";
 	case kw_if: return "if";
 	case kw_define_syntax: return "define-syntax";
-//	case kw_syntax_rules: return "syntax-rules";
 	case kw_call_with_continuation: return "call-with-continuation";
 	case kw_call_cc: return "call/cc";
 	case kw_include: return "include";
@@ -161,6 +165,9 @@ symbol_lookup_props(Sly_State *ss, sly_value sym, u32 *level, sly_value *uplist)
 		}
 		scope = scope->parent;
 	}
+	printf("Undefined symbol '");
+	sly_display(sym, 1);
+	printf("\n");
 	sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol");
 	return SLY_NULL;
 }
@@ -177,6 +184,9 @@ lookup_macro(Sly_State *ss, sly_value sym)
 		}
 		scope = scope->parent;
 	}
+	printf("Undefined symbol '");
+	sly_display(sym, 1);
+	printf("\n");
 	sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol");
 	return SLY_NULL;
 }
@@ -226,11 +236,10 @@ init_symtable(Sly_State *ss, sly_value symtable)
 
 int
 comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
-{ /* (define <variable> <expr>)
-   * or
-   * (define (<procedure> . <params>)
-   *   <body> <*body> ...)
-   */
+{
+	/* TODO: Definitions should only be allowed at the top-level
+	 * or the begining of bodies.
+	 */
 	struct compile *cc = ss->cc;
 	sly_value stx = car(form);
 	syntax *syn = GET_PTR(stx);
@@ -254,9 +263,9 @@ comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 	if (!symbol_p(var)) {
 		sly_raise_exception(ss, EXC_COMPILE, "Error variable name must be a symbol");
 	}
+	sly_value globals  = cc->globals;
 	if (IS_GLOBAL(cc->cscope)) {
 		stx = car(form);
-		sly_value globals  = cc->globals;
 		sly_value datum = syntax_p(stx) ? syntax_to_datum(stx) : stx;
 		st_prop.p.islocal = 0;
 		st_prop.p.type = sym_global;
@@ -266,19 +275,7 @@ comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 			dictionary_set(ss, globals, var, SLY_VOID);
 			comp_expr(ss, car(form), reg);
 			if (is_syntax) {
-				st_prop.p.issyntax = 1;
-				dictionary_set(ss, symtable, var, st_prop.v);
-				size_t len = vector_len(proto->K);
-				sly_value p = vector_ref(proto->K, len-1);
-				if (ss->eval_frame == NULL) {
-					ss->eval_frame = make_eval_stack(ss);
-					ss->eval_frame->U = make_vector(ss, 1, 1);
-					vector_set(ss->eval_frame->U, 0, globals);
-				}
-				ss->frame = ss->eval_frame;
-				sly_value clos = form_closure(ss, p);
-				ss->eval_frame = ss->frame;
-				dictionary_set(ss, cc->cscope->macros, var, clos);
+				STORE_MACRO_CLOSURE();
 			}
 			if ((size_t)reg + 1 >= proto->nregs) proto->nregs = reg + 2;
 			vector_append(ss, proto->code, iABx(OP_LOADK, reg + 1, st_prop.p.reg, line_number));
@@ -297,17 +294,7 @@ comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 		dictionary_set(ss, symtable, var, st_prop.v);
 		comp_expr(ss, car(form), st_prop.p.reg);
 		if (is_syntax) {
-			st_prop.p.issyntax = 1;
-			dictionary_set(ss, symtable, var, st_prop.v);
-			size_t len = vector_len(proto->K);
-			sly_value p = vector_ref(proto->K, len-1);
-			if (ss->eval_frame == NULL) {
-				ss->eval_frame = make_eval_stack(ss);
-			}
-			ss->frame = ss->eval_frame;
-			sly_value clos = form_closure(ss, p);
-			ss->eval_frame = ss->frame;
-			dictionary_set(ss, cc->cscope->macros, var, clos);
+			STORE_MACRO_CLOSURE();
 		}
 		/* end of definition */
 		if (!null_p(cdr(form))) {
@@ -388,6 +375,10 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 	} else if (st_prop.p.type == sym_upval) {
 		vector_append(ss, proto->code, iAB(OP_SETUPVAL,
 										   st_prop.p.reg + 1 + proto->nargs,
+										   reg, line_number));
+	} else if (st_prop.p.type == sym_arg) {
+		vector_append(ss, proto->code, iAB(OP_SETUPVAL,
+										   st_prop.p.reg,
 										   reg, line_number));
 	}
 	if (!null_p(cdr(form))) {
@@ -642,15 +633,6 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 				vector_append(ss, proto->code, iABx(OP_LOADK, reg, kreg, s->tok.ln));
 			}
 		} break;
-		case kw_quasiquote: {
-			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"quasiquote\" unimplemented");
-		} break;
-		case kw_unquote: {
-			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"unquote\" unimplemented");
-		} break;
-		case kw_unquote_splice: {
-			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"unquote-splice\" unimplemented");
-		} break;
 		case kw_syntax_quote: {
 			syntax *s = GET_PTR(stx);
 			form = cdr(form);
@@ -660,16 +642,8 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			form = car(form);
 			prototype *proto = GET_PTR(ss->cc->cscope->proto);
 			int kreg = intern_constant(ss, form);
+			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 			vector_append(ss, proto->code, iABx(OP_LOADK, reg, kreg, s->tok.ln));
-		} break;
-		case kw_syntax_quasiquote: {
-			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"syntax-quasiquote\" unimplemented");
-		} break;
-		case kw_syntax_unquote: {
-			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"syntax-unquote\" unimplemented");
-		} break;
-		case kw_syntax_unquote_splice: {
-			sly_raise_exception(ss, EXC_COMPILE, "Keyword \"syntax-unquote-splice\" unimplemented");
 		} break;
 		case kw_begin: {
 			form = cdr(form);
@@ -849,6 +823,29 @@ cnot(Sly_State *ss, sly_value args)
 }
 
 sly_value
+cnull_p(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	return ctobool(null_p(vector_ref(args, 0)));
+}
+
+sly_value
+cpair_p(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	return ctobool(pair_p(vector_ref(args, 0)));
+}
+
+sly_value
+cequal_p(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	sly_value v1 = vector_ref(args, 0);
+	sly_value v2 = vector_ref(args, 1);
+	return ctobool(sly_equal(v1, v2));
+}
+
+sly_value
 cnum_noteq(Sly_State *ss, sly_value args)
 {
 	vector_set(args, 0, cnum_eq(ss, args));
@@ -917,6 +914,12 @@ cgensym(Sly_State *ss, sly_value args)
 }
 
 sly_value
+cmake_syntax(Sly_State *ss, sly_value args)
+{
+	return make_syntax(ss, (token){0}, vector_ref(args, 0));
+}
+
+sly_value
 cmake_vector(Sly_State *ss, sly_value args)
 {
 	sly_value list = vector_ref(args, 0);
@@ -977,6 +980,9 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN(">=", cnum_geq, 2, 0);
 	ADD_BUILTIN("/=", cnum_noteq, 2, 0);
 	ADD_BUILTIN("not", cnot, 1, 0);
+	ADD_BUILTIN("null?", cnull_p, 1, 0);
+	ADD_BUILTIN("pair?", cpair_p, 1, 0);
+	ADD_BUILTIN("equal?", cequal_p, 2, 0);
 	ADD_BUILTIN("cons", ccons, 2, 0);
 	ADD_BUILTIN("car", ccar, 1, 0);
 	ADD_BUILTIN("cdr", ccdr, 1, 0);
@@ -985,6 +991,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("display", cdisplay, 1, 0);
 	ADD_BUILTIN("list", clist, 0, 1);
 	ADD_BUILTIN("gensym", cgensym, 0, 0);
+	ADD_BUILTIN("make-syntax", cmake_syntax, 1, 0);
 	ADD_BUILTIN("make-vector", cmake_vector, 0, 1);
 	ADD_BUILTIN("vector-ref", cvector_ref, 2, 0);
 	ADD_BUILTIN("vector-set", cvector_set, 3, 0);

@@ -104,6 +104,14 @@ form_closure(Sly_State *ss, sly_value _proto)
 	sly_value _clos = make_closure(ss, _proto);
 	closure *clos = GET_PTR(_clos);
 	prototype *proto = GET_PTR(_proto);
+	/*
+	printf("clos->upvals :: ");
+	sly_display(clos->upvals, 1);
+	printf("\n");
+	printf("ss->frame->U :: ");
+	sly_display(ss->frame->U, 1);
+	printf("\n");
+	*/
 	vector_set(clos->upvals, 0, vector_ref(ss->frame->U, 0));
 	size_t len = vector_len(proto->uplist);
 	for (size_t i = 0; i < len; ++i) {
@@ -279,8 +287,9 @@ vm_run(Sly_State *ss, int run_gc)
 				ss->frame->pc = cc->pc;
 				vector_set(ss->frame->R, cc->ret_slot, arg);
 			} else {
-				printf("Register dump:\n");
-				sly_display(ss->frame->R, 1);
+				printf("pc :: %zu\n", ss->frame->pc-1);
+				dis_all(ss->frame, 1);
+				sly_display(val, 1);
 				printf("\n");
 				sly_assert(0, "Type Error expected procedure");
 			}
