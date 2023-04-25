@@ -163,7 +163,7 @@ sly_display(sly_value v, int lit)
 		printf("#dict(");
 		for (size_t i = 0; i < vec->cap; ++i) {
 			sly_value v = vec->elems[i];
-			if (slot_is_free(v)) {
+			if (!slot_is_free(v)) {
 				sly_display(vec->elems[i], 1);
 			}
 			printf(" ");
@@ -171,13 +171,26 @@ sly_display(sly_value v, int lit)
 		printf("\b)");
 	} else if (closure_p(v)) {
 		printf("#<closure@%p>", GET_PTR(v));
+		closure *clos = GET_PTR(v);
+		sly_display(clos->proto, 1);
 	} else if (cclosure_p(v)) {
 		printf("#<cclosure@%p>", GET_PTR(v));
+	} else if (upvalue_p(v)) {
+		upvalue *uv = GET_PTR(v);
+		printf("#<upvalue: ");
+		if (uv->isclosed) {
+			sly_display(uv->u.val, 1);
+		} else {
+			printf(" #<ref ");
+			sly_display(*uv->u.ptr, 1);
+			printf("> ");
+		}
+		printf("> ");
+
 	} else {
-		printf("#<UNEMPLEMENTED %zu, %d>", v & TAG_MASK, TYPEOF(v));
+		printf("#<UNEMPLEMENTED %#lx, %zu, %d>", v, v & TAG_MASK, TYPEOF(v));
 	}
 }
-
 
 u64
 sly_hash(sly_value v)
@@ -587,10 +600,10 @@ make_symbol(Sly_State *ss, char *cstr, size_t len)
 sly_value
 gensym(Sly_State *ss)
 {
-	static int sym_num = 100;
+	static int sym_num = 0;
 	char buf[255] = {0};
-	snprintf(buf, sizeof(buf), "# g%d", sym_num++);
-	return make_symbol(ss, buf, strlen(buf));
+	snprintf(buf, sizeof(buf), "__gensym%d__", sym_num++);
+	return make_uninterned_symbol(ss, buf, strlen(buf));
 }
 
 void
@@ -1020,7 +1033,7 @@ make_syntax(Sly_State *ss, token tok, sly_value datum)
 	stx->h.type = tt_syntax;
 	stx->tok = tok;
 	stx->datum = datum;
-	stx->scope = NULL;
+	stx->lex_info = make_vector(ss, 0, 4);
 	return (sly_value)stx;
 }
 
@@ -1170,4 +1183,95 @@ dictionary_remove(sly_value d, sly_value key)
 	sly_assert(!slot_is_free(dict->elems[idx]), "Dictionary Key Error key not found");
 	set_car(dict->elems[idx], SLY_NULL); // null key indicates slot is free
 	dict->len--;
+}
+
+sly_value
+upvalue_next(sly_value _uv)
+{
+	sly_assert(upvalue_p(_uv), "Type Error expected <upvalue>");
+	upvalue *uv = GET_PTR(_uv);
+	return uv->next;
+}
+
+void
+close_upvalue(sly_value _uv)
+{
+	sly_assert(upvalue_p(_uv), "Type Error expected <upvalue>");
+	upvalue *uv = GET_PTR(_uv);
+	if (!uv->isclosed) {
+		uv->isclosed = 1;
+		uv->u.val = *uv->u.ptr;
+	}
+}
+
+static sly_value
+find_open_upvalue(closure *clos, sly_value *ptr)
+{
+	sly_value uv = clos->oups;
+	while (upvalue_p(uv)) {
+		upvalue *u = GET_PTR(uv);
+		if (u->u.ptr == ptr) {
+			return uv;
+		}
+		uv = upvalue_next(uv);
+	}
+	return SLY_VOID;
+}
+
+sly_value
+make_closed_upvalue(Sly_State *ss, sly_value val)
+{
+	upvalue *uv = gc_alloc(ss, sizeof(*uv));
+	*uv = (upvalue){0};
+	uv->h.type = tt_upvalue;
+	uv->isclosed = 1;
+	uv->u.val = val;
+	return (sly_value)uv;
+}
+
+sly_value
+make_open_upvalue(Sly_State *ss, closure *clos, sly_value *ptr)
+{
+	sly_value _uv = find_open_upvalue(clos, ptr);
+	if (upvalue_p(_uv)) {
+		return _uv;
+	}
+	upvalue *uv = gc_alloc(ss, sizeof(*uv));
+	uv->h.type = tt_upvalue;
+	uv->isclosed = 0;
+	uv->u.ptr = ptr;
+	uv->next = clos->oups;
+	clos->oups = (sly_value)uv;
+	return clos->oups;
+}
+
+sly_value
+upvalue_get(sly_value uv)
+{
+	sly_assert(upvalue_p(uv), "Type Error expected <upvalue>");
+	upvalue *u = GET_PTR(uv);
+	if (u->isclosed) {
+		return u->u.val;
+	}
+	return *u->u.ptr;
+}
+
+void
+upvalue_set(sly_value uv, sly_value value)
+{
+	sly_assert(upvalue_p(uv), "Type Error expected <upvalue>");
+	upvalue *u = GET_PTR(uv);
+	if (u->isclosed) {
+		u->u.val = value;
+	} else {
+		*u->u.ptr = value;
+	}
+}
+
+int
+upvalue_isclosed(sly_value uv)
+{
+	sly_assert(upvalue_p(uv), "Type Error expected <upvalue>");
+	upvalue *u = GET_PTR(uv);
+	return u->isclosed;
 }

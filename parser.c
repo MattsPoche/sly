@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <errno.h>
 #include "sly_types.h"
 #include "lexer.h"
 #include "parser.h"
@@ -224,6 +225,10 @@ sly_value
 parse_file(Sly_State *ss, char *file_path, char **contents)
 {
 	FILE *file = fopen(file_path, "r");
+	if (file == NULL) {
+		fprintf(stderr, "%s\n", strerror(errno));
+		sly_raise_exception(ss, EXC_COMPILE, "Error unable to open source file");
+	}
 	size_t size = get_file_size(file);
 	char *str = MALLOC(size+1);
 	assert(str != NULL);

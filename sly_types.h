@@ -13,7 +13,7 @@ typedef uintptr_t sly_value;
 #define st_ptr   0x0
 #define st_pair  0x1
 #define st_imm   0x2
-#define st_ref   0x3
+// #define st_ref   0x3
 #define st_bool  0x4
 #define TAG_MASK 0x7
 
@@ -81,22 +81,23 @@ union imm_value {
 };
 
 enum type_tag {
-	tt_pair,				// 0
-	tt_byte,				// 1
-	tt_int,					// 2
-	tt_float,				// 3
-	tt_symbol,				// 4
-	tt_byte_vector,			// 5
-	tt_vector,				// 6
-	tt_string,				// 7
-	tt_dictionary,			// 8
-	tt_prototype,			// 9
-	tt_closure,				// 10
-	tt_cclosure,			// 11
-	tt_continuation,		// 12
-	tt_syntax,				// 13
-	tt_scope,				// 14
-	tt_stack_frame,			// 15
+	tt_pair,			// 0
+	tt_byte,			// 1
+	tt_int,				// 2
+	tt_float,			// 3
+	tt_symbol,			// 4
+	tt_byte_vector,		// 5
+	tt_vector,			// 6
+	tt_string,			// 7
+	tt_dictionary,		// 8
+	tt_prototype,		// 9
+	tt_closure,			// 10
+	tt_cclosure,		// 11
+	tt_upvalue,			// 12
+	tt_continuation,	// 13
+	tt_syntax,			// 14
+	tt_scope,			// 15
+	tt_stack_frame,		// 16
 };
 
 #define OBJ_HEADER gc_object h
@@ -156,10 +157,21 @@ typedef struct _proto {
 	int has_varg;       // has variable argument
 } prototype;
 
+typedef struct _upvalue {
+	OBJ_HEADER;
+	sly_value next;
+	int isclosed;
+	union {
+		sly_value *ptr;
+		sly_value val;
+	} u;
+} upvalue;
+
 typedef struct _clos {
 	OBJ_HEADER;
 	sly_value upvals; // captured values
 	sly_value proto;  // <prototype>
+	sly_value oups;
 	size_t arg_idx;   // position in upvals where args are stored
 } closure;
 
@@ -175,7 +187,7 @@ typedef sly_value (*cfunc)(Sly_State *ss, sly_value args);
 typedef struct _cclos {
 	OBJ_HEADER;
 	size_t nargs; // <vector> arglist
-	cfunc fn;       // pointer to c function
+	cfunc fn;     // pointer to c function
 	int has_varg;
 } cclosure;
 
@@ -192,8 +204,8 @@ struct scope {
 typedef struct _syntax {
 	OBJ_HEADER;
 	token tok;
-	struct scope *scope;
-	sly_value datum;
+	sly_value lex_info;  // <vector> each slot corrisponds to phase level
+	sly_value datum;	 // and contains it's scopes.
 } syntax;
 
 void sly_assert(int p, char *msg);
@@ -267,6 +279,14 @@ void dictionary_set(Sly_State *ss, sly_value d, sly_value key, sly_value value);
 sly_value dictionary_entry_ref(sly_value d, sly_value key);
 sly_value dictionary_ref(sly_value d, sly_value key);
 void dictionary_remove(sly_value d, sly_value key);
+void close_upvalue(sly_value _uv);
+sly_value make_open_upvalue(Sly_State *ss, closure *clos, sly_value *ptr);
+sly_value make_closed_upvalue(Sly_State *ss, sly_value val);
+int upvalue_isclosed(sly_value uv);
+sly_value upvalue_get(sly_value uv);
+void upvalue_set(sly_value uv, sly_value value);
+sly_value upvalue_next(sly_value _uv);
+
 
 #define cstr_to_symbol(cstr) (make_symbol(ss, (cstr), strlen(cstr)))
 
@@ -274,7 +294,6 @@ void dictionary_remove(sly_value d, sly_value key);
 #define null_p(v)        ((v) == SLY_NULL)
 #define void_p(v)        ((v) == SLY_VOID)
 #define ptr_p(v)         (!void_p(v) && ((v) & TAG_MASK) == st_ptr)
-#define ref_p(v)         (((v) & TAG_MASK) == st_ref)
 #define open_p(v)        ref_p(v)
 #define GET_PTR(v)       ((void *)((v) & ~TAG_MASK))
 #define TYPEOF(v)        (((gc_object *)GET_PTR(v))->type)
@@ -290,9 +309,31 @@ void dictionary_remove(sly_value d, sly_value key);
 #define prototype_p(v)   (ptr_p(v) && TYPEOF(v) == tt_prototype)
 #define closure_p(v)     (ptr_p(v) && TYPEOF(v) == tt_closure)
 #define cclosure_p(v)    (ptr_p(v) && TYPEOF(v) == tt_cclosure)
+#define upvalue_p(v)     (ptr_p(v) && TYPEOF(v) == tt_upvalue)
 #define continuation_p(v) (ptr_p(v) && TYPEOF(v) == tt_continuation)
 #define syntax_p(v)      (ptr_p(v) && TYPEOF(v) == tt_syntax)
 #define heap_obj_p(v)    (ptr_p(v) || pair_p(v))
+
+static inline int
+expression_p(sly_value val)
+{
+	if (syntax_p(val)) {
+		syntax *stx = GET_PTR(val);
+		return pair_p(stx->datum);
+	}
+	return 0;
+}
+
+static inline int
+identifier_p(sly_value val)
+{
+	if (syntax_p(val)) {
+		syntax *stx = GET_PTR(val);
+		return symbol_p(stx->datum);
+	}
+	return 0;
+}
+
 
 static inline int
 int_p(sly_value val)

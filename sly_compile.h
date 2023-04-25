@@ -4,10 +4,8 @@
 union uplookup {
 	sly_value v;
 	struct {
-		u32 level;  /* scope level */
 		u8 isup;    /* points to upval (or function arg) */
 		u8 reg;     /* register */
-		u8 _pad[2];
 	} u;
 };
 

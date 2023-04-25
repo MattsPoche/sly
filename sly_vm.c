@@ -7,23 +7,10 @@
 #define get_const(i)    vector_ref(ss->frame->K, (i))
 #define get_reg(i)      vector_ref(ss->frame->R, (i))
 #define set_reg(i, v)   vector_set(ss->frame->R, (i), (v))
-#define get_upval(i)    vector_ref(ss->frame->U, (i))
-#define set_upval(i, v) vector_set(ss->frame->U, (i), (v))
-#define SET_FRAME_UPVALUES()											\
-	do {																\
-		nframe->U = copy_vector(ss, clos->upvals);						\
-		vector *upvec = GET_PTR(clos->upvals);							\
-		size_t upidx = clos->arg_idx + proto->nargs;					\
-		size_t len = vector_len(nframe->U);								\
-		for (size_t i = upidx; i < len; ++i) {							\
-			if (!ref_p(vector_ref(nframe->U, i))) {						\
-				sly_value ref = (sly_value)((sly_value *)(&upvec->elems[i])); \
-				ref = (ref & ~TAG_MASK) | st_ref;						\
-				vector_set(nframe->U, i, ref);							\
-			}															\
-		}																\
-	} while (0)
+#define get_upval(i)    upvalue_get(vector_ref(ss->frame->U, (i)))
+#define set_upval(i, v) upvalue_set(vector_ref(ss->frame->U, (i)), (v))
 
+#if 0
 static inline sly_value
 capture_value(stack_frame *frame, union uplookup upinfo)
 {
@@ -46,55 +33,22 @@ capture_value(stack_frame *frame, union uplookup upinfo)
 	sly_assert(0, "Error value not found");
 	return SLY_NULL;
 }
+#endif
 
-static inline int
-is_ref_inframe(stack_frame *frame, sly_value *ref)
-{
-	vector *ups = GET_PTR(frame->U);
-	sly_value *up_start = ups->elems;
-	sly_value *up_end = &ups->elems[ups->len];
-	sly_value *cl_start = NULL;
-	sly_value *cl_end = NULL;
-	if (!null_p(frame->clos)) {
-		closure *clos = GET_PTR(frame->clos);
-		ups = GET_PTR(clos->upvals);
-		cl_start = ups->elems;
-		cl_end = &ups->elems[ups->len];
-	}
-	vector *regs = GET_PTR(frame->R);
-	sly_value *reg_start = regs->elems;
-	sly_value *reg_end = &regs->elems[ups->len];
-	return (ref >= up_start && ref < up_end)
-		|| (ref >= cl_start && ref < cl_end)
-		|| (ref >= reg_start && ref < reg_end);
-}
-
-static inline void
+static void
 close_upvalues(stack_frame *frame)
 { /* If any closures are present on the stack,
    * check the upvalues. If the upvalue is a reference
    * that refers to a slot in the frame's upvalues or
    * registers, close the upvalue.
    */
-	size_t rc = vector_len(frame->R);
-	for (size_t i = 0; i < rc; ++i) {
-		sly_value _clos = vector_ref(frame->R, i);
-		if (closure_p(_clos)) {
-			closure *clos = GET_PTR(_clos);
-			prototype *proto = GET_PTR(clos->proto);
-			size_t upidx = clos->arg_idx + proto->nargs;
-			sly_value upvals = clos->upvals;
-			size_t len = vector_len(upvals);
-			for (size_t j = upidx; j < len; ++j) {
-				sly_value uv = vector_ref(upvals, j);
-				if (ref_p(uv)) {
-					sly_value *ref = GET_PTR(uv);
-					if (is_ref_inframe(frame, ref)) {
-						vector_set(upvals, j, *ref); // close upvalue;
-					}
-				}
-			}
-		}
+	UNUSED(frame);
+	return;
+	closure *clos = GET_PTR(frame->clos);
+	sly_value uv = clos->oups;
+	while (upvalue_p(uv)) {
+		close_upvalue(uv);
+		uv = upvalue_next(uv);
 	}
 }
 
@@ -104,21 +58,19 @@ form_closure(Sly_State *ss, sly_value _proto)
 	sly_value _clos = make_closure(ss, _proto);
 	closure *clos = GET_PTR(_clos);
 	prototype *proto = GET_PTR(_proto);
-	/*
-	printf("clos->upvals :: ");
-	sly_display(clos->upvals, 1);
-	printf("\n");
-	printf("ss->frame->U :: ");
-	sly_display(ss->frame->U, 1);
-	printf("\n");
-	*/
 	vector_set(clos->upvals, 0, vector_ref(ss->frame->U, 0));
 	size_t len = vector_len(proto->uplist);
 	for (size_t i = 0; i < len; ++i) {
-		sly_value upi = vector_ref(proto->uplist, i);
 		union uplookup upinfo;
-		upinfo.v = upi;
-		sly_value uv = capture_value(ss->frame, upinfo);
+		upinfo.v = vector_ref(proto->uplist, i);
+		sly_value uv;
+		vector *ups =  GET_PTR(ss->frame->U);
+		vector *regs = GET_PTR(ss->frame->R);
+		if (upinfo.u.isup) {
+			uv = ups->elems[upinfo.u.reg];
+		} else {
+			uv = make_open_upvalue(ss, clos, &regs->elems[upinfo.u.reg]);
+		}
 		vector_set(clos->upvals, i + 1 + proto->nargs, uv);
 	}
 	return _clos;
@@ -173,24 +125,12 @@ vm_run(Sly_State *ss, int run_gc)
 		case OP_GETUPVAL: {
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
-			sly_value u = get_upval(b);
-			if (ref_p(u)) {
-				sly_value *ref = GET_PTR(u);
-				set_reg(a, *ref);
-			} else {
-				set_reg(a, u);
-			}
+			set_reg(a, get_upval(b));
 		} break;
 		case OP_SETUPVAL: {
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
-			sly_value u = get_upval(a);
-			if (ref_p(u)) {
-				sly_value *ref = GET_PTR(u);
-				*ref = get_reg(b);
-			} else {
-				set_upval(a, get_reg(b));
-			}
+			set_upval(a, get_reg(b));
 		} break;
 		case OP_GETUPDICT: {
 			u8 a = GET_A(instr);
@@ -253,7 +193,7 @@ vm_run(Sly_State *ss, int run_gc)
 				nframe->clos = val;
 				nframe->level = ss->frame->level + 1;
 				size_t nargs = b - a - 1;
-				SET_FRAME_UPVALUES();
+				nframe->U = clos->upvals;
 				if (proto->has_varg) {
 					sly_assert(nargs >= proto->nargs,
 							   "Error wrong number of arguments");
@@ -262,13 +202,17 @@ vm_run(Sly_State *ss, int run_gc)
 					for (size_t i = b - 1; nvargs--; --i) {
 						vargs = cons(ss, get_reg(i), vargs);
 					}
-					vector_set(nframe->U, clos->arg_idx + proto->nargs, vargs);
+					vector_set(nframe->U,
+							   clos->arg_idx + proto->nargs,
+							   make_closed_upvalue(ss, vargs));
 				} else {
 					sly_assert(nargs == proto->nargs,
 							   "Error wrong number of arguments");
 				}
 				for (size_t i = 0; i < proto->nargs; ++i) {
-					vector_set(nframe->U, clos->arg_idx + i, get_reg(a + 1 + i));
+					vector_set(nframe->U,
+							   clos->arg_idx + i,
+							   make_closed_upvalue(ss, get_reg(a + 1 + i)));
 				}
 				nframe->K = proto->K;
 				nframe->code = proto->code;
@@ -287,9 +231,12 @@ vm_run(Sly_State *ss, int run_gc)
 				ss->frame->pc = cc->pc;
 				vector_set(ss->frame->R, cc->ret_slot, arg);
 			} else {
-				printf("pc :: %zu\n", ss->frame->pc-1);
 				dis_all(ss->frame, 1);
+				printf("pc :: %zu\n", ss->frame->pc-1);
 				sly_display(val, 1);
+				printf("\n");
+				printf("%d, %d\n", a, b);
+				sly_display(ss->cc->globals, 1);
 				printf("\n");
 				sly_assert(0, "Type Error expected procedure");
 			}
@@ -305,8 +252,10 @@ vm_run(Sly_State *ss, int run_gc)
 				stack_frame *nframe = make_stack(ss, proto->nregs);
 				nframe->clos = proc;
 				nframe->level = ss->frame->level + 1;
-				SET_FRAME_UPVALUES();
-				vector_set(nframe->U, clos->arg_idx, cc);
+				nframe->U = clos->upvals;
+				vector_set(nframe->U,
+						   clos->arg_idx,
+						   make_closed_upvalue(ss, cc));
 				nframe->K = proto->K;
 				nframe->code = proto->code;
 				nframe->pc = proto->entry;
@@ -326,11 +275,11 @@ vm_run(Sly_State *ss, int run_gc)
 				ret_val = get_reg(a);
 				goto vm_exit;
 			}
-			close_upvalues(ss->frame);
-			sly_value r = get_reg(a);
 			size_t ret_slot = ss->frame->ret_slot;
+			ret_val = get_reg(a);
+			close_upvalues(ss->frame);
 			ss->frame = ss->frame->parent;
-			set_reg(ret_slot, r);
+			set_reg(ret_slot, ret_val);
 		} break;
 		case OP_VECREF: {
 			u8 a = GET_A(instr);

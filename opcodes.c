@@ -188,7 +188,14 @@ dis_prototype(prototype *proto, int lstk)
 void
 dis_all(stack_frame *frame, int lstk)
 {
-	printf("Disassembly of top-level code\n");
+	sly_value proto = SLY_NULL;
+	if (closure_p(frame->clos)) {
+		closure *clos = GET_PTR(frame->clos);
+		proto = clos->proto;
+	}
+	printf("Disassembly of top-level code ");
+	sly_display(proto, 1);
+	printf("\n");
 	dis_code(frame->code);
 	size_t len = vector_len(frame->K);
 	if (lstk) {

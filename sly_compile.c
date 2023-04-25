@@ -54,6 +54,7 @@ union symbol_properties {
 		dictionary_set(ss, symtable, sym, st_prop.v);					\
 		dictionary_set(ss, cc->globals, sym, make_cclosure(ss, fn, nargs, has_vargs)); \
 	} while (0)
+
 #define RESOLVE_UPVAL()													\
 	do {																\
 		if (st_prop.p.type == sym_upval) {								\
@@ -335,6 +336,36 @@ comp_if(Sly_State *ss, sly_value form, int reg)
 	return reg;
 }
 
+static union symbol_properties
+resolve_upval(Sly_State *ss,
+			  struct scope *scope,
+			  sly_value sym,
+			  union symbol_properties prop,
+			  u32 level)
+{
+	struct scope *parent = scope->parent;
+	union symbol_properties upprop = {0};
+	union uplookup upinfo = {0};
+	prototype *proto = GET_PTR(scope->proto);
+	if (parent->level != level) {
+		prop = resolve_upval(ss, parent, sym, prop, parent->level);
+	}
+	if (prop.p.type == sym_upval
+		|| prop.p.type == sym_arg) {
+		upinfo.u.isup = 1;
+	} else if (prop.p.type == sym_variable) {
+		upinfo.u.isup = 0;
+	} else {
+		sly_raise_exception(ss, EXC_COMPILE, "Compile error");
+	}
+	upinfo.u.reg = prop.p.reg;
+	upprop.p.type = sym_upval;
+	upprop.p.reg = vector_len(proto->uplist);
+	vector_append(ss, proto->uplist, upinfo.v);
+	dictionary_set(ss, scope->symtable, sym, upprop.v);
+	return upprop;
+}
+
 int
 comp_set(Sly_State *ss, sly_value form, int reg)
 {
@@ -350,11 +381,10 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 	}
 	u32 level = 0;
 	sly_value uplist = SLY_NULL;
-	sly_value prop = symbol_lookup_props(ss, datum, &level, &uplist);
 	union symbol_properties st_prop;
-	st_prop.v = prop;
+	st_prop.v = symbol_lookup_props(ss, datum, &level, &uplist);
 	if (cc->cscope->level != level && st_prop.p.type != sym_global) { /* is non local */
-		RESOLVE_UPVAL();
+		st_prop = resolve_upval(ss, cc->cscope, datum, st_prop, level);
 	}
 	form = cdr(form);
 	reg = comp_expr(ss, car(form), reg);
@@ -401,11 +431,10 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 	if (symbol_p(datum)) {
 		u32 level = 0;
 		sly_value uplist = SLY_NULL;
-		sly_value prop = symbol_lookup_props(ss, datum, &level, &uplist);
 		union symbol_properties st_prop;
-		st_prop.v = prop;
+		st_prop.v = symbol_lookup_props(ss, datum, &level, &uplist);
 		if (cc->cscope->level != level && st_prop.p.type != sym_global) { /* is non local */
-			RESOLVE_UPVAL();
+			st_prop = resolve_upval(ss, cc->cscope, datum, st_prop, level);
 		}
 		switch ((enum symbol_type)st_prop.p.type) {
 		case sym_variable: {

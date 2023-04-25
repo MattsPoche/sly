@@ -56,7 +56,9 @@ traverse_frame(Sly_State *ss, stack_frame *frame)
 	mark_gray(ss, GET_PTR(frame->U));
 	mark_gray(ss, GET_PTR(frame->R));
 	mark_gray(ss, GET_PTR(frame->clos));
-	if (frame->parent) mark_gray(ss, (gc_object *)frame->parent);
+	if (frame->parent) {
+		mark_gray(ss, (gc_object *)frame->parent);
+	}
 }
 
 static void
@@ -65,6 +67,7 @@ traverse_scope(Sly_State *ss, struct scope *scope)
 	if (scope->parent) mark_gray(ss, (gc_object *)scope->parent);
 	mark_gray(ss, GET_PTR(scope->proto));
 	mark_gray(ss, GET_PTR(scope->symtable));
+	mark_gray(ss, GET_PTR(scope->macros));
 }
 
 static void
@@ -85,11 +88,6 @@ traverse_vector(Sly_State *ss, vector *vec)
 		sly_value v = vec->elems[i];
 		if (pair_p(v) || ptr_p(v)) {
 			mark_gray(ss, GET_PTR(v));
-		} else if (ref_p(v)) {
-			sly_value *ref = GET_PTR(v);
-			if (pair_p(*ref) || ptr_p(*ref)) {
-				mark_gray(ss, GET_PTR(*ref));
-			}
 		}
 	}
 }
@@ -118,16 +116,20 @@ traverse_closure(Sly_State *ss, closure *clos)
 {
 	mark_gray(ss, GET_PTR(clos->upvals));
 	mark_gray(ss, GET_PTR(clos->proto));
+	if (upvalue_p(clos->oups)) {
+		mark_gray(ss, GET_PTR(clos->oups));
+	}
+
 }
 
 static void
 traverse_syntax(Sly_State *ss, syntax *stx)
 {
 	sly_value v = stx->datum;
-	if (stx->scope) mark_gray(ss, (gc_object *)stx->scope);
 	if (pair_p(v) || ptr_p(v)) {
 		mark_gray(ss, GET_PTR(v));
 	}
+	mark_gray(ss, GET_PTR(stx->lex_info));
 }
 
 static void
@@ -135,6 +137,19 @@ traverse_continuation(Sly_State *ss, continuation *cont)
 {
 	if (cont->frame) {
 		mark_gray(ss, (gc_object *)cont->frame);
+	}
+}
+
+static void
+traverse_upvalue(Sly_State *ss, upvalue *uv)
+{
+	if (uv->next) {
+		mark_gray(ss, (gc_object *)uv->next);
+	}
+	if (uv->isclosed) {
+		if (pair_p(uv->u.val) || ptr_p(uv->u.val)) {
+			mark_gray(ss, GET_PTR(uv->u.val));
+		}
 	}
 }
 
@@ -168,6 +183,9 @@ traverse_object(Sly_State *ss, gc_object *obj)
 	case tt_cclosure: break;
 	case tt_continuation:
 		traverse_continuation(ss, (continuation *)obj);
+		break;
+	case tt_upvalue:
+		traverse_upvalue(ss, (upvalue *)obj);
 		break;
 	case tt_syntax:
 		traverse_syntax(ss, (syntax *)obj);
@@ -225,9 +243,18 @@ free_object(Sly_State *ss, gc_object *obj)
 	case tt_prototype: {
 		ss->gc.bytes -= sizeof(prototype);
 	} break;
+	case tt_upvalue: {
+		ss->gc.bytes -= sizeof(upvalue);
+	} break;
 	case tt_closure: {
 		ss->gc.bytes -= sizeof(closure);
-	} break;
+		closure *clos = (closure *)obj;
+		sly_value uv = clos->oups;
+		while (upvalue_p(uv)) {
+			close_upvalue(uv);
+			uv = upvalue_next(uv);
+		}
+} break;
 	case tt_cclosure: {
 		ss->gc.bytes -= sizeof(cclosure);
 	} break;
