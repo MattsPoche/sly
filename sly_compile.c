@@ -185,10 +185,10 @@ lookup_macro(Sly_State *ss, sly_value sym)
 		}
 		scope = scope->parent;
 	}
-	printf("Undefined symbol '");
+	printf("Undefined macro '");
 	sly_display(sym, 1);
 	printf("\n");
-	sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol");
+	sly_raise_exception(ss, EXC_COMPILE, "Error undefined macro");
 	return SLY_NULL;
 }
 
@@ -513,7 +513,7 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 		if (symbol_p(s->datum)) {
 			u32 level = 0;
 			sly_value uplist = SLY_NULL;
-			union symbol_properties st_prop;
+			union symbol_properties st_prop = {0};
 			st_prop.v = symbol_lookup_props(ss, s->datum, &level, &uplist);
 			if (st_prop.p.issyntax) {
 				/* call macro */
@@ -559,7 +559,7 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 	sly_value symtable = scope->symtable;
 	sly_value stx, sym, args = car(form);
 	form = cdr(form);
-	union symbol_properties st_prop;
+	union symbol_properties st_prop = {0};
 	st_prop.p.type = sym_arg;
 	st_prop.p.islocal = 1;
 	size_t nargs = 0;
