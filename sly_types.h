@@ -57,6 +57,7 @@ typedef struct _sly_state {
 	struct compile *cc;
 	struct _stack_frame *frame;
 	struct _stack_frame *eval_frame;
+	struct _upvalue *open_upvals;
 	sly_value proto;
 	sly_value interned;
 	jmp_buf jbuf;
@@ -154,12 +155,13 @@ typedef struct _proto {
 	size_t entry;       // entry point
 	size_t nregs;       // count of registers needed
 	size_t nargs;       // count of arguments
+	size_t nvars;       // count of arguments + variables
 	int has_varg;       // has variable argument
 } prototype;
 
 typedef struct _upvalue {
 	OBJ_HEADER;
-	sly_value next;
+	struct _upvalue *next;
 	int isclosed;
 	union {
 		sly_value *ptr;
@@ -171,8 +173,6 @@ typedef struct _clos {
 	OBJ_HEADER;
 	sly_value upvals; // captured values
 	sly_value proto;  // <prototype>
-	sly_value oups;
-	size_t arg_idx;   // position in upvals where args are stored
 } closure;
 
 typedef struct _cont {
@@ -198,7 +198,6 @@ struct scope {
 	sly_value symtable;   // <dictionary>
 	sly_value macros;
 	u32 level;
-	int prev_var;
 };
 
 typedef struct _syntax {
@@ -280,12 +279,12 @@ sly_value dictionary_entry_ref(sly_value d, sly_value key);
 sly_value dictionary_ref(sly_value d, sly_value key);
 void dictionary_remove(sly_value d, sly_value key);
 void close_upvalue(sly_value _uv);
-sly_value make_open_upvalue(Sly_State *ss, closure *clos, sly_value *ptr);
+upvalue *find_open_upvalue(Sly_State *ss, sly_value *ptr, upvalue **parent);
+sly_value make_open_upvalue(Sly_State *ss, sly_value *ptr);
 sly_value make_closed_upvalue(Sly_State *ss, sly_value val);
 int upvalue_isclosed(sly_value uv);
 sly_value upvalue_get(sly_value uv);
 void upvalue_set(sly_value uv, sly_value value);
-sly_value upvalue_next(sly_value _uv);
 
 
 #define cstr_to_symbol(cstr) (make_symbol(ss, (cstr), strlen(cstr)))
@@ -343,6 +342,8 @@ int_p(sly_value val)
 		union imm_value v;
 		v.v = val;
 		return v.i.type == imm_int;
+	} else if (val & TAG_MASK) {
+		return 0;
 	}
 	return TYPEOF(val) == tt_int;
 }
@@ -355,6 +356,8 @@ float_p(sly_value val)
 		union imm_value v;
 		v.v = val;
 		return v.i.type == imm_float;
+	} else if (val & TAG_MASK) {
+		return 0;
 	}
 	return TYPEOF(val) == tt_float;
 }
@@ -367,6 +370,8 @@ byte_p(sly_value val)
 		union imm_value v;
 		v.v = val;
 		return v.i.type == imm_byte;
+	}  else if (val & TAG_MASK) {
+		return 0;
 	}
 	return TYPEOF(val) == tt_byte;
 	return 0;

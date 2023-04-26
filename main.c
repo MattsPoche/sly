@@ -90,7 +90,7 @@ sly_load_file(Sly_State *ss, char *file_name)
 	for (size_t i = 0; i < 12; ++i) {
 		vector_set(frame->U, i, SLY_VOID);
 	}
-	vector_set(frame->U, 0, make_closed_upvalue(ss, ss->cc->globals));
+	vector_set(frame->U, 0, make_open_upvalue(ss, &ss->cc->globals));
 	frame->K = proto->K;
 	frame->clos = SLY_NULL;
 	frame->code = proto->code;

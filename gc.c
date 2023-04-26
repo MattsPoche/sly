@@ -64,7 +64,7 @@ traverse_frame(Sly_State *ss, stack_frame *frame)
 static void
 traverse_scope(Sly_State *ss, struct scope *scope)
 {
-	if (scope->parent) mark_gray(ss, (gc_object *)scope->parent);
+	mark_gray(ss, (gc_object *)scope->parent);
 	mark_gray(ss, GET_PTR(scope->proto));
 	mark_gray(ss, GET_PTR(scope->symtable));
 	mark_gray(ss, GET_PTR(scope->macros));
@@ -116,10 +116,6 @@ traverse_closure(Sly_State *ss, closure *clos)
 {
 	mark_gray(ss, GET_PTR(clos->upvals));
 	mark_gray(ss, GET_PTR(clos->proto));
-	if (upvalue_p(clos->oups)) {
-		mark_gray(ss, GET_PTR(clos->oups));
-	}
-
 }
 
 static void
@@ -143,13 +139,13 @@ traverse_continuation(Sly_State *ss, continuation *cont)
 static void
 traverse_upvalue(Sly_State *ss, upvalue *uv)
 {
-	if (uv->next) {
-		mark_gray(ss, (gc_object *)uv->next);
-	}
+	mark_gray(ss, (gc_object *)uv->next);
 	if (uv->isclosed) {
 		if (pair_p(uv->u.val) || ptr_p(uv->u.val)) {
 			mark_gray(ss, GET_PTR(uv->u.val));
 		}
+	} else {
+		mark_gray(ss, GET_PTR(*uv->u.ptr));
 	}
 }
 
@@ -214,104 +210,129 @@ propagate_mark(Sly_State *ss)
 static void
 mark_roots(Sly_State *ss)
 {
-	if (ss->frame)
-		traverse_object(ss, (gc_object *)ss->frame);
-	if (ss->eval_frame)
-		traverse_object(ss, (gc_object *)ss->eval_frame);
-	if (ss->proto)
-		traverse_object(ss, (gc_object *)ss->proto);
-	if (ss->interned)
-		traverse_object(ss, (gc_object *)ss->interned);
-	if (ss->cc->globals)
-		traverse_object(ss, (gc_object *)ss->cc->globals);
-	if (ss->cc->cscope)
-		traverse_object(ss, (gc_object *)ss->cc->cscope);
+	traverse_object(ss, (gc_object *)ss->frame);
+	traverse_object(ss, (gc_object *)ss->eval_frame);
+	traverse_object(ss, (gc_object *)ss->proto);
+	traverse_object(ss, (gc_object *)ss->interned);
+	traverse_object(ss, GET_PTR(ss->cc->globals));
+	traverse_object(ss, (gc_object *)ss->cc->cscope);
+	traverse_object(ss, (gc_object *)ss->open_upvals);
+	/*
+	if (ss->frame != NULL) mark_object((gc_object *)ss->frame, GC_GRAY);
+	if (ss->eval_frame != NULL) mark_object((gc_object *)ss->eval_frame, GC_GRAY);
+	if (ss->cc->cscope != NULL) mark_object((gc_object *)ss->cc->cscope, GC_GRAY);
+	if (ss->open_upvals != NULL) mark_object((gc_object *)ss->open_upvals, GC_GRAY);
+	mark_object(GET_PTR(ss->proto), GC_GRAY);
+	mark_object(GET_PTR(ss->interned), GC_GRAY);
+	mark_object(GET_PTR(ss->cc->globals), GC_GRAY);
+	*/
 }
 
 static void
 free_object(Sly_State *ss, gc_object *obj)
 {
+	size_t size = 0;
 	switch ((enum type_tag)obj->type) {
 	case tt_pair: {
-		ss->gc.bytes -= sizeof(pair);
+		size = sizeof(pair);
 	} break;
 	case tt_byte:
 	case tt_int:
 	case tt_float: {
-		ss->gc.bytes -= sizeof(number);
+		size = sizeof(number);
 	} break;
 	case tt_prototype: {
-		ss->gc.bytes -= sizeof(prototype);
+		size = sizeof(prototype);
 	} break;
 	case tt_upvalue: {
-		ss->gc.bytes -= sizeof(upvalue);
+		size = sizeof(upvalue);
 	} break;
 	case tt_closure: {
-		ss->gc.bytes -= sizeof(closure);
-		closure *clos = (closure *)obj;
-		sly_value uv = clos->oups;
-		while (upvalue_p(uv)) {
-			close_upvalue(uv);
-			uv = upvalue_next(uv);
-		}
-} break;
+		size = sizeof(closure);
+	} break;
 	case tt_cclosure: {
-		ss->gc.bytes -= sizeof(cclosure);
+		size = sizeof(cclosure);
 	} break;
 	case tt_continuation: {
-		ss->gc.bytes -= sizeof(continuation);
+		size = sizeof(continuation);
 	} break;
 	case tt_syntax: {
-		ss->gc.bytes -= sizeof(syntax);
+		size = sizeof(syntax);
 	} break;
 	case tt_scope: {
-		ss->gc.bytes -= sizeof(struct scope);
+		size = sizeof(struct scope);
 	} break;
 	case tt_stack_frame: {
-		ss->gc.bytes -= sizeof(stack_frame);
+		size = sizeof(stack_frame);
 	} break;
 	case tt_symbol: {
 		symbol *sym = (symbol *)obj;
-		ss->gc.bytes -= sizeof(*sym) + sym->len;
+		size = sizeof(*sym);
+		ss->gc.bytes -= sym->len;
 		FREE(sym->name);
 	} break;
 	case tt_string:
 	case tt_byte_vector: {
 		byte_vector *bvec = (byte_vector *)obj;
-		ss->gc.bytes -= sizeof(*bvec) + bvec->cap;
+		size = sizeof(*bvec);
+		ss->gc.bytes -= bvec->cap;
 		FREE(bvec->elems);
 	} break;
 	case tt_dictionary:
 	case tt_vector: {
 		vector *vec = (vector *)obj;
-		ss->gc.bytes -= sizeof(*vec) + (vec->cap * sizeof(sly_value));
+		size = sizeof(*vec);
+		ss->gc.bytes -= vec->cap * sizeof(sly_value);
 		FREE(vec->elems);
 	} break;
 	}
+	memset(obj, -1, size);
+	ss->gc.bytes -= size;
 	FREE(obj);
+}
+
+static void
+remove_after(Sly_State *ss, gc_object *obj)
+{
+	gc_object *dead = obj->next;
+	obj->next = obj->next->next;
+	free_object(ss, dead);
+}
+
+static void
+remove_beginning(Sly_State *ss)
+{
+	gc_object *dead = ss->gc.objects;
+	ss->gc.objects = ss->gc.objects->next;
+	free_object(ss, dead);
+}
+
+static void
+mark_all_white(Sly_State *ss)
+{
+	gc_object *obj = ss->gc.objects;
+	while (obj) {
+		mark_object(obj, GC_WHITE);
+		obj = obj->next;
+	}
 }
 
 static void
 sweep(Sly_State *ss)
 {
-	GC *gc = &ss->gc;
-	gc_object *obj = gc->objects;
-	gc_object *tmp = NULL, *prev = NULL;
-	while (obj) {
-		if (obj->color == GC_WHITE) {
-			tmp = obj;
-			obj = obj->next;
-			if (prev == NULL) {
-				gc->objects = obj;
-			} else {
-				prev->next = obj;
-			}
-			free_object(ss, tmp);
-		} else {
-			mark_object(obj, GC_WHITE);
-			prev = obj;
-			obj = obj->next;
+	while (ss->gc.objects
+		   && ss->gc.objects->color == GC_WHITE) {
+		remove_beginning(ss);
+	}
+	gc_object *obj = ss->gc.objects;
+	if (obj) {
+		mark_object(obj, GC_WHITE);
+	}
+	while (obj && obj->next) {
+		if (obj->next->color == GC_WHITE) {
+			remove_after(ss, obj);
 		}
+		obj = obj->next;
 	}
 }
 
@@ -325,6 +346,7 @@ gc_collect(Sly_State *ss)
 		propagate_mark(ss);
 	}
 	sweep(ss);
+	mark_all_white(ss);
 	gc->treshold = gc->bytes * GC_HEAP_GROW_FACTOR;
 }
 

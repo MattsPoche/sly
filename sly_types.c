@@ -658,6 +658,7 @@ make_prototype(Sly_State *ss, sly_value uplist, sly_value constants, sly_value c
 	proto->code = code;
 	proto->nregs = nregs;
 	proto->nargs = nargs;
+	proto->nvars = 0;
 	proto->entry = entry;
 	proto->has_varg = has_varg;
 	return (sly_value)proto;
@@ -670,8 +671,7 @@ make_closure(Sly_State *ss, sly_value _proto)
 	closure *clos = gc_alloc(ss, sizeof(*clos));
 	clos->h.type = tt_closure;
 	prototype *proto = GET_PTR(_proto);
-	clos->arg_idx = 1;
-	size_t cap = clos->arg_idx + proto->nargs + vector_len(proto->uplist);
+	size_t cap = 1 + vector_len(proto->uplist); /* + 1 for globals */
 	if (proto->has_varg) cap++;
 	clos->upvals = make_vector(ss, cap, cap);
 	clos->proto = _proto;
@@ -1185,14 +1185,6 @@ dictionary_remove(sly_value d, sly_value key)
 	dict->len--;
 }
 
-sly_value
-upvalue_next(sly_value _uv)
-{
-	sly_assert(upvalue_p(_uv), "Type Error expected <upvalue>");
-	upvalue *uv = GET_PTR(_uv);
-	return uv->next;
-}
-
 void
 close_upvalue(sly_value _uv)
 {
@@ -1204,18 +1196,27 @@ close_upvalue(sly_value _uv)
 	}
 }
 
-static sly_value
-find_open_upvalue(closure *clos, sly_value *ptr)
+upvalue *
+find_open_upvalue(Sly_State *ss, sly_value *ptr, upvalue **parent)
 {
-	sly_value uv = clos->oups;
-	while (upvalue_p(uv)) {
-		upvalue *u = GET_PTR(uv);
-		if (u->u.ptr == ptr) {
+	upvalue *uv = ss->open_upvals;
+	upvalue *p;
+	if (uv == NULL) return NULL;
+	if (uv->u.ptr == ptr) {
+		if (parent) *parent = NULL;
+		return uv;
+	}
+	p = uv;
+	uv = uv->next;
+	while (uv) {
+		if (uv->u.ptr == ptr) {
+			if (parent) *parent = p;
 			return uv;
 		}
-		uv = upvalue_next(uv);
+		p = uv;
+		uv = uv->next;
 	}
-	return SLY_VOID;
+	return NULL;
 }
 
 sly_value
@@ -1230,19 +1231,18 @@ make_closed_upvalue(Sly_State *ss, sly_value val)
 }
 
 sly_value
-make_open_upvalue(Sly_State *ss, closure *clos, sly_value *ptr)
+make_open_upvalue(Sly_State *ss, sly_value *ptr)
 {
-	sly_value _uv = find_open_upvalue(clos, ptr);
-	if (upvalue_p(_uv)) {
-		return _uv;
+	upvalue *uv = find_open_upvalue(ss, ptr, NULL);
+	if (uv == NULL) {
+		uv = gc_alloc(ss, sizeof(*uv));
+		uv->h.type = tt_upvalue;
+		uv->isclosed = 0;
+		uv->u.ptr = ptr;
+		uv->next = ss->open_upvals;
+		ss->open_upvals = uv;
 	}
-	upvalue *uv = gc_alloc(ss, sizeof(*uv));
-	uv->h.type = tt_upvalue;
-	uv->isclosed = 0;
-	uv->u.ptr = ptr;
-	uv->next = clos->oups;
-	clos->oups = (sly_value)uv;
-	return clos->oups;
+	return (sly_value)uv;
 }
 
 sly_value

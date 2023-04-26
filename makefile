@@ -12,7 +12,7 @@ OBJECTS=$(CSOURCE:%.c=%.o)
 all: deps $(TARGET)
 
 test: $(TARGET)
-	./$< test/*
+	./$< test/*.sly
 
 clean:
 	rm -f $(OBJECTS) $(TARGET) $(TARGET).d

@@ -10,45 +10,23 @@
 #define get_upval(i)    upvalue_get(vector_ref(ss->frame->U, (i)))
 #define set_upval(i, v) upvalue_set(vector_ref(ss->frame->U, (i)), (v))
 
-#if 0
-static inline sly_value
-capture_value(stack_frame *frame, union uplookup upinfo)
-{
-	while (frame->level != upinfo.u.level) {
-		frame = frame->parent;
-	}
-	if (upinfo.u.isup) {
-		vector *values = GET_PTR(frame->U);
-		if (ref_p(values->elems[upinfo.u.reg])) {
-			return values->elems[upinfo.u.reg];
-		} else {
-			sly_value v = (sly_value)(&values->elems[upinfo.u.reg]);
-			return (v & ~TAG_MASK) | st_ref;
-		}
-	} else {
-		vector *values = GET_PTR(frame->R);
-		sly_value v = (sly_value)(&values->elems[upinfo.u.reg]);
-		return (v & ~TAG_MASK) | st_ref;
-	}
-	sly_assert(0, "Error value not found");
-	return SLY_NULL;
-}
-#endif
-
 static void
-close_upvalues(stack_frame *frame)
-{ /* If any closures are present on the stack,
-   * check the upvalues. If the upvalue is a reference
-   * that refers to a slot in the frame's upvalues or
-   * registers, close the upvalue.
-   */
-	UNUSED(frame);
-	return;
+close_upvalues(Sly_State *ss, stack_frame *frame)
+{
+	vector *vec = GET_PTR(frame->R);
+	upvalue *uv, *parent;
 	closure *clos = GET_PTR(frame->clos);
-	sly_value uv = clos->oups;
-	while (upvalue_p(uv)) {
-		close_upvalue(uv);
-		uv = upvalue_next(uv);
+	prototype *proto = GET_PTR(clos->proto);
+	for (size_t i = 0; i < proto->nvars; ++i) {
+		uv = find_open_upvalue(ss, &vec->elems[i], &parent);
+		if (uv) {
+			if (parent == NULL) {
+				ss->open_upvals = uv->next;
+			} else {
+				parent->next = uv->next;
+			}
+			close_upvalue((sly_value)uv);
+		}
 	}
 }
 
@@ -69,9 +47,9 @@ form_closure(Sly_State *ss, sly_value _proto)
 		if (upinfo.u.isup) {
 			uv = ups->elems[upinfo.u.reg];
 		} else {
-			uv = make_open_upvalue(ss, clos, &regs->elems[upinfo.u.reg]);
+			uv = make_open_upvalue(ss, &regs->elems[upinfo.u.reg]);
 		}
-		vector_set(clos->upvals, i + 1 + proto->nargs, uv);
+		vector_set(clos->upvals, i + 1, uv);
 	}
 	return _clos;
 }
@@ -161,9 +139,9 @@ vm_run(Sly_State *ss, int run_gc)
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
 			sly_value val = get_reg(a);
+			size_t nargs = b - a - 1;
 			if (cclosure_p(val)) {
 				cclosure *clos = GET_PTR(val);
-				size_t nargs = b - a - 1;
 				sly_value args;
 				if (clos->has_varg) {
 					sly_assert(nargs >= clos->nargs,
@@ -192,7 +170,6 @@ vm_run(Sly_State *ss, int run_gc)
 				stack_frame *nframe = make_stack(ss, proto->nregs);
 				nframe->clos = val;
 				nframe->level = ss->frame->level + 1;
-				size_t nargs = b - a - 1;
 				nframe->U = clos->upvals;
 				if (proto->has_varg) {
 					sly_assert(nargs >= proto->nargs,
@@ -202,17 +179,13 @@ vm_run(Sly_State *ss, int run_gc)
 					for (size_t i = b - 1; nvargs--; --i) {
 						vargs = cons(ss, get_reg(i), vargs);
 					}
-					vector_set(nframe->U,
-							   clos->arg_idx + proto->nargs,
-							   make_closed_upvalue(ss, vargs));
+					vector_set(nframe->R, proto->nargs, vargs);
 				} else {
 					sly_assert(nargs == proto->nargs,
 							   "Error wrong number of arguments");
 				}
 				for (size_t i = 0; i < proto->nargs; ++i) {
-					vector_set(nframe->U,
-							   clos->arg_idx + i,
-							   make_closed_upvalue(ss, get_reg(a + 1 + i)));
+					vector_set(nframe->R, i, get_reg(a + 1 + i));
 				}
 				nframe->K = proto->K;
 				nframe->code = proto->code;
@@ -221,7 +194,6 @@ vm_run(Sly_State *ss, int run_gc)
 				nframe->parent = ss->frame;
 				ss->frame = nframe;
 			} else if (continuation_p(val)) {
-				size_t nargs = b - a - 1;
 				/* TODO: continuations should take a vararg?
 				 */
 				sly_assert(nargs == 1, "Error Wrong number of arguments for continuation");
@@ -233,11 +205,18 @@ vm_run(Sly_State *ss, int run_gc)
 			} else {
 				dis_all(ss->frame, 1);
 				printf("pc :: %zu\n", ss->frame->pc-1);
+				printf("level :: %u\n", ss->frame->level);
 				sly_display(val, 1);
 				printf("\n");
 				printf("%d, %d\n", a, b);
 				sly_display(ss->cc->globals, 1);
-				printf("\n");
+				printf("\n\n");
+				upvalue *uv = ss->open_upvals;
+				while (uv) {
+					sly_display((sly_value)uv, 1);
+					printf("\n");
+					uv = uv->next;
+				}
 				sly_assert(0, "Type Error expected procedure");
 			}
 		} break;
@@ -253,9 +232,7 @@ vm_run(Sly_State *ss, int run_gc)
 				nframe->clos = proc;
 				nframe->level = ss->frame->level + 1;
 				nframe->U = clos->upvals;
-				vector_set(nframe->U,
-						   clos->arg_idx,
-						   make_closed_upvalue(ss, cc));
+				vector_set(nframe->R, 0, cc);
 				nframe->K = proto->K;
 				nframe->code = proto->code;
 				nframe->pc = proto->entry;
@@ -277,7 +254,7 @@ vm_run(Sly_State *ss, int run_gc)
 			}
 			size_t ret_slot = ss->frame->ret_slot;
 			ret_val = get_reg(a);
-			close_upvalues(ss->frame);
+			close_upvalues(ss, ss->frame);
 			ss->frame = ss->frame->parent;
 			set_reg(ret_slot, ret_val);
 		} break;
@@ -313,7 +290,8 @@ vm_run(Sly_State *ss, int run_gc)
 			u8 a = GET_A(instr);
 			size_t b = GET_Bx(instr);
 			sly_value _proto = get_const(b);
-			set_reg(a, form_closure(ss, _proto));
+			sly_value clos = form_closure(ss, _proto);
+			set_reg(a, clos);
 		} break;
 		}
 		if (run_gc) {

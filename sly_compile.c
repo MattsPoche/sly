@@ -54,42 +54,6 @@ union symbol_properties {
 		dictionary_set(ss, symtable, sym, st_prop.v);					\
 		dictionary_set(ss, cc->globals, sym, make_cclosure(ss, fn, nargs, has_vargs)); \
 	} while (0)
-
-#define RESOLVE_UPVAL()													\
-	do {																\
-		if (st_prop.p.type == sym_upval) {								\
-			u8 upidx = vector_len(proto->uplist);						\
-			vector_append(ss, proto->uplist, vector_ref(uplist, st_prop.p.reg)); \
-			st_prop.p.islocal = 0;										\
-			st_prop.p.reg = upidx;										\
-		} else if (st_prop.p.type == sym_arg) {							\
-			u8 upidx = vector_len(proto->uplist);						\
-			union uplookup upinfo = {0};								\
-			upinfo.u.isup = 1;											\
-			upinfo.u.level = level;										\
-			upinfo.u.reg = st_prop.p.reg;								\
-			sly_value upi = *((sly_value *)(&upinfo));					\
-			vector_append(ss, proto->uplist, upi);						\
-			st_prop.p.islocal = 0;										\
-			st_prop.p.reg = upidx;										\
-			st_prop.p.type = sym_upval;									\
-		} else if (st_prop.p.type == sym_variable) {					\
-			u8 upidx = vector_len(proto->uplist);						\
-			union uplookup upinfo = {0};								\
-			upinfo.u.isup = 0;											\
-			upinfo.u.level = level;										\
-			upinfo.u.reg = st_prop.p.reg;								\
-			sly_value upi = *((sly_value *)(&upinfo));					\
-			vector_append(ss, proto->uplist, upi);						\
-			st_prop.p.islocal = 0;										\
-			st_prop.p.reg = upidx;										\
-			st_prop.p.type = sym_upval;									\
-		} else {														\
-			sly_raise_exception(ss, EXC_COMPILE, "Compile error");		\
-		}																\
-		dictionary_set(ss, cc->cscope->symtable, datum, st_prop.v);		\
-	} while (0)
-
 #define STORE_MACRO_CLOSURE()								\
 	do {													\
 		st_prop.p.issyntax = 1;								\
@@ -220,7 +184,6 @@ make_scope(Sly_State *ss)
 								  make_vector(ss, 0, 8),
 								  make_vector(ss, 0, 8),
 								  0, 0, 0, 0);
-	scope->prev_var = 0;
 	return scope;
 }
 
@@ -289,7 +252,7 @@ comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 		}
 		return reg;
 	} else {
-		st_prop.p.reg = cc->cscope->prev_var++;
+		st_prop.p.reg = proto->nvars++;
 		st_prop.p.islocal = 1;
 		st_prop.p.type = sym_variable;
 		dictionary_set(ss, symtable, var, st_prop.v);
@@ -301,7 +264,7 @@ comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 		if (!null_p(cdr(form))) {
 			sly_raise_exception(ss, EXC_COMPILE, "Compile Error malformed define");
 		}
-		return cc->cscope->prev_var;
+		return proto->nvars;
 	}
 }
 
@@ -322,10 +285,36 @@ comp_if(Sly_State *ss, sly_value form, int reg)
 	int be_res = comp_expr(ss, boolexpr, reg);
 	size_t fjmp = vector_len(proto->code);
 	vector_append(ss, proto->code, 0);
-	comp_expr(ss, tbranch, reg);
+	{ /* tbranch */
+		int line_number;
+		if (syntax_p(tbranch)) {
+			syntax *s = GET_PTR(tbranch);
+			line_number = s->tok.ln;
+		} else {
+			line_number = -1;
+		}
+		int ex_reg = comp_expr(ss, tbranch, reg);
+		if (ex_reg != -1 && ex_reg != reg) {
+			vector_append(ss, proto->code,
+						  iAB(OP_MOVE, reg, ex_reg, line_number));
+		}
+	}
 	size_t jmp = vector_len(proto->code);
 	vector_append(ss, proto->code, 0);
-	comp_expr(ss, fbranch, reg);
+	{ /* fbranch */
+		int line_number;
+		if (syntax_p(fbranch)) {
+			syntax *s = GET_PTR(fbranch);
+			line_number = s->tok.ln;
+		} else {
+			line_number = -1;
+		}
+		int ex_reg = comp_expr(ss, fbranch, reg);
+		if (ex_reg != -1 && ex_reg != reg) {
+			vector_append(ss, proto->code,
+						  iAB(OP_MOVE, reg, ex_reg, line_number));
+		}
+	}
 	size_t end = vector_len(proto->code);
 	if (be_res == -1) {
 		vector_set(proto->code, fjmp, iABx(OP_FJMP, reg, jmp + 1, -1));
@@ -350,17 +339,17 @@ resolve_upval(Sly_State *ss,
 	if (parent->level != level) {
 		prop = resolve_upval(ss, parent, sym, prop, parent->level);
 	}
-	if (prop.p.type == sym_upval
-		|| prop.p.type == sym_arg) {
+	if (prop.p.type == sym_upval) {
 		upinfo.u.isup = 1;
-	} else if (prop.p.type == sym_variable) {
+	} else if (prop.p.type == sym_variable
+			   || prop.p.type == sym_arg) {
 		upinfo.u.isup = 0;
 	} else {
 		sly_raise_exception(ss, EXC_COMPILE, "Compile error");
 	}
 	upinfo.u.reg = prop.p.reg;
 	upprop.p.type = sym_upval;
-	upprop.p.reg = vector_len(proto->uplist);
+	upprop.p.reg = vector_len(proto->uplist) + 1; /* + 1 because first slot is reserved for globals */
 	vector_append(ss, proto->uplist, upinfo.v);
 	dictionary_set(ss, scope->symtable, sym, upprop.v);
 	return upprop;
@@ -389,7 +378,8 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 	form = cdr(form);
 	reg = comp_expr(ss, car(form), reg);
 	if ((size_t)reg + 1 >= proto->nregs) proto->nregs = reg + 2;
-	if (st_prop.p.type == sym_variable) {
+	if (st_prop.p.type == sym_variable
+		|| st_prop.p.type == sym_arg) {
 		if (reg != -1 && st_prop.p.reg != reg) {
 			vector_append(ss, proto->code, iAB(OP_MOVE, st_prop.p.reg, reg, line_number));
 		}
@@ -400,16 +390,13 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 			dictionary_set(ss, cc->cscope->symtable, datum, st_prop.v);
 		}
 		if ((size_t)reg + 1 >= proto->nregs) proto->nregs = reg + 2;
-		vector_append(ss, proto->code, iABx(OP_LOADK, reg + 1, st_prop.p.reg, line_number));
-		vector_append(ss, proto->code, iABC(OP_SETUPDICT, 0, reg + 1, reg, line_number));
+		vector_append(ss, proto->code,
+					  iABx(OP_LOADK, reg + 1, st_prop.p.reg, line_number));
+		vector_append(ss, proto->code,
+					  iABC(OP_SETUPDICT, 0, reg + 1, reg, line_number));
 	} else if (st_prop.p.type == sym_upval) {
-		vector_append(ss, proto->code, iAB(OP_SETUPVAL,
-										   st_prop.p.reg + 1 + proto->nargs,
-										   reg, line_number));
-	} else if (st_prop.p.type == sym_arg) {
-		vector_append(ss, proto->code, iAB(OP_SETUPVAL,
-										   st_prop.p.reg,
-										   reg, line_number));
+		vector_append(ss, proto->code,
+					  iAB(OP_SETUPVAL, st_prop.p.reg, reg, line_number));
 	}
 	if (!null_p(cdr(form))) {
 		sly_raise_exception(ss, EXC_COMPILE, "Error malformed set! expression");
@@ -437,7 +424,8 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 			st_prop = resolve_upval(ss, cc->cscope, datum, st_prop, level);
 		}
 		switch ((enum symbol_type)st_prop.p.type) {
-		case sym_variable: {
+		case sym_variable:
+		case sym_arg: {
 			return st_prop.p.reg;
 		} break;
 		case sym_constant: {
@@ -449,17 +437,9 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 		case sym_keyword: {
 			sly_raise_exception(ss, EXC_COMPILE, "Unexpected keyword");
 		} break;
-		case sym_arg:
-			vector_append(ss, proto->code, iAB(OP_GETUPVAL,
-											   reg,
-											   st_prop.p.reg,
-											   line_number));
-			return reg;
 		case sym_upval: {
-			vector_append(ss, proto->code, iAB(OP_GETUPVAL,
-											   reg,
-											   st_prop.p.reg + 1 + proto->nargs,
-											   line_number));
+			vector_append(ss, proto->code,
+						  iAB(OP_GETUPVAL, reg, st_prop.p.reg, line_number));
 			return reg;
 		} break;
 		case sym_global: {
@@ -549,12 +529,10 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 {
 	struct compile *cc = ss->cc;
 	struct scope *scope = make_scope(ss);
-	//init_symtable(ss, scope->symtable);
 	scope->parent = cc->cscope;
 	scope->level = cc->cscope->level + 1;
 	cc->cscope = scope;
 	int preg = reg;
-	reg = 0;
 	prototype *proto = GET_PTR(scope->proto);
 	sly_value symtable = scope->symtable;
 	sly_value stx, sym, args = car(form);
@@ -562,15 +540,17 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 	union symbol_properties st_prop = {0};
 	st_prop.p.type = sym_arg;
 	st_prop.p.islocal = 1;
-	size_t nargs = 0;
+	proto->nargs = 0;
+	proto->nregs = 0;
 	while (pair_p(args)) {
 		stx = car(args);
 		sym = syntax_to_datum(stx);
 		if (!symbol_p(sym)) {
 			sly_raise_exception(ss, EXC_COMPILE, "Compile error function parameter must be a symbol");
 		}
-		nargs++;
-		st_prop.p.reg = nargs;
+		proto->nargs++;
+		st_prop.p.reg = proto->nregs;
+		proto->nregs++;
 		dictionary_set(ss, symtable, sym, st_prop.v);
 		args = cdr(args);
 	}
@@ -578,15 +558,16 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 		sym = syntax_to_datum(args);
 		if (symbol_p(sym)) {
 			proto->has_varg = 1;
-			st_prop.p.reg = nargs + 1;
+			st_prop.p.reg =	proto->nregs;
+			proto->nregs++;
 			dictionary_set(ss, symtable, sym, st_prop.v);
 		} else {
 			sly_raise_exception(ss, EXC_COMPILE, "Compile error function parameter must be a symbol");
 		}
 	}
-	proto->nargs = nargs;
+	proto->nvars = proto->nregs;
 	while (!null_p(form)) {
-		reg = comp_expr(ss, car(form), reg);
+		reg = comp_expr(ss, car(form), proto->nvars);
 		form = cdr(form);
 	}
 	vector_append(ss, proto->code, iA(OP_RETURN, reg, -1));
@@ -676,8 +657,9 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 		} break;
 		case kw_begin: {
 			form = cdr(form);
+			prototype *proto = GET_PTR(ss->cc->cscope->proto);
 			while (!null_p(form)) {
-				reg = comp_expr(ss, car(form), reg);
+				comp_expr(ss, car(form), proto->nvars);
 				form = cdr(form);
 			}
 		} break;
