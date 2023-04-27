@@ -1,0 +1,23 @@
+;; Strict functional implementation of the Y combinator
+;; https://en.wikipedia.org/wiki/Fixed-point_combinator
+
+(define Y!
+  (lambda (f)
+    ((lambda (i)
+       (set! i (f (lambda (x) (i x)))) ;; (set! i expr) assigns i the value of expr
+       i)                              ;; replacing it in the present lexical scope
+     #f)))
+
+(define (F f) (lambda (x) (if (= x 0) 1 (* x (f (- x 1))))))
+
+(define (fac n) ((F (Y! F)) n))
+
+(display "3! = ")
+(display (fac 3))
+(display "\n")
+(display "5! = ")
+(display (fac 5))
+(display "\n")
+(display "6! = ")
+(display (fac 6))
+(display "\n")

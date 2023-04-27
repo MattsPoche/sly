@@ -4,7 +4,7 @@
 union uplookup {
 	sly_value v;
 	struct {
-		u8 isup;    /* points to upval (or function arg) */
+		u8 isup;    /* points to upval */
 		u8 reg;     /* register */
 	} u;
 };
