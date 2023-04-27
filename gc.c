@@ -10,7 +10,6 @@
 #define GC_WHITE 0
 #define GC_GRAY  1
 #define GC_BLACK 2
-#define GC_HEAP_GROW_FACTOR 2
 
 void
 gc_init(GC *gc)
@@ -347,7 +346,7 @@ gc_collect(Sly_State *ss)
 	}
 	sweep(ss);
 	mark_all_white(ss);
-	gc->treshold = gc->bytes * GC_HEAP_GROW_FACTOR;
+	gc->treshold = gc->bytes + (gc->bytes / 2);
 }
 
 void

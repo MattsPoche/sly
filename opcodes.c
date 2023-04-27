@@ -116,6 +116,9 @@ dis(INSTR ins)
 		printf("(CALL/CC %d)%n", a, &pad);
 	} break;
 	case OP_TAILCALL: {
+		u8 a = GET_A(instr);
+		u8 b = GET_B(instr);
+		printf("(TAILCALL %d %d)%n", a, b, &pad);
 	} break;
 	case OP_RETURN: {
 		u8 a = GET_A(instr);

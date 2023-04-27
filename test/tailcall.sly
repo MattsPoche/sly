@@ -1,0 +1,13 @@
+(define (println x)
+  (display x)
+  (display "\n"))
+
+(define (tailcall x)
+  (if x
+	  (begin (println "foo")
+			 (println "bar"))
+	  (begin (println "biz")
+			 (println "baz"))))
+
+(tailcall #t)
+(tailcall #f)

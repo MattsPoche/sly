@@ -200,11 +200,17 @@ struct scope {
 	u32 level;
 };
 
+enum syntax_context {
+	ctx_none = 0,
+	ctx_tail_pos = 1,
+};
+
 typedef struct _syntax {
 	OBJ_HEADER;
 	token tok;
 	sly_value lex_info;  // <vector> each slot corrisponds to phase level
 	sly_value datum;	 // and contains it's scopes.
+	u32 context;
 } syntax;
 
 void sly_assert(int p, char *msg);
@@ -312,27 +318,8 @@ void upvalue_set(sly_value uv, sly_value value);
 #define continuation_p(v) (ptr_p(v) && TYPEOF(v) == tt_continuation)
 #define syntax_p(v)      (ptr_p(v) && TYPEOF(v) == tt_syntax)
 #define heap_obj_p(v)    (ptr_p(v) || pair_p(v))
-
-static inline int
-expression_p(sly_value val)
-{
-	if (syntax_p(val)) {
-		syntax *stx = GET_PTR(val);
-		return pair_p(stx->datum);
-	}
-	return 0;
-}
-
-static inline int
-identifier_p(sly_value val)
-{
-	if (syntax_p(val)) {
-		syntax *stx = GET_PTR(val);
-		return symbol_p(stx->datum);
-	}
-	return 0;
-}
-
+#define syntax_pair_p(v) (syntax_p(v) && pair_p(syntax_to_datum(v)))
+#define identifier_p(v)  (syntax_p(v) && symbol_p(syntax_to_datum(v)))
 
 static inline int
 int_p(sly_value val)

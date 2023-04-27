@@ -5,6 +5,8 @@
 #include "parser.h"
 #include "sly_alloc.h"
 
+#define syntax_cons(car, cdr) make_syntax(ss, t, cons(ss, car, cdr))
+
 static char *
 escape_string(Sly_State *ss, char *str, size_t len)
 {
@@ -68,47 +70,49 @@ parse_value(Sly_State *ss, char *cstr)
 		sly_assert(0, "(parse_value, tok_any)UNEMPLEMENTED");
 	} break;
 	case tok_quote: {
-		sly_value stx = make_syntax(ss, t, cstr_to_symbol("quote"));
-		return cons(ss, stx, cons(ss, parse_value(ss, cstr), SLY_NULL));
+		return syntax_cons(make_syntax(ss, t, cstr_to_symbol("quote")),
+						   cons(ss, parse_value(ss, cstr), SLY_NULL));
 	} break;
 	case tok_quasiquote: {
-		sly_value stx = make_syntax(ss, t, cstr_to_symbol("quasiquote"));
-		return cons(ss, stx, cons(ss, parse_value(ss, cstr), SLY_NULL));
+		return syntax_cons(make_syntax(ss, t, cstr_to_symbol("quasiquote")),
+						   cons(ss, parse_value(ss, cstr), SLY_NULL));
 	} break;
 	case tok_unquote: {
-		sly_value stx = make_syntax(ss, t, cstr_to_symbol("unquote"));
-		return cons(ss, stx, cons(ss, parse_value(ss, cstr), SLY_NULL));
+		return syntax_cons(make_syntax(ss, t, cstr_to_symbol("unquote")),
+						   cons(ss, parse_value(ss, cstr), SLY_NULL));
 	} break;
 	case tok_unquote_splice: {
-		sly_value stx = make_syntax(ss, t, cstr_to_symbol("unquote-splice"));
-		return cons(ss, stx, cons(ss, parse_value(ss, cstr), SLY_NULL));
+		return syntax_cons(make_syntax(ss, t, cstr_to_symbol("unquote-splice")),
+						   cons(ss, parse_value(ss, cstr), SLY_NULL));
 	} break;
 	case tok_syntax_quote: {
-		sly_value stx = make_syntax(ss, t, cstr_to_symbol("syntax-quote"));
-		return cons(ss, stx, cons(ss, parse_value(ss, cstr), SLY_NULL));
+		return syntax_cons(make_syntax(ss, t, cstr_to_symbol("syntax-quote")),
+						   cons(ss, parse_value(ss, cstr), SLY_NULL));
 	} break;
 	case tok_syntax_quasiquote: {
-		sly_value stx = make_syntax(ss, t, cstr_to_symbol("syntax-quasiquote"));
-		return cons(ss, stx, cons(ss, parse_value(ss, cstr), SLY_NULL));
+		return syntax_cons(make_syntax(ss, t, cstr_to_symbol("syntax-quasiquote")),
+						   cons(ss, parse_value(ss, cstr), SLY_NULL));
 	} break;
 	case tok_syntax_unquote: {
-		sly_value stx = make_syntax(ss, t, cstr_to_symbol("syntax-unquote"));
-		return cons(ss, stx, cons(ss, parse_value(ss, cstr), SLY_NULL));
+		return syntax_cons(make_syntax(ss, t, cstr_to_symbol("syntax-unquote")),
+						   cons(ss, parse_value(ss, cstr), SLY_NULL));
 	} break;
 	case tok_syntax_unquote_splice: {
-		sly_value stx = make_syntax(ss, t, cstr_to_symbol("syntax-unquote-splice"));
-		return cons(ss, stx, cons(ss, parse_value(ss, cstr), SLY_NULL));
+		return syntax_cons(make_syntax(ss, t, cstr_to_symbol("syntax-unquote-splice")),
+						   cons(ss, parse_value(ss, cstr), SLY_NULL));
 	} break;
 	case tok_comment: {
 		return parse_value(ss, cstr);
 	} break;
 	case tok_lbracket: {
+		token start_list;
 		if (peek().tag == tok_rbracket) {
 			next_token();
 			return SLY_NULL;
 		}
 		list = cons(ss, parse_value(ss, cstr), SLY_NULL);
 build_list:
+		start_list = t;
 		for (;;) {
 			t = peek();
 			if (t.tag == tok_eof) {
@@ -116,7 +120,7 @@ build_list:
 			}
 			if (t.tag == tok_rbracket) {
 				next_token();
-				return list;
+				break;
 			}
 			if (t.tag == tok_dot) {
 				next_token();
@@ -124,10 +128,11 @@ build_list:
 				if (next_token().tag != tok_rbracket) {
 					sly_raise_exception(ss, EXC_COMPILE, "Parse Error expected closing bracket");
 				}
-				return list;
+				break;
 			}
 			append(list, cons(ss, parse_value(ss, cstr), SLY_NULL));
 		}
+		return make_syntax(ss, start_list, list);
 	} break;
 	case tok_rbracket: {
 		printf("DEBUG:\n%s\n", &cstr[t.so]);
@@ -200,8 +205,8 @@ sly_value
 parse(Sly_State *ss, char *cstr)
 {
 	lexer_init(cstr);
-
-	sly_value code = cons(ss, make_syntax(ss, (token){0}, cstr_to_symbol("begin")),
+	sly_value code = cons(ss,
+						  make_syntax(ss, (token){0}, cstr_to_symbol("begin")),
 						  SLY_NULL);
 	sly_value val;
 	while (peek().tag != tok_eof) {
@@ -209,7 +214,7 @@ parse(Sly_State *ss, char *cstr)
 		append(code, cons(ss, val, SLY_NULL));
 	}
 	lexer_end();
-	return code;
+	return make_syntax(ss, (token){0}, code);
 }
 
 static size_t

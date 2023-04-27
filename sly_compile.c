@@ -71,6 +71,9 @@ union symbol_properties {
 		dictionary_set(ss, cc->cscope->macros, var, clos);	\
 	} while (0)
 
+#define CAR(val) (syntax_p(val) ? car(syntax_to_datum(val)) : car(val))
+#define CDR(val) (syntax_p(val) ? cdr(syntax_to_datum(val)) : cdr(val))
+#define syntax_cons(car, cdr) make_syntax(ss, (token){0}, cons(ss, car, cdr))
 
 static char *
 keywords(int idx)
@@ -205,31 +208,31 @@ comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 	 * or the begining of bodies.
 	 */
 	struct compile *cc = ss->cc;
-	sly_value stx = car(form);
+	sly_value stx = CAR(form);
 	syntax *syn = GET_PTR(stx);
 	int line_number = syn->tok.ln;
 	sly_value var;
-	if (pair_p(stx)) { /* function definition */
-		var = syntax_to_datum(car(stx));
-		sly_value params = cdr(stx);
+	if (syntax_pair_p(stx)) { /* function definition */
+		var = syntax_to_datum(CAR(stx));
+		sly_value params = CDR(stx);
 		/* build lambda form */
-		form = cons(ss,
-					cons(ss,
-						 make_syntax(ss, (token){0}, make_symbol(ss, "lambda", 6)),
-						 cons(ss, params, cdr(form))), SLY_NULL);
+		form = syntax_cons(syntax_cons(make_syntax(ss, (token){0}, make_symbol(ss, "lambda", 6)),
+									   cons(ss, params, CDR(form))), SLY_NULL);
 	} else {
 		var = syntax_to_datum(stx);
-		form = cdr(form);
+		form = CDR(form);
 	}
 	sly_value symtable = cc->cscope->symtable;
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	union symbol_properties st_prop = {0};
 	if (!symbol_p(var)) {
+		sly_display(var, 1);
+		printf("\n");
 		sly_raise_exception(ss, EXC_COMPILE, "Error variable name must be a symbol");
 	}
 	sly_value globals  = cc->globals;
 	if (IS_GLOBAL(cc->cscope)) {
-		stx = car(form);
+		stx = CAR(form);
 		sly_value datum = syntax_p(stx) ? syntax_to_datum(stx) : stx;
 		st_prop.p.islocal = 0;
 		st_prop.p.type = sym_global;
@@ -237,7 +240,7 @@ comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 		dictionary_set(ss, symtable, var, st_prop.v);
 		if (pair_p(datum) || symbol_p(datum)) {
 			dictionary_set(ss, globals, var, SLY_VOID);
-			comp_expr(ss, car(form), reg);
+			comp_expr(ss, CAR(form), reg);
 			if (is_syntax) {
 				STORE_MACRO_CLOSURE();
 			}
@@ -247,7 +250,7 @@ comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 		} else {
 			dictionary_set(ss, globals, var, datum);
 		}
-		if (!null_p(cdr(form))) {
+		if (!null_p(CDR(form))) {
 			sly_raise_exception(ss, EXC_COMPILE, "Compile Error malformed define");
 		}
 		return reg;
@@ -256,12 +259,12 @@ comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 		st_prop.p.islocal = 1;
 		st_prop.p.type = sym_variable;
 		dictionary_set(ss, symtable, var, st_prop.v);
-		comp_expr(ss, car(form), st_prop.p.reg);
+		comp_expr(ss, CAR(form), st_prop.p.reg);
 		if (is_syntax) {
 			STORE_MACRO_CLOSURE();
 		}
 		/* end of definition */
-		if (!null_p(cdr(form))) {
+		if (!null_p(CDR(form))) {
 			sly_raise_exception(ss, EXC_COMPILE, "Compile Error malformed define");
 		}
 		return proto->nvars;
@@ -273,14 +276,22 @@ comp_if(Sly_State *ss, sly_value form, int reg)
 {
 	struct compile *cc = ss->cc;
 	prototype *proto = GET_PTR(cc->cscope->proto);
-	sly_value boolexpr = car(form);
-	form = cdr(form);
-	sly_value tbranch = car(form);
-	form = cdr(form);
-	sly_value fbranch = car(form);
-	form = cdr(form);
+	syntax *stx = GET_PTR(form);
+	form = CDR(form);
+	sly_value boolexpr = CAR(form);
+	form = CDR(form);
+	sly_value tbranch = CAR(form);
+	form = CDR(form);
+	sly_value fbranch = CAR(form);
+	form = CDR(form);
 	if (!null_p(form)) {
 		sly_raise_exception(ss, EXC_COMPILE, "Compile Error malformed if expression");
+	}
+	if (stx->context & ctx_tail_pos) {
+		syntax *s = GET_PTR(tbranch);
+		s->context |= ctx_tail_pos;
+		s = GET_PTR(fbranch);
+		s->context |= ctx_tail_pos;
 	}
 	int be_res = comp_expr(ss, boolexpr, reg);
 	size_t fjmp = vector_len(proto->code);
@@ -359,8 +370,8 @@ int
 comp_set(Sly_State *ss, sly_value form, int reg)
 {
 	struct compile *cc = ss->cc;
-	form = cdr(form);
-	sly_value stx = car(form);
+	form = CDR(form);
+	sly_value stx = CAR(form);
 	syntax *syn = GET_PTR(stx);
 	int line_number = syn->tok.ln;
 	sly_value datum = syntax_to_datum(stx);
@@ -375,8 +386,8 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 	if (cc->cscope->level != level && st_prop.p.type != sym_global) { /* is non local */
 		st_prop = resolve_upval(ss, cc->cscope, datum, st_prop, level);
 	}
-	form = cdr(form);
-	reg = comp_expr(ss, car(form), reg);
+	form = CDR(form);
+	reg = comp_expr(ss, CAR(form), reg);
 	if ((size_t)reg + 1 >= proto->nregs) proto->nregs = reg + 2;
 	if (st_prop.p.type == sym_variable
 		|| st_prop.p.type == sym_arg) {
@@ -398,7 +409,7 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 		vector_append(ss, proto->code,
 					  iAB(OP_SETUPVAL, st_prop.p.reg, reg, line_number));
 	}
-	if (!null_p(cdr(form))) {
+	if (!null_p(CDR(form))) {
 		sly_raise_exception(ss, EXC_COMPILE, "Error malformed set! expression");
 	}
 	return reg;
@@ -412,6 +423,10 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 	int line_number = -1;
 	if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 	sly_value datum;
+	if (!syntax_p(form)) {
+		sly_display(form, 1);
+		printf("\n");
+	}
 	datum = syntax_to_datum(form);
 	syntax *syn = GET_PTR(form);
 	line_number = syn->tok.ln;
@@ -483,24 +498,23 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 {
 	struct compile *cc = ss->cc;
 	prototype *proto = GET_PTR(cc->cscope->proto);
-	sly_value head = car(form);
-	form = cdr(form);
+	syntax *stx = GET_PTR(form);
+	sly_value head = CAR(form);
+	form = CDR(form);
 	token tok;
 	tok.ln = -1;
-	if (syntax_p(head)) {
+	if (identifier_p(head)) {
 		syntax *s = GET_PTR(head);
 		tok = s->tok;
-		if (symbol_p(s->datum)) {
-			u32 level = 0;
-			sly_value uplist = SLY_NULL;
-			union symbol_properties st_prop = {0};
-			st_prop.v = symbol_lookup_props(ss, s->datum, &level, &uplist);
-			if (st_prop.p.issyntax) {
-				/* call macro */
-				sly_value macro = lookup_macro(ss, s->datum);
-				form = call_closure_no_eval(ss, macro, cons(ss, form, SLY_NULL));
-				return comp_expr(ss, form, reg);
-			}
+		u32 level = 0;
+		sly_value uplist = SLY_NULL;
+		union symbol_properties st_prop = {0};
+		st_prop.v = symbol_lookup_props(ss, s->datum, &level, &uplist);
+		if (st_prop.p.issyntax) {
+			/* call macro */
+			sly_value macro = lookup_macro(ss, s->datum);
+			form = call_closure_no_eval(ss, macro, cons(ss, form, SLY_NULL));
+			return comp_expr(ss, form, reg);
 		}
 	}
 	int start = reg;
@@ -509,17 +523,21 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 		vector_append(ss, proto->code, iAB(OP_MOVE, reg, reg2, tok.ln));
 	}
 	reg++;
-	while (pair_p(form)) {
-		head = car(form);
+	while (!null_p(form)) {
+		head = CAR(form);
 		syntax *s = GET_PTR(head);
 		reg2 = comp_expr(ss, head, reg);
 		if (reg2 != -1 && reg2 != reg) {
 			vector_append(ss, proto->code, iAB(OP_MOVE, reg, reg2, s->tok.ln));
 		}
 		reg++;
-		form = cdr(form);
+		form = CDR(form);
 	}
-	vector_append(ss, proto->code, iAB(OP_CALL, start, reg, tok.ln));
+	if (stx->context & ctx_tail_pos) {
+		vector_append(ss, proto->code, iAB(OP_TAILCALL, start, reg, tok.ln));
+	} else {
+		vector_append(ss, proto->code, iAB(OP_CALL, start, reg, tok.ln));
+	}
 	if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 	return start;
 }
@@ -535,24 +553,26 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 	int preg = reg;
 	prototype *proto = GET_PTR(scope->proto);
 	sly_value symtable = scope->symtable;
-	sly_value stx, sym, args = car(form);
-	form = cdr(form);
+	sly_value stx, sym, args = CAR(form);
+	form = CDR(form);
 	union symbol_properties st_prop = {0};
 	st_prop.p.type = sym_arg;
 	st_prop.p.islocal = 1;
 	proto->nargs = 0;
 	proto->nregs = 0;
-	while (pair_p(args)) {
-		stx = car(args);
+	while (pair_p(args) || syntax_pair_p(args)) {
+		stx = CAR(args);
 		sym = syntax_to_datum(stx);
 		if (!symbol_p(sym)) {
+			sly_display(sym, 1);
+			printf("\n");
 			sly_raise_exception(ss, EXC_COMPILE, "Compile error function parameter must be a symbol");
 		}
 		proto->nargs++;
 		st_prop.p.reg = proto->nregs;
 		proto->nregs++;
 		dictionary_set(ss, symtable, sym, st_prop.v);
-		args = cdr(args);
+		args = CDR(args);
 	}
 	if (!null_p(args)) {
 		sym = syntax_to_datum(args);
@@ -562,13 +582,20 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 			proto->nregs++;
 			dictionary_set(ss, symtable, sym, st_prop.v);
 		} else {
+			sly_display(sym, 1);
+			printf("\n");
 			sly_raise_exception(ss, EXC_COMPILE, "Compile error function parameter must be a symbol");
 		}
 	}
 	proto->nvars = proto->nregs;
-	while (!null_p(form)) {
-		reg = comp_expr(ss, car(form), proto->nvars);
-		form = cdr(form);
+	{
+		while (!null_p(CDR(form))) {
+			comp_expr(ss, CAR(form), proto->nvars);
+			form = CDR(form);
+		}
+		syntax *stx = GET_PTR(CAR(form));
+		stx->context |= ctx_tail_pos;
+		reg = comp_expr(ss, CAR(form), proto->nvars);
 	}
 	vector_append(ss, proto->code, iA(OP_RETURN, reg, -1));
 	cc->cscope = cc->cscope->parent;
@@ -584,9 +611,12 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 sly_value
 strip_syntax(Sly_State *ss, sly_value form)
 {
+	if (syntax_pair_p(form)) {
+		return strip_syntax(ss, syntax_to_datum(form));
+	}
 	if (pair_p(form)) {
-		return cons(ss, strip_syntax(ss, car(form)),
-					    strip_syntax(ss, cdr(form)));
+		return cons(ss, strip_syntax(ss, CAR(form)),
+					    strip_syntax(ss, CDR(form)));
 	}
 	if (syntax_p(form)) {
 		return syntax_to_datum(form);
@@ -598,12 +628,12 @@ int
 comp_expr(Sly_State *ss, sly_value form, int reg)
 {
 	struct compile *cc = ss->cc;
-	if (!pair_p(form)) {
+	if (!syntax_pair_p(form)) {
 		return comp_atom(ss, form, reg);
 	}
 	sly_value stx, datum;
-	stx = car(form);
-	if (pair_p(stx)) {
+	stx = CAR(form);
+	if (syntax_pair_p(stx)) {
 		return comp_funcall(ss, form, reg);
 	}
 	if (!syntax_p(stx)) {
@@ -616,20 +646,20 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 	if (symbol_p(datum) && (kw = is_keyword(datum)) != -1) {
 		switch ((enum kw)kw) {
 		case kw_define: {
-			form = cdr(form);
+			form = CDR(form);
 			reg = comp_define(ss, form, reg, 0);
 		} break;
 		case kw_lambda: {
-			form = cdr(form);
+			form = CDR(form);
 			reg = comp_lambda(ss, form, reg);
 		} break;
 		case kw_quote: {
 			syntax *s = GET_PTR(stx);
-			form = cdr(form);
-			if (!null_p(cdr(form))) {
+			form = CDR(form);
+			if (!null_p(CDR(form))) {
 				sly_raise_exception(ss, EXC_COMPILE, "Error malformed quote");
 			}
-			form = car(form);
+			form = CAR(form);
 			form = strip_syntax(ss, form);
 			prototype *proto = GET_PTR(ss->cc->cscope->proto);
 			if (null_p(form)) {
@@ -645,55 +675,60 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 		} break;
 		case kw_syntax_quote: {
 			syntax *s = GET_PTR(stx);
-			form = cdr(form);
-			if (!null_p(cdr(form))) {
+			form = CDR(form);
+			if (!null_p(CDR(form))) {
 				sly_raise_exception(ss, EXC_COMPILE, "Error malformed quote");
 			}
-			form = car(form);
+			form = CAR(form);
 			prototype *proto = GET_PTR(ss->cc->cscope->proto);
 			int kreg = intern_constant(ss, form);
 			if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 			vector_append(ss, proto->code, iABx(OP_LOADK, reg, kreg, s->tok.ln));
 		} break;
 		case kw_begin: {
-			form = cdr(form);
+			syntax *s = GET_PTR(form);
+			form = CDR(form);
 			prototype *proto = GET_PTR(ss->cc->cscope->proto);
-			while (!null_p(form)) {
-				comp_expr(ss, car(form), proto->nvars);
-				form = cdr(form);
+			while (!null_p(CDR(form))) {
+				comp_expr(ss, CAR(form), proto->nvars);
+				form = CDR(form);
 			}
+			if (s->context & ctx_tail_pos) {
+				s = GET_PTR(CAR(form));
+				s->context |= ctx_tail_pos;
+			}
+			comp_expr(ss, CAR(form), proto->nvars);
 		} break;
 		case kw_if: {
-			form = cdr(form);
 			reg = comp_if(ss, form, reg);
 		} break;
 		case kw_set: {
 			comp_set(ss, form, reg);
 		} break;
 		case kw_define_syntax: {
-			form = cdr(form);
+			form = CDR(form);
 			reg = comp_define(ss, form, reg, 1);
 		} break;
 		case kw_call_with_continuation: /* fallthrough intended */
 		case kw_call_cc: {
 			prototype *proto = GET_PTR(cc->cscope->proto);
 			syntax *s = GET_PTR(stx);
-			form = cdr(form);
-			int reg2 = comp_expr(ss, car(form), reg);
+			form = CDR(form);
+			int reg2 = comp_expr(ss, CAR(form), reg);
 			if (reg2 == -1) {
 				vector_append(ss, proto->code, iA(OP_CALLWCC, reg, s->tok.ln));
 			} else {
 				vector_append(ss, proto->code, iA(OP_CALLWCC, reg2, s->tok.ln));
 			}
-			if (!null_p(cdr(form))) {
+			if (!null_p(CDR(form))) {
 				sly_raise_exception(ss, EXC_COMPILE, "Error malformed display expression");
 			}
 		} break;
 		case kw_include: { /* TODO: Hasn't been tested */
 			char *src;
 			char path[255] = {0};
-			form = cdr(form);
-			byte_vector *bv = GET_PTR(syntax_to_datum(car(form)));
+			form = CDR(form);
+			byte_vector *bv = GET_PTR(syntax_to_datum(CAR(form)));
 			memcpy(path, bv->elems, bv->len);
 			sly_value ast = parse_file(ss, path, &src);
 			FREE(src);

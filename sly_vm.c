@@ -58,6 +58,7 @@ sly_value
 vm_run(Sly_State *ss, int run_gc)
 {
 	sly_value ret_val = SLY_VOID;
+	int do_tailcall = 0;
 	union instr instr;
     for (;;) {
 		instr.v = next_instr();
@@ -135,6 +136,9 @@ vm_run(Sly_State *ss, int run_gc)
 				ss->frame->pc = b;
 			}
 		} break;
+		case OP_TAILCALL:
+			do_tailcall = 1;
+			__attribute__((fallthrough));
 		case OP_CALL: {
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
@@ -169,7 +173,6 @@ vm_run(Sly_State *ss, int run_gc)
 				prototype *proto = GET_PTR(clos->proto);
 				stack_frame *nframe = make_stack(ss, proto->nregs);
 				nframe->clos = val;
-				nframe->level = ss->frame->level + 1;
 				nframe->U = clos->upvals;
 				if (proto->has_varg) {
 					sly_assert(nargs >= proto->nargs,
@@ -190,13 +193,22 @@ vm_run(Sly_State *ss, int run_gc)
 				nframe->K = proto->K;
 				nframe->code = proto->code;
 				nframe->pc = proto->entry;
-				nframe->ret_slot = a;
-				nframe->parent = ss->frame;
+				if (do_tailcall) {
+					nframe->ret_slot = ss->frame->ret_slot;
+					nframe->level = ss->frame->level;
+					nframe->parent = ss->frame->parent;
+					close_upvalues(ss, ss->frame);
+				} else {
+					nframe->ret_slot = a;
+					nframe->parent = ss->frame;
+					nframe->level = ss->frame->level + 1;
+				}
 				ss->frame = nframe;
 			} else if (continuation_p(val)) {
 				/* TODO: continuations should take a vararg?
 				 */
-				sly_assert(nargs == 1, "Error Wrong number of arguments for continuation");
+				sly_assert(nargs == 1,
+						   "Error Wrong number of arguments for continuation");
 				continuation *cc = GET_PTR(val);
 				sly_value arg = get_reg(a+1);
 				ss->frame = cc->frame;
@@ -219,6 +231,7 @@ vm_run(Sly_State *ss, int run_gc)
 				}
 				sly_assert(0, "Type Error expected procedure");
 			}
+			do_tailcall = 0;
 		} break;
 		case OP_CALLWCC: {
 			u8 a = GET_A(instr);
@@ -242,9 +255,6 @@ vm_run(Sly_State *ss, int run_gc)
 			} else {
 				sly_assert(0, "CALL/CC Not emplemented for procedure type");
 			}
-		} break;
-		case OP_TAILCALL: {
-			sly_assert(0, "(OP_TAILCALL) UNEMPLEMENTED");
 		} break;
 		case OP_RETURN: {
 			u8 a = GET_A(instr);
