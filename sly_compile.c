@@ -521,7 +521,7 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 	}
 	vector_append(ss, proto->code, iAB(OP_CALL, start, reg, tok.ln));
 	if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
-	return start + 1;
+	return start;
 }
 
 int

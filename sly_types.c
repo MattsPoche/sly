@@ -165,8 +165,8 @@ sly_display(sly_value v, int lit)
 			sly_value v = vec->elems[i];
 			if (!slot_is_free(v)) {
 				sly_display(vec->elems[i], 1);
+				printf(" ");
 			}
-			printf(" ");
 		}
 		printf("\b)");
 	} else if (closure_p(v)) {
@@ -183,9 +183,9 @@ sly_display(sly_value v, int lit)
 		} else {
 			printf(" #<ref ");
 			sly_display(*uv->u.ptr, 1);
-			printf("> ");
+			printf(">");
 		}
-		printf("> ");
+		printf(">");
 
 	} else {
 		printf("#<UNEMPLEMENTED %#lx, %zu, %d>", v, v & TAG_MASK, TYPEOF(v));

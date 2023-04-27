@@ -1,0 +1,12 @@
+;; Z is a strict fixed-point combinator,
+;; a version of the Y combinator for
+;; strict functional languages.
+;; This code is meant to test free variable capture.
+
+(define (Z f)
+  ((lambda (x) (f (lambda (v) ((x x) v))))
+   (lambda (x) (f (lambda (v) ((x x) v))))))
+
+(define (F f) (lambda (x) (if (= x 0) 1 (* x (f (- x 1))))))
+
+(display ((F (Z F)) 3))(display "\n")
