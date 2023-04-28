@@ -30,7 +30,7 @@ call_closure(Sly_State *ss, sly_value clos, sly_value arglist)
 	ss->frame->pc = 0;
 	vector_append(ss, ss->frame->R, clos);
 	while (!null_p(arglist)) {
-		vector_append(ss, ss->frame->R, eval_expr(ss, car(arglist)));
+		vector_append(ss, ss->frame->R, eval_expr(ss, CAR(arglist)));
 		arglist = cdr(arglist);
 	}
 	size_t len = vector_len(ss->frame->R);
@@ -159,9 +159,10 @@ eval_atom(Sly_State *ss, sly_value expr)
 	sly_value globals = ss->cc->globals;
 	if (symbol_p(datum)) {
 		return dictionary_ref(globals, datum);
-	} else {
-		return datum;
+	} else if (null_p(datum)) {
+		sly_assert(0, "Error (eval_atom): bad syntax, empty expression");
 	}
+	return datum;
 }
 
 sly_value

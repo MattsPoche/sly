@@ -268,40 +268,16 @@ vm_run(Sly_State *ss, int run_gc)
 			ss->frame = ss->frame->parent;
 			set_reg(ret_slot, ret_val);
 		} break;
-		case OP_VECREF: {
-			u8 a = GET_A(instr);
-			u8 b = GET_B(instr);
-			u8 c = GET_C(instr);
-			sly_value vec = get_reg(b);
-			set_reg(a, vector_ref(vec, get_int(get_reg(c))));
-		} break;
-		case OP_VECSET: {
-			u8 a = GET_A(instr);
-			u8 b = GET_B(instr);
-			u8 c = GET_C(instr);
-			sly_value vec = get_reg(a);
-			vector_set(vec, get_int(get_reg(b)), get_reg(c));
-		} break;
-		case OP_DICTREF: {
-			u8 a = GET_A(instr);
-			u8 b = GET_B(instr);
-			u8 c = GET_C(instr);
-			sly_value dict = get_reg(b);
-			set_reg(a, dictionary_ref(dict, get_reg(c)));
-		} break;
-		case OP_DICTSET: {
-			u8 a = GET_A(instr);
-			u8 b = GET_B(instr);
-			u8 c = GET_C(instr);
-			sly_value dict = get_reg(a);
-			dictionary_set(ss, dict, get_reg(b), get_reg(c));
-		} break;
 		case OP_CLOSURE: {
 			u8 a = GET_A(instr);
 			size_t b = GET_Bx(instr);
 			sly_value _proto = get_const(b);
 			sly_value clos = form_closure(ss, _proto);
 			set_reg(a, clos);
+		} break;
+		case OP_COUNT:
+		default: {
+			sly_assert(0, "Error invalid opcode");
 		} break;
 		}
 		if (run_gc) {

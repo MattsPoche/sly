@@ -25,13 +25,15 @@ static char retok[] =
 	"|^([])}])"													// 11
 	"|^(\\.)"RE_SEP												// 12
 	"|^(#\\()"      										    // 13
-	"|^(λ|\\\\)"RE_SEP											// 14
-	"|^(\"([^\"]|\\\\.)*\")"RE_SEP								// 15
-	"|^(#t|#f)"RE_SEP											// 16
-	"|^(-?[0-9]+\\.[0-9]+)"RE_SEP								// 17
-	"|^(#[xX][0-9A-Fa-f]+)"RE_SEP								// 18
-	"|^(-?[0-9]+)"RE_SEP										// 19
-	"|^([^][(){};'`\"#,[:space:]][^][(){};[:space:]]*)"RE_SEP;	// 20
+	"|^(#uv8\\()"     										    // 14
+	"|^(#dict\\()"     										    // 15
+	"|^(λ|\\\\)"RE_SEP											// 16
+	"|^(\"([^\"]|\\\\.)*\")"RE_SEP								// 17
+	"|^(#t|#f)"RE_SEP											// 18
+	"|^(-?[0-9]+\\.[0-9]+)"RE_SEP								// 19
+	"|^(#[xX][0-9A-Fa-f]+)"RE_SEP								// 20
+	"|^(-?[0-9]+)"RE_SEP										// 21
+	"|^([^][(){};'`\"#,[:space:]][^][(){};[:space:]]*)"RE_SEP;	// 22
 
 static regmatch_t pmatch[tok_max] = {0};
 static regex_t rexpr = {0};
@@ -60,6 +62,8 @@ tok_to_string(enum token t)
 	case tok_lbracket: return "lbracket";
 	case tok_rbracket: return "rbracket";
 	case tok_vector: return "vector";
+	case tok_byte_vector: return "byte-vector";
+	case tok_dictionary: return "dictionary";
 	case tok_dot: return "dot";
 	case tok_bool: return "bool";
 	case tok_lambda: return "λ";

@@ -17,6 +17,8 @@ enum token {
 	tok_dot,					// 12
 	tok__nocap0,
 	tok_vector,					// 13
+	tok_byte_vector,			// 13
+	tok_dictionary,				// 13
 	tok_lambda,					// 14
 	tok__nocap1,
 	tok_string,					// 15

@@ -143,6 +143,16 @@ build_list:
 		list = cons(ss, stx, SLY_NULL);
 		goto build_list;
 	} break;
+	case tok_byte_vector: {
+		sly_value stx = make_syntax(ss, t, cstr_to_symbol("make-byte-vector"));
+		list = cons(ss, stx, SLY_NULL);
+		goto build_list;
+	} break;
+	case tok_dictionary: {
+		sly_value stx = make_syntax(ss, t, cstr_to_symbol("make-dictionary"));
+		list = cons(ss, stx, SLY_NULL);
+		goto build_list;
+	} break;
 	case tok_dot: {
 		sly_raise_exception(ss, EXC_COMPILE, "Parse Error bad dot");
 	} break;

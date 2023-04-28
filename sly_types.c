@@ -369,7 +369,7 @@ size_t
 list_len(sly_value list)
 {
 	size_t len = 0;
-	for (; pair_p(list); list = cdr(list));
+	for (; pair_p(list); list = cdr(list)) len++;
 	return len;
 }
 

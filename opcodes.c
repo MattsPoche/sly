@@ -124,26 +124,14 @@ dis(INSTR ins)
 		u8 a = GET_A(instr);
 		printf("(RETURN %d)%n", a, &pad);
 	} break;
-	case OP_DICTREF: {
-		u8 a = GET_A(instr);
-		u8 b = GET_B(instr);
-		u8 c = GET_C(instr);
-		printf("(DICTREF %d %d %d)%n", a, b, c, &pad);
-	} break;
-	case OP_DICTSET: {
-		u8 a = GET_A(instr);
-		u8 b = GET_B(instr);
-		u8 c = GET_C(instr);
-		printf("(DICTSET %d %d %d)%n", a, b, c, &pad);
-	} break;
-	case OP_VECREF: {
-	} break;
-	case OP_VECSET: {
-	} break;
 	case OP_CLOSURE: {
 		u8 a = GET_A(instr);
 		u64 b = GET_Bx(instr);
 		printf("(CLOSURE %d %lu)%n", a, b, &pad);
+	} break;
+	case OP_COUNT:
+	default: {
+		sly_assert(0, "Error invalid opcode");
 	} break;
 	}
 	if (instr.i.ln < 0) {
