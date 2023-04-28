@@ -6,6 +6,10 @@
 #include "opcodes.h"
 #include "eval.h"
 
+#define CAR(val) (syntax_p(val) ? car(syntax_to_datum(val)) : car(val))
+#define CDR(val) (syntax_p(val) ? cdr(syntax_to_datum(val)) : cdr(val))
+#define syntax_cons(car, cdr) make_syntax(ss, (token){0}, cons(ss, car, cdr))
+
 sly_value
 call_closure(Sly_State *ss, sly_value clos, sly_value arglist)
 {
@@ -80,19 +84,19 @@ eval_lambda(Sly_State *ss, sly_value expr)
 static sly_value
 eval_definition(Sly_State *ss, sly_value expr)
 {
-	sly_value head = car(expr);
-	sly_value tail = cdr(expr);
+	sly_value head = CAR(expr);
+	sly_value tail = CDR(expr);
 	sly_value globals = ss->cc->globals;
 	sly_value name, val;
-	if (pair_p(head)) {	/* procedure */
-		name = syntax_to_datum(car(head));
+	if (syntax_pair_p(head)) {	/* procedure */
+		name = syntax_to_datum(CAR(head));
 		sly_assert(symbol_p(name), "Error (eval_definition): variable name must be a symbol");
-		val = eval_lambda(ss, cons(ss, cdr(head), tail));
+		val = eval_lambda(ss, cons(ss, CDR(head), tail));
 	} else { /* variable */
 		name = syntax_to_datum(head);
 		sly_assert(symbol_p(name), "Error (eval_definition): variable name must be a symbol");
-		val = eval_expr(ss, car(tail));
-		sly_assert(null_p(cdr(tail)), "Error (eval_definition): bad syntax, expected end of expr");
+		val = eval_expr(ss, CAR(tail));
+		sly_assert(null_p(CDR(tail)), "Error (eval_definition): bad syntax, expected end of expr");
 	}
 	dictionary_set(ss, globals, name, val);
 	return SLY_VOID;
@@ -101,10 +105,10 @@ eval_definition(Sly_State *ss, sly_value expr)
 static sly_value
 eval_list(Sly_State *ss, sly_value expr)
 {
-	sly_value head = car(expr);
-	sly_value tail = cdr(expr);
+	sly_value head = CAR(expr);
+	sly_value tail = CDR(expr);
 	sly_value fn;
-	if (pair_p(head)) {
+	if (syntax_pair_p(head)) {
 		fn = eval_expr(ss, head);
 	} else {
 		sly_value datum = syntax_to_datum(head);
@@ -113,26 +117,26 @@ eval_list(Sly_State *ss, sly_value expr)
 			|| symbol_eq(datum, cstr_to_symbol("set!"))) {
 			return eval_definition(ss, tail);
 		} else if (symbol_eq(datum, cstr_to_symbol("quote"))) {
-			sly_value val = strip_syntax(ss, car(tail));
-			sly_assert(null_p(cdr(tail)), "Error (eval_list): bad syntax, expected end of expr");
+			sly_value val = strip_syntax(ss, CAR(tail));
+			sly_assert(null_p(CDR(tail)), "Error (eval_list): bad syntax, expected end of expr");
 			return val;
 		} else if (symbol_eq(datum, cstr_to_symbol("syntax-quote"))) {
-			sly_assert(null_p(cdr(tail)), "Error (eval_list): bad syntax, expected end of expr");
-			return car(tail);
+			sly_assert(null_p(CDR(tail)), "Error (eval_list): bad syntax, expected end of expr");
+			return CAR(tail);
 		} else if (symbol_eq(datum, cstr_to_symbol("begin"))) {
 			sly_value val = SLY_VOID;
 			while (!null_p(tail)) {
-				val = eval_expr(ss, car(tail));
-				tail = cdr(tail);
+				val = eval_expr(ss, CAR(tail));
+				tail = CDR(tail);
 			}
 			return val;
 		} else if (symbol_eq(datum, cstr_to_symbol("if"))) {
-			sly_value clause = car(tail);
-			tail = cdr(tail);
-			sly_value tbranch = car(tail);
-			tail = cdr(tail);
-			sly_value fbranch = car(tail);
-			sly_assert(null_p(cdr(tail)), "Error (eval_list): bad syntax, expected end of expr");
+			sly_value clause = CAR(tail);
+			tail = CDR(tail);
+			sly_value tbranch = CAR(tail);
+			tail = CDR(tail);
+			sly_value fbranch = CAR(tail);
+			sly_assert(null_p(CDR(tail)), "Error (eval_list): bad syntax, expected end of expr");
 			if (booltoc(eval_expr(ss, clause))) {
 				return eval_expr(ss, tbranch);
 			} else {
@@ -163,7 +167,7 @@ eval_atom(Sly_State *ss, sly_value expr)
 sly_value
 eval_expr(Sly_State *ss, sly_value expr)
 {
-	if (pair_p(expr)) {
+	if (syntax_pair_p(expr)) {
 		return eval_list(ss, expr);
 	} else {
 		return eval_atom(ss, expr);

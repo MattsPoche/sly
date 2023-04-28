@@ -145,7 +145,7 @@ sly_repl(Sly_State *ss)
 	for (size_t i = 0; i < 12; ++i) {
 		vector_set(frame->U, i, SLY_VOID);
 	}
-	vector_set(frame->U, 0, ss->cc->globals);
+	vector_set(frame->U, 0, make_open_upvalue(ss, &ss->cc->globals));
 	frame->K = proto->K;
 	frame->clos = SLY_NULL;
 	frame->code = proto->code;
@@ -196,7 +196,7 @@ next_arg(int *argc, char **argv[])
 int
 main(int argc, char *argv[])
 {
-	Sly_State ss = {0};
+	Sly_State ss;
 	char *arg = next_arg(&argc, &argv);
 	if (argc) {
 		while (argc) {
@@ -204,17 +204,18 @@ main(int argc, char *argv[])
 			if (strcmp(arg, "-I") == 0) {
 				debug_info = 1;
 				continue;
-			}
-			sly_init_state(&ss);
-			sly_load_file(&ss, arg);
-			sly_free_state(&ss);
-			if (debug_info) {
-				printf("** Allocations: %d **\n", allocations);
-				printf("** Net allocations: %d **\n", net_allocations);
-				printf("** Total bytes allocated: %zu **\n", bytes_allocated);
-				printf("** GC Total Collections: %d **\n\n", ss.gc.collections);
 			} else {
-				printf("\n");
+				sly_init_state(&ss);
+				sly_load_file(&ss, arg);
+				sly_free_state(&ss);
+				if (debug_info) {
+					printf("** Allocations: %d **\n", allocations);
+					printf("** Net allocations: %d **\n", net_allocations);
+					printf("** Total bytes allocated: %zu **\n", bytes_allocated);
+					printf("** GC Total Collections: %d **\n\n", ss.gc.collections);
+				} else {
+					printf("\n");
+				}
 			}
 		}
 	} else {
