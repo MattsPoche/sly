@@ -6,6 +6,11 @@
 #include "sly_alloc.h"
 
 #define syntax_cons(car, cdr) make_syntax(ss, t, cons(ss, car, cdr))
+#define peek() (tokens.ts[tokens.cur])
+#define next_token() (tokens.cur == tokens.len ? \
+					  tokens.ts[tokens.cur-1] : tokens.ts[tokens.cur++])
+
+static token_buff tokens;
 
 static char *
 escape_string(Sly_State *ss, char *str, size_t len)
@@ -135,7 +140,7 @@ build_list:
 		return make_syntax(ss, start_list, list);
 	} break;
 	case tok_rbracket: {
-		printf("DEBUG:\n%s\n", &cstr[t.so]);
+		printf("DEBUG:%d:%d\n%s\n", t.ln, t.cn, cstr);
 		sly_raise_exception(ss, EXC_COMPILE, "Parse Error mismatched bracket");
 	} break;
 	case tok_vector: {
@@ -214,7 +219,8 @@ build_list:
 sly_value
 parse(Sly_State *ss, char *cstr)
 {
-	lexer_init(cstr);
+	tokens = (token_buff){0};
+	lex_str(cstr, &tokens);
 	sly_value code = cons(ss,
 						  make_syntax(ss, (token){0}, cstr_to_symbol("begin")),
 						  SLY_NULL);
@@ -223,7 +229,7 @@ parse(Sly_State *ss, char *cstr)
 		if (null_p(val = parse_value(ss, cstr))) break;
 		append(code, cons(ss, val, SLY_NULL));
 	}
-	lexer_end();
+	free(tokens.ts);
 	return make_syntax(ss, (token){0}, code);
 }
 

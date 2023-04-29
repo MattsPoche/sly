@@ -45,11 +45,14 @@ typedef struct _token {
 	int ln, cn;
 } token;
 
-char *tok_to_string(enum token t);
-token next_token(void);
-token peek(void);
-int lexer_init(char *str);
-void lexer_end(void);
+typedef struct {
+	size_t cur;
+	size_t len;
+	size_t max;
+	token *ts;
+} token_buff;
 
+char *tok_to_string(enum token t);
+int lex_str(char *str, token_buff *_tokens);
 
 #endif /* SLY_LEXER_H_ */

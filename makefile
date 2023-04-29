@@ -1,7 +1,7 @@
 CC=gcc
 CFLAGS=-Werror -Wextra -pedantic -Wall -Wswitch-enum -ggdb -std=c11
 RELEASE=-O3 -Werror -Wextra -pedantic -Wall -Wswitch-enum -std=c11
-DEFS=-DUSE_SLY_ALLOC -DNO_READLINE
+DEFS=-DUSE_SLY_ALLOC
 LFLAGS=
 TARGET=sly
 CSOURCE=$(shell find -name "*.c")

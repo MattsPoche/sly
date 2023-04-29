@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <regex.h>
 #include "lexer.h"
+#include "sly_alloc.h"
 
 #define LINE_SIZE 1024
 #define RE_SEP "([][(){};[:space:]]|$)"
@@ -164,17 +165,28 @@ next_token(void)
 	}
 }
 
-token
-peek(void)
+static void
+grow_token_buff(token_buff *tokens)
 {
-	if (tpeek.so == -1) {
-		tpeek = next_token();
+	if (tokens->max == 0) {
+		tokens->max = 12;
+	} else {
+		tokens->max *= 2;
 	}
-	return tpeek;
+	tokens->ts = realloc(tokens->ts, sizeof(token) * tokens->max);
+}
+
+static void
+push_token(token_buff *tokens, token t)
+{
+	if (tokens->len >= tokens->max) {
+		grow_token_buff(tokens);
+	}
+	tokens->ts[tokens->len++] = t;
 }
 
 int
-lexer_init(char *str)
+lex_str(char *str, token_buff *_tokens)
 {
 	text = str;
 	char err_str[255];
@@ -188,11 +200,16 @@ lexer_init(char *str)
 	off = 0;
 	line_number = 0;
 	column_number = 0;
-	return 0;
-}
-
-void
-lexer_end(void)
-{
+	if (text[0] == '#' && text[1] == '!') {
+		while (text[off] != '\n' && text[off] != '\0') off++;
+	}
+	token_buff tokens = {0};
+	token t = {0};
+	do {
+		t = next_token();
+		push_token(&tokens, t);
+	} while (t.tag != tok_eof);
+	*_tokens = tokens;
 	regfree(&rexpr);
+	return 0;
 }

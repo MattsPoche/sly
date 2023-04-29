@@ -22,7 +22,7 @@ enum kw {
 	kw_define_syntax,
 	kw_call_with_continuation,
 	kw_call_cc,
-	kw_include,
+	kw_load,
 	KW_COUNT,
 };
 
@@ -47,7 +47,7 @@ union symbol_properties {
 	} p;
 };
 
-#define IS_GLOBAL(scope)       ((scope)->parent == NULL)
+#define IS_GLOBAL(scope) ((scope)->parent == NULL)
 #define ADD_BUILTIN(name, fn, nargs, has_vargs)							\
 	do {																\
 		sym = make_symbol(ss, name, strlen(name));						\
@@ -89,7 +89,7 @@ keywords(int idx)
 	case kw_define_syntax: return "define-syntax";
 	case kw_call_with_continuation: return "call-with-continuation";
 	case kw_call_cc: return "call/cc";
-	case kw_include: return "include";
+	case kw_load: return "load";
 	case KW_COUNT: break;
 	}
 	sly_assert(0, "Error, No such keyword");
@@ -101,6 +101,20 @@ static sly_value kw_symbols[KW_COUNT];
 int comp_expr(Sly_State *ss, sly_value form, int reg);
 int comp_atom(Sly_State *ss, sly_value form, int reg);
 static void init_symtable(Sly_State *ss, sly_value symtable);
+static size_t intern_constant(Sly_State *ss, sly_value value);
+static void setup_frame(Sly_State *ss);
+
+static void
+define_global_var(Sly_State *ss, sly_value var, sly_value val)
+{
+	sly_value symtable = ss->cc->cscope->symtable;
+	sly_value globals = ss->cc->globals;
+	union symbol_properties st_prop = {0};
+	st_prop.p.type = sym_global;
+	st_prop.p.reg = intern_constant(ss, var);
+	dictionary_set(ss, symtable, var, st_prop.v);
+	dictionary_set(ss, globals, var, val);
+}
 
 int
 is_keyword(sly_value sym)
@@ -233,7 +247,7 @@ comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 	sly_value globals  = cc->globals;
 	if (IS_GLOBAL(cc->cscope)) {
 		stx = CAR(form);
-		sly_value datum = syntax_p(stx) ? syntax_to_datum(stx) : stx;
+		sly_value datum = syntax_to_datum(stx);
 		st_prop.p.islocal = 0;
 		st_prop.p.type = sym_global;
 		st_prop.p.reg = intern_constant(ss, var);
@@ -724,15 +738,24 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 				sly_raise_exception(ss, EXC_COMPILE, "Error malformed display expression");
 			}
 		} break;
-		case kw_include: { /* TODO: Hasn't been tested */
+		case kw_load: {
 			char *src;
 			char path[255] = {0};
+			sly_assert(ss->cc->cscope->level == 0,
+					   "Error: load form is only allowed in a top-level context");
 			form = CDR(form);
 			byte_vector *bv = GET_PTR(syntax_to_datum(CAR(form)));
 			memcpy(path, bv->elems, bv->len);
 			sly_value ast = parse_file(ss, path, &src);
-			FREE(src);
-			comp_expr(ss, ast, reg);
+			struct scope *pscope = ss->cc->cscope;
+			ss->cc->cscope = make_scope(ss);
+			ss->cc->cscope->symtable = pscope->symtable;
+			init_symtable(ss, ss->cc->cscope->symtable);
+			ss->cc->cscope->level = 0; /* top level */
+			sly_compile(ss, ast);
+			setup_frame(ss);
+			vm_run(ss, 0);
+			ss->cc->cscope = pscope;
 		} break;
 		case KW_COUNT: {
 			sly_raise_exception(ss, EXC_COMPILE, "(KW_COUNT) Not a real keyword");
@@ -746,6 +769,82 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 
 #include "builtins.h"
 
+void
+sly_init_state(Sly_State *ss)
+{
+	*ss = (Sly_State){0};
+	ss->interned = make_dictionary(ss);
+	ss->cc = MALLOC(sizeof(*ss->cc));
+	ss->cc->globals = make_dictionary(ss);
+	ss->cc->cscope = make_scope(ss);
+	ss->interned = make_dictionary(ss);
+	init_symtable(ss, ss->cc->cscope->symtable);
+	ss->cc->cscope->level = 0; /* top level */
+	init_builtins(ss);
+	define_global_var(ss, make_symbol(ss, "__file__", 8), SLY_FALSE);
+	define_global_var(ss, make_symbol(ss, "__name__", 8), SLY_FALSE);
+}
+
+static void
+setup_frame(Sly_State *ss)
+{
+	ss->proto = ss->cc->cscope->proto;
+	prototype *proto = GET_PTR(ss->proto);
+	stack_frame *frame = make_stack(ss, proto->nregs);
+	frame->U = make_vector(ss, 12, 12);
+	for (size_t i = 0; i < 12; ++i) {
+		vector_set(frame->U, i, SLY_VOID);
+	}
+	vector_set(frame->U, 0, make_open_upvalue(ss, &ss->cc->globals));
+	frame->K = proto->K;
+	frame->clos = SLY_NULL;
+	frame->code = proto->code;
+	frame->pc = proto->entry;
+	frame->level = 0;
+	ss->frame = frame;
+}
+
+void
+sly_free_state(Sly_State *ss)
+{
+	gc_free_all(ss);
+	if (ss->cc) {
+		FREE(ss->cc);
+		ss->cc = NULL;
+	}
+	if (ss->source_code) {
+		FREE(ss->source_code);
+		ss->source_code = NULL;
+	}
+}
+
+void
+sly_do_file(char *file_path, int debug_info)
+{
+	Sly_State ss = {0};
+	sly_value globals;
+	sly_init_state(&ss);
+	sly_compile(&ss, parse_file(&ss, file_path, &ss.source_code));
+	setup_frame(&ss);
+	gc_collect(&ss);
+	globals = ss.cc->globals;
+	dictionary_set(&ss, globals,
+				   make_symbol(&ss, "__file__", 8),
+				   make_string(&ss, file_path, strlen(file_path)));
+	dictionary_set(&ss, globals,
+				   make_symbol(&ss, "__name__", 8),
+				   make_string(&ss, file_path, strlen(file_path)));
+	if (debug_info) dis_all(ss.frame, 1);
+	vm_run(&ss, 1);
+	sly_free_state(&ss);
+	if (debug_info) {
+		printf("** Allocations: %d **\n", allocations);
+		printf("** Net allocations: %d **\n", net_allocations);
+		printf("** Total bytes allocated: %zu **\n", bytes_allocated);
+		printf("** GC Total Collections: %d **\n", ss.gc.collections);
+	}
+}
+
 int
 sly_compile(Sly_State *ss, sly_value ast)
 {
@@ -755,18 +854,7 @@ sly_compile(Sly_State *ss, sly_value ast)
 			fprintf(stderr, "%s\n", ss->excpt_msg);
 			return ss->excpt;
 		});
-	prototype *proto;
-	ss->cc = MALLOC(sizeof(*ss->cc));
-	if (ss->cc == NULL) {
-		sly_raise_exception(ss, EXC_ALLOC, "(sly_compile) malloc failed; returned NULL");
-	}
-	assert(ss->cc != NULL);
-	struct compile *cc = ss->cc;
-	cc->cscope = make_scope(ss);
-	init_symtable(ss, cc->cscope->symtable);
-	cc->cscope->level = 0; /* top level */
-	init_builtins(ss);
-	proto = GET_PTR(cc->cscope->proto);
+	prototype *proto = GET_PTR(ss->cc->cscope->proto);
 	int r = comp_expr(ss, ast, 0);
 	vector_append(ss, proto->code, iA(OP_RETURN, r, -1));
 	END_HANDLE_EXCEPTION(ss);

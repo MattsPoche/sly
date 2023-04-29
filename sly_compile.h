@@ -14,6 +14,9 @@ struct compile {
 	struct scope *cscope;
 };
 
+void sly_init_state(Sly_State *ss);
+void sly_free_state(Sly_State *ss);
+void sly_do_file(char *file_path, int debug_info);
 int comp_lambda(Sly_State *ss, sly_value form, int reg);
 int comp_expr(Sly_State *ss, sly_value form, int reg);
 int sly_compile(Sly_State *ss, sly_value ast);

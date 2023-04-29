@@ -203,6 +203,7 @@ struct scope {
 enum syntax_context {
 	ctx_none = 0,
 	ctx_tail_pos = 1,
+	ctx_macro    = 1 << 1,
 };
 
 typedef struct _syntax {
