@@ -11,6 +11,13 @@
 /* TODO [ ] Associate syntactic info with opcodes (semi-done)
  */
 
+/* TODO [ ] procedures cannot refer to variables defined
+ * after they are.
+ */
+
+/* TODO [ ] macros are unable to call functions defined in the same file.
+ */
+
 enum kw {
 	kw_define = 0,
 	kw_lambda,
@@ -60,16 +67,13 @@ union symbol_properties {
 		dictionary_set(ss, symtable, var, st_prop.v);		\
 		size_t len = vector_len(proto->K);					\
 		sly_value p = vector_ref(proto->K, len-1);			\
-		if (ss->eval_frame == NULL) {						\
-			ss->eval_frame = make_eval_stack(ss);			\
-			ss->eval_frame->U = make_vector(ss, 1, 1);		\
-			vector_set(ss->eval_frame->U, 0, globals);		\
-		}													\
-		ss->frame = ss->eval_frame;							\
-		sly_value clos = form_closure(ss, p);				\
-		ss->eval_frame = ss->frame;							\
-		dictionary_set(ss, cc->cscope->macros, var, clos);	\
+		sly_value _clos = make_closure(ss, p);				\
+		closure *clos = GET_PTR(_clos);						\
+		vector_set(clos->upvals, 0,							\
+				   make_closed_upvalue(ss, globals));		\
+		dictionary_set(ss, cc->cscope->macros, var, _clos);	\
 	} while (0)
+#define EMPTY_SYNTAX() make_syntax(ss, (token){0}, SLY_NULL)
 
 #define CAR(val) (syntax_p(val) ? car(syntax_to_datum(val)) : car(val))
 #define CDR(val) (syntax_p(val) ? cdr(syntax_to_datum(val)) : cdr(val))
@@ -215,6 +219,19 @@ init_symtable(Sly_State *ss, sly_value symtable)
 	}
 }
 
+static void
+apply_context(sly_value form, int ctx)
+{
+	if (syntax_p(form)) {
+		syntax *stx = GET_PTR(form);
+		stx->context |= ctx;
+	}
+	if (pair_p(form) || syntax_pair_p(form)) {
+		apply_context(CAR(form), ctx);
+		apply_context(CDR(form), ctx);
+	}
+}
+
 int
 comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 {
@@ -226,6 +243,7 @@ comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 	syntax *syn = GET_PTR(stx);
 	int line_number = syn->tok.ln;
 	sly_value var;
+	if (is_syntax) apply_context(form, ctx_macro_body);
 	if (syntax_pair_p(stx)) { /* function definition */
 		var = syntax_to_datum(CAR(stx));
 		sly_value params = CDR(stx);
@@ -401,6 +419,7 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 		st_prop = resolve_upval(ss, cc->cscope, datum, st_prop, level);
 	}
 	form = CDR(form);
+	int preg = reg;
 	reg = comp_expr(ss, CAR(form), reg);
 	if ((size_t)reg + 1 >= proto->nregs) proto->nregs = reg + 2;
 	if (st_prop.p.type == sym_variable
@@ -414,6 +433,7 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 			st_prop.p.islocal = 1;
 			dictionary_set(ss, cc->cscope->symtable, datum, st_prop.v);
 		}
+		if (reg == -1) reg = preg;
 		if ((size_t)reg + 1 >= proto->nregs) proto->nregs = reg + 2;
 		vector_append(ss, proto->code,
 					  iABx(OP_LOADK, reg + 1, st_prop.p.reg, line_number));
@@ -507,12 +527,101 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 	return -1;
 }
 
+static void
+apply_alias(sly_value id, sly_value aliases)
+{
+	sly_value sym = syntax_to_datum(id);
+	syntax *stx = GET_PTR(id);
+	sly_value entry = dictionary_entry_ref(aliases, sym);
+	stx->context ^= ctx_macro_body;
+	if (slot_is_free(entry)) return;
+	sly_value alias = cdr(entry);
+	stx->alias = sym;
+	stx->datum = alias;
+}
+
+static void
+gen_aliases(Sly_State *ss, sly_value form, sly_value aliases)
+{
+	if (syntax_pair_p(form)) {
+		while (!null_p(form)) {
+			sly_value id = CAR(form);
+			sly_assert(identifier_p(id), "Error Expected Identifier in binding form");
+			syntax *s = GET_PTR(id);
+			if (s->context & ctx_macro_body) {
+				sly_value alias = gensym(ss);
+				dictionary_set(ss, aliases, syntax_to_datum(id), alias);
+				apply_alias(id, aliases);
+			}
+			form = CDR(form);
+		}
+	} else {
+		sly_value id = form;
+		syntax *s = GET_PTR(id);
+		if (s->context & ctx_macro_body) {
+			sly_value alias = gensym(ss);
+			dictionary_set(ss, aliases, syntax_to_datum(id), alias);
+			apply_alias(id, aliases);
+		}
+	}
+}
+
+static void
+sanitize(Sly_State *ss, sly_value form, sly_value aliases)
+{ /* To keep macros hygenic, variable bindings introduced
+   * in expansions are replaced by gensyms.
+   */
+	if (syntax_pair_p(form) && identifier_p(CAR(form))) {
+		syntax *s = GET_PTR(CAR(form));
+		sly_value sym = s->datum;
+		if ((symbol_eq(sym, make_symbol(ss, "define", 6))
+			 || symbol_eq(sym, make_symbol(ss, "lambda", 6)))
+			&& (s->context & ctx_macro_body)) {
+			form = CDR(form);
+			gen_aliases(ss, CAR(form), aliases);
+			form = CDR(form);
+			sanitize(ss, form, aliases);
+		} else {
+			sanitize(ss, CAR(form), aliases);
+			sanitize(ss, CDR(form), aliases);
+		}
+	} else if (syntax_pair_p(form) || pair_p(form)) {
+		sanitize(ss, CAR(form), aliases);
+		sanitize(ss, CDR(form), aliases);
+	} else if (identifier_p(form)) {
+		syntax *s = GET_PTR(form);
+		if (s->context & ctx_macro_body) {
+			apply_alias(form, aliases);
+		}
+	}
+
+}
+
+static sly_value
+copy_syntax(Sly_State *ss, sly_value form)
+{
+	if (syntax_p(form)) {
+		sly_value stx = EMPTY_SYNTAX();
+		syntax *s0 = GET_PTR(stx);
+		syntax *s1 = GET_PTR(form);
+		*s0 = *s1;
+		s0->datum = copy_syntax(ss, s0->datum);
+		return stx;
+	}
+	if (pair_p(form)) {
+		return cons(ss, copy_syntax(ss, car(form)),
+					copy_syntax(ss, cdr(form)));
+	}
+	return form;
+}
+
 int
 comp_funcall(Sly_State *ss, sly_value form, int reg)
 {
 	struct compile *cc = ss->cc;
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	syntax *stx = GET_PTR(form);
+	sly_value expr = form;
 	sly_value head = CAR(form);
 	form = CDR(form);
 	token tok;
@@ -527,7 +636,20 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 		if (st_prop.p.issyntax) {
 			/* call macro */
 			sly_value macro = lookup_macro(ss, s->datum);
-			form = call_closure_no_eval(ss, macro, cons(ss, form, SLY_NULL));
+			closure *clos = GET_PTR(macro);
+			prototype *proto = GET_PTR(clos->proto);
+			stack_frame *frame = make_stack(ss, proto->nregs);
+			frame->U = clos->upvals;
+			frame->K = proto->K;
+			frame->code = proto->code;
+			frame->pc = proto->entry;
+			vector_set(frame->R, 0, expr);
+			ss->frame = frame;
+			form = vm_run(ss, 0);
+			form = copy_syntax(ss, form);
+			ss->frame = NULL;
+			sly_value aliases = make_dictionary(ss);
+			sanitize(ss, form, aliases);
 			return comp_expr(ss, form, reg);
 		}
 	}
@@ -602,6 +724,7 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 		}
 	}
 	proto->nvars = proto->nregs;
+	int tmp = reg;
 	{
 		while (!null_p(CDR(form))) {
 			comp_expr(ss, CAR(form), proto->nvars);
@@ -611,6 +734,7 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 		stx->context |= ctx_tail_pos;
 		reg = comp_expr(ss, CAR(form), proto->nvars);
 	}
+	if (reg == -1) reg = tmp;
 	vector_append(ss, proto->code, iA(OP_RETURN, reg, -1));
 	cc->cscope = cc->cscope->parent;
 	reg = preg;
@@ -750,6 +874,7 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			struct scope *pscope = ss->cc->cscope;
 			ss->cc->cscope = make_scope(ss);
 			ss->cc->cscope->symtable = pscope->symtable;
+			ss->cc->cscope->macros = pscope->macros;
 			init_symtable(ss, ss->cc->cscope->symtable);
 			ss->cc->cscope->level = 0; /* top level */
 			sly_compile(ss, ast);

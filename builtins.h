@@ -476,6 +476,26 @@ cvoid(Sly_State *ss, sly_value args)
 	return SLY_VOID;
 }
 
+static sly_value
+clist(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	return vector_ref(args, 0);
+}
+
+static sly_value
+clist_to_syntax(Sly_State *ss, sly_value args)
+{
+	sly_value list = vector_ref(args, 0);
+	syntax *s0 = GET_PTR(car(list));
+	sly_value stx = make_syntax(ss, (token){0}, list);
+	syntax *s1 = GET_PTR(stx);
+	s1->lex_info = s0->lex_info;
+	s1->tok = s0->tok;
+	s1->context = s0->context;
+	return stx;
+}
+
 static void
 init_builtins(Sly_State *ss)
 {
@@ -540,6 +560,8 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("make-dictionary", cmake_dictionary, 0, 1);
 	ADD_BUILTIN("dictionary-ref", cdictionary_ref, 2, 0);
 	ADD_BUILTIN("dictionary-set!", cdictionary_set, 3, 0);
+	ADD_BUILTIN("list", clist, 0, 1);
+	ADD_BUILTIN("list->syntax", clist_to_syntax, 1, 0);
 }
 
 #endif /* SLY_BUILTINS_H_ */

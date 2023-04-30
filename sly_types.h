@@ -201,9 +201,11 @@ struct scope {
 };
 
 enum syntax_context {
-	ctx_none = 0,
-	ctx_tail_pos = 1,
-	ctx_macro    = 1 << 1,
+	ctx_none			= 0,
+	ctx_tail_pos		= 1,
+	ctx_binding			= 1 << 1,
+	ctx_macro_body		= 1 << 2,
+	ctx_macro_expansion	= 1 << 3,
 };
 
 typedef struct _syntax {
@@ -211,6 +213,7 @@ typedef struct _syntax {
 	token tok;
 	sly_value lex_info;  // <vector> each slot corrisponds to phase level
 	sly_value datum;	 // and contains it's scopes.
+	sly_value alias;
 	u32 context;
 } syntax;
 

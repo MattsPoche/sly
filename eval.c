@@ -23,7 +23,8 @@ call_closure(Sly_State *ss, sly_value clos, sly_value arglist)
 		ss->frame = ss->eval_frame;
 		ss->frame->K = make_vector(ss, 0, 12);
 		ss->frame->U = make_vector(ss, 1, 1);
-		vector_set(ss->frame->U, 0, ss->cc->globals);
+		vector_set(ss->frame->U, 0,
+				   make_open_upvalue(ss, &ss->cc->globals));
 	}
 	vector_discard_values(ss, ss->frame->code);
 	vector_discard_values(ss, ss->frame->R);
@@ -54,7 +55,8 @@ call_closure_no_eval(Sly_State *ss, sly_value clos, sly_value arglist)
 		ss->frame = ss->eval_frame;
 		ss->frame->K = make_vector(ss, 0, 12);
 		ss->frame->U = make_vector(ss, 1, 1);
-		vector_set(ss->frame->U, 0, ss->cc->globals);
+		vector_set(ss->frame->U, 0,
+				   make_open_upvalue(ss, &ss->cc->globals));
 	}
 	vector_discard_values(ss, ss->frame->code);
 	vector_discard_values(ss, ss->frame->R);

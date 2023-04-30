@@ -1,0 +1,24 @@
+(define-syntax (set2! form)
+  ;; (set2! x y expr)
+  ;; ->
+  ;; (begin (define tmp expr)
+  ;;        (set! x tmp)
+  ;;        (set! y tmp))
+  (set! form (cdr (syntax->datum form)))
+  (define x (car form))
+  (define y (car (cdr form)))
+  (define expr (car (cdr (cdr form))))
+  (list->syntax (list #'begin
+					  (list->syntax (list #'define #'tmp expr))
+					  (list->syntax (list #'set! x #'tmp))
+					  (list->syntax (list #'set! y #'tmp)))))
+
+(define (f)
+  (display "This message should only print once!\n")
+  69)
+
+(define x #f)
+(define y #f)
+(set2! x y (f))
+(display x)(display "\n")
+(display y)(display "\n")
