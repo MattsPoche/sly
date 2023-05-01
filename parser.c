@@ -121,6 +121,8 @@ build_list:
 		for (;;) {
 			t = peek();
 			if (t.tag == tok_eof) {
+				sly_display(list, 1);
+				printf("\n");
 				sly_raise_exception(ss, EXC_COMPILE, "Parse Error unexpected end of file");
 			}
 			if (t.tag == tok_rbracket) {

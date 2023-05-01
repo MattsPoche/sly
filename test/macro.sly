@@ -8,10 +8,11 @@
   (define x (car form))
   (define y (car (cdr form)))
   (define expr (car (cdr (cdr form))))
+  (define tmp #'tmp)
   (list->syntax (list #'begin
-					  (list->syntax (list #'define #'tmp expr))
-					  (list->syntax (list #'set! x #'tmp))
-					  (list->syntax (list #'set! y #'tmp)))))
+					  (list->syntax (list #'define tmp expr))
+					  (list->syntax (list #'set! x tmp))
+					  (list->syntax (list #'set! y tmp)))))
 
 (define (f)
   (display "This message should only print once!\n")

@@ -244,6 +244,19 @@ cidentifier_p(Sly_State *ss, sly_value args)
 }
 
 static sly_value
+cidentifier_eq(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	sly_value id0 = vector_ref(args, 0);
+	sly_value id1 = vector_ref(args, 1);
+	if (identifier_p(id0) && identifier_p(id1)) {
+		return ctobool(sly_equal(syntax_to_datum(id0),
+								 syntax_to_datum(id1)));
+	}
+	return SLY_FALSE;
+}
+
+static sly_value
 cdictionary_p(Sly_State *ss, sly_value args)
 {
 	UNUSED(ss);
@@ -496,6 +509,42 @@ clist_to_syntax(Sly_State *ss, sly_value args)
 	return stx;
 }
 
+static sly_value
+clist_tail(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	return tail(vector_ref(args, 0));
+}
+
+static sly_value
+cappend(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	sly_value list = vector_ref(args, 0);
+	sly_value val = vector_ref(args, 1);
+	append(list, val);
+	return SLY_VOID;
+}
+
+static sly_value
+clist_length(Sly_State *ss, sly_value args)
+{
+	sly_value list = vector_ref(args, 0);
+	return make_int(ss, list_len(list));
+}
+
+static sly_value
+craise_macro_exception(Sly_State *ss, sly_value args)
+{
+	sly_value str = vector_ref(args, 0);
+	byte_vector *bv = GET_PTR(str);
+	char *msg = malloc(bv->len+1);
+	memcpy(msg, bv->elems, bv->len);
+	msg[bv->len] = '\0';
+	sly_raise_exception(ss, EXC_MACRO, msg);
+	return SLY_VOID;
+}
+
 static void
 init_builtins(Sly_State *ss)
 {
@@ -535,6 +584,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("syntax?", csyntax_p, 1, 0);
 	ADD_BUILTIN("syntax-pair?", csyntax_pair_p, 1, 0);
 	ADD_BUILTIN("identifier?", cidentifier_p, 1, 0);
+	ADD_BUILTIN("identifier=?", cidentifier_eq, 2, 0);
 	ADD_BUILTIN("equal?", cequal_p, 2, 0);
 	ADD_BUILTIN("cons", ccons, 2, 0);
 	ADD_BUILTIN("car", ccar, 1, 0);
@@ -562,6 +612,10 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("dictionary-set!", cdictionary_set, 3, 0);
 	ADD_BUILTIN("list", clist, 0, 1);
 	ADD_BUILTIN("list->syntax", clist_to_syntax, 1, 0);
+	ADD_BUILTIN("list-tail", clist_tail, 1, 0);
+	ADD_BUILTIN("append", cappend, 2, 0);
+	ADD_BUILTIN("list-length", clist_length, 1, 0);
+	ADD_BUILTIN("raise-macro-exception", craise_macro_exception, 1, 0);
 }
 
 #endif /* SLY_BUILTINS_H_ */

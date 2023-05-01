@@ -193,8 +193,13 @@ vm_run(Sly_State *ss, int run_gc)
 				nframe->K = proto->K;
 				nframe->code = proto->code;
 				nframe->pc = proto->entry;
-				if (do_tailcall) {
+				if (ss->frame->level > 0 && do_tailcall) {
 					nframe->ret_slot = ss->frame->ret_slot;
+					printf("level :: %d\n", ss->frame->level);
+					printf("pc :: %zu\n", ss->frame->pc);
+					sly_display(val, 1);
+					printf("\n");
+					dis_all(ss->frame, 1);
 					nframe->level = ss->frame->level;
 					nframe->parent = ss->frame->parent;
 					close_upvalues(ss, ss->frame);

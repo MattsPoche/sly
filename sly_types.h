@@ -43,6 +43,7 @@ typedef uintptr_t sly_value;
 enum exc_code { /* exception code */
 	EXC_GENERIC,
 	EXC_COMPILE,
+	EXC_MACRO,
 	EXC_TYPE,
 	EXC_ARGS,
 	EXC_ALLOC,

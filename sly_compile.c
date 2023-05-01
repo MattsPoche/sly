@@ -103,7 +103,8 @@ keywords(int idx)
 static sly_value kw_symbols[KW_COUNT];
 
 int comp_expr(Sly_State *ss, sly_value form, int reg);
-int comp_atom(Sly_State *ss, sly_value form, int reg);
+static int comp_atom(Sly_State *ss, sly_value form, int reg);
+static void init_builtins(Sly_State *ss);
 static void init_symtable(Sly_State *ss, sly_value symtable);
 static size_t intern_constant(Sly_State *ss, sly_value value);
 static void setup_frame(Sly_State *ss);
@@ -115,12 +116,11 @@ define_global_var(Sly_State *ss, sly_value var, sly_value val)
 	sly_value globals = ss->cc->globals;
 	union symbol_properties st_prop = {0};
 	st_prop.p.type = sym_global;
-	st_prop.p.reg = intern_constant(ss, var);
 	dictionary_set(ss, symtable, var, st_prop.v);
 	dictionary_set(ss, globals, var, val);
 }
 
-int
+static int
 is_keyword(sly_value sym)
 {
 	for (int i = 0; i < KW_COUNT; ++i) {
@@ -224,7 +224,7 @@ apply_context(sly_value form, int ctx)
 {
 	if (syntax_p(form)) {
 		syntax *stx = GET_PTR(form);
-		stx->context |= ctx;
+		stx->context = FLAG_ON(stx->context, ctx);
 	}
 	if (pair_p(form) || syntax_pair_p(form)) {
 		apply_context(CAR(form), ctx);
@@ -232,7 +232,7 @@ apply_context(sly_value form, int ctx)
 	}
 }
 
-int
+static int
 comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 {
 	/* TODO: Definitions should only be allowed at the top-level
@@ -303,7 +303,7 @@ comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 	}
 }
 
-int
+static int
 comp_if(Sly_State *ss, sly_value form, int reg)
 {
 	struct compile *cc = ss->cc;
@@ -321,9 +321,9 @@ comp_if(Sly_State *ss, sly_value form, int reg)
 	}
 	if (stx->context & ctx_tail_pos) {
 		syntax *s = GET_PTR(tbranch);
-		s->context |= ctx_tail_pos;
+		s->context = FLAG_ON(s->context, ctx_tail_pos);
 		s = GET_PTR(fbranch);
-		s->context |= ctx_tail_pos;
+		s->context = FLAG_ON(s->context, ctx_tail_pos);
 	}
 	int be_res = comp_expr(ss, boolexpr, reg);
 	size_t fjmp = vector_len(proto->code);
@@ -398,7 +398,7 @@ resolve_upval(Sly_State *ss,
 	return upprop;
 }
 
-int
+static int
 comp_set(Sly_State *ss, sly_value form, int reg)
 {
 	struct compile *cc = ss->cc;
@@ -449,7 +449,7 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 	return reg;
 }
 
-int
+static int
 comp_atom(Sly_State *ss, sly_value form, int reg)
 {
 	struct compile *cc = ss->cc;
@@ -516,7 +516,7 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 				if (i >= INT16_MIN && i <= INT16_MAX) {
 					if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 					vector_append(ss, proto->code, iABx(OP_LOADI, reg, i, line_number));
-					return -1;
+					return reg;
 				}
 			}
 			size_t idx = intern_constant(ss, datum);
@@ -524,7 +524,7 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 			vector_append(ss, proto->code, iABx(OP_LOADK, reg, idx, line_number));
 		}
 	}
-	return -1;
+	return reg;
 }
 
 static void
@@ -533,7 +533,7 @@ apply_alias(sly_value id, sly_value aliases)
 	sly_value sym = syntax_to_datum(id);
 	syntax *stx = GET_PTR(id);
 	sly_value entry = dictionary_entry_ref(aliases, sym);
-	stx->context ^= ctx_macro_body;
+	stx->context = FLAG_OFF(stx->context, ctx_macro_body);
 	if (slot_is_free(entry)) return;
 	sly_value alias = cdr(entry);
 	stx->alias = sym;
@@ -615,7 +615,7 @@ copy_syntax(Sly_State *ss, sly_value form)
 	return form;
 }
 
-int
+static int
 comp_funcall(Sly_State *ss, sly_value form, int reg)
 {
 	struct compile *cc = ss->cc;
@@ -731,7 +731,7 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 			form = CDR(form);
 		}
 		syntax *stx = GET_PTR(CAR(form));
-		stx->context |= ctx_tail_pos;
+		stx->context = FLAG_ON(stx->context, ctx_tail_pos);
 		reg = comp_expr(ss, CAR(form), proto->nvars);
 	}
 	if (reg == -1) reg = tmp;
@@ -833,7 +833,7 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			}
 			if (s->context & ctx_tail_pos) {
 				s = GET_PTR(CAR(form));
-				s->context |= ctx_tail_pos;
+				s->context = FLAG_ON(s->context, ctx_tail_pos);
 			}
 			comp_expr(ss, CAR(form), proto->nvars);
 		} break;
@@ -904,7 +904,7 @@ sly_init_state(Sly_State *ss)
 	ss->cc->cscope = make_scope(ss);
 	ss->interned = make_dictionary(ss);
 	init_symtable(ss, ss->cc->cscope->symtable);
-	ss->cc->cscope->level = 0; /* top level */
+	ss->cc->cscope->level = 0;
 	init_builtins(ss);
 	define_global_var(ss, make_symbol(ss, "__file__", 8), SLY_FALSE);
 	define_global_var(ss, make_symbol(ss, "__name__", 8), SLY_FALSE);
@@ -974,10 +974,10 @@ int
 sly_compile(Sly_State *ss, sly_value ast)
 {
 	HANDLE_EXCEPTION(ss, {
-			fprintf(stderr, "Caught exception in %s ", ss->file_path);
+			fprintf(stderr, "Unhandled exception in %s ", ss->file_path);
 			fprintf(stderr, "during compilation:\n");
 			fprintf(stderr, "%s\n", ss->excpt_msg);
-			return ss->excpt;
+			exit(1);
 		});
 	prototype *proto = GET_PTR(ss->cc->cscope->proto);
 	int r = comp_expr(ss, ast, 0);
