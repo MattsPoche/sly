@@ -1055,6 +1055,49 @@ syntax_to_datum(sly_value syn)
 }
 
 static sly_value
+datum_to_syntax_rec(Sly_State *ss, sly_value id, sly_value datum)
+{
+	token t = {0};
+	if (syntax_p(id)) {
+		syntax *s = GET_PTR(id);
+		t = s->tok;
+	}
+	if (null_p(datum)
+		|| void_p(datum)
+		|| syntax_p(datum)) {
+		return datum;
+	}
+	if (pair_p(datum)) {
+		return cons(ss,
+					datum_to_syntax(ss, id, car(datum)),
+					datum_to_syntax_rec(ss, id, cdr(datum)));
+	}
+	return make_syntax(ss, t, datum);
+}
+
+sly_value
+datum_to_syntax(Sly_State *ss, sly_value id, sly_value datum)
+{
+	token t = {0};
+	if (syntax_p(id)) {
+		syntax *s = GET_PTR(id);
+		t = s->tok;
+	}
+	if (null_p(datum)
+		|| void_p(datum)
+		|| syntax_p(datum)) {
+		return datum;
+	}
+	if (pair_p(datum)) {
+		return make_syntax(ss, t,
+						   cons(ss,
+								datum_to_syntax(ss, id, car(datum)),
+								datum_to_syntax_rec(ss, id, cdr(datum))));
+	}
+	return make_syntax(ss, t, datum);
+}
+
+static sly_value
 make_dictionary_sz(Sly_State *ss, size_t size)
 {
 	sly_value v = make_vector(ss, 0, size);

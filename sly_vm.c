@@ -149,7 +149,7 @@ vm_run(Sly_State *ss, int run_gc)
 				sly_value args;
 				if (clos->has_varg) {
 					sly_assert(nargs >= clos->nargs,
-							   "Error wrong number of arguments");
+							   "Error wrong number of arguments (152)");
 					size_t nvargs = nargs - clos->nargs;
 					sly_value vargs = SLY_NULL;
 					args = make_vector(ss, clos->nargs + 1, clos->nargs + 1);
@@ -160,7 +160,7 @@ vm_run(Sly_State *ss, int run_gc)
 					nargs = clos->nargs;
 				} else {
 					sly_assert(nargs == clos->nargs,
-							   "Error wrong number of arguments");
+							   "Error wrong number of arguments (163)");
 					args = make_vector(ss, clos->nargs, clos->nargs);
 				}
 				for (size_t i = 0; i < nargs; ++i) {
@@ -176,7 +176,7 @@ vm_run(Sly_State *ss, int run_gc)
 				nframe->U = clos->upvals;
 				if (proto->has_varg) {
 					sly_assert(nargs >= proto->nargs,
-							   "Error wrong number of arguments");
+							   "Error wrong number of arguments (179)");
 					size_t nvargs = nargs - proto->nargs;
 					sly_value vargs = SLY_NULL;
 					for (size_t i = b - 1; nvargs--; --i) {
@@ -184,8 +184,12 @@ vm_run(Sly_State *ss, int run_gc)
 					}
 					vector_set(nframe->R, proto->nargs, vargs);
 				} else {
+					if (nargs != proto->nargs) {
+						sly_display(val, 1);
+						printf("\n");
+					}
 					sly_assert(nargs == proto->nargs,
-							   "Error wrong number of arguments");
+							   "Error wrong number of arguments (188)");
 				}
 				for (size_t i = 0; i < proto->nargs; ++i) {
 					vector_set(nframe->R, i, get_reg(a + 1 + i));
@@ -194,12 +198,14 @@ vm_run(Sly_State *ss, int run_gc)
 				nframe->code = proto->code;
 				nframe->pc = proto->entry;
 				if (ss->frame->level > 0 && do_tailcall) {
-					nframe->ret_slot = ss->frame->ret_slot;
+#if 0
 					printf("level :: %d\n", ss->frame->level);
 					printf("pc :: %zu\n", ss->frame->pc);
 					sly_display(val, 1);
 					printf("\n");
 					dis_all(ss->frame, 1);
+#endif
+					nframe->ret_slot = ss->frame->ret_slot;
 					nframe->level = ss->frame->level;
 					nframe->parent = ss->frame->parent;
 					close_upvalues(ss, ss->frame);
@@ -220,6 +226,7 @@ vm_run(Sly_State *ss, int run_gc)
 				ss->frame->pc = cc->pc;
 				vector_set(ss->frame->R, cc->ret_slot, arg);
 			} else {
+#if 0
 				dis_all(ss->frame, 1);
 				printf("pc :: %zu\n", ss->frame->pc-1);
 				printf("level :: %u\n", ss->frame->level);
@@ -234,6 +241,7 @@ vm_run(Sly_State *ss, int run_gc)
 					printf("\n");
 					uv = uv->next;
 				}
+#endif
 				sly_assert(0, "Type Error expected procedure");
 			}
 			do_tailcall = 0;

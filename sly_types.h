@@ -283,6 +283,7 @@ int sly_eq(sly_value o1, sly_value o2);
 int sly_equal(sly_value o1, sly_value o2);
 sly_value make_syntax(Sly_State *ss, token tok, sly_value datum);
 sly_value syntax_to_datum(sly_value syn);
+sly_value datum_to_syntax(Sly_State *ss, sly_value id, sly_value syn);
 sly_value make_dictionary(Sly_State *ss);
 int slot_is_free(sly_value slot);
 void dictionary_set(Sly_State *ss, sly_value d, sly_value key, sly_value value);

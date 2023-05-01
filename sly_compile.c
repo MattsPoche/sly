@@ -380,7 +380,7 @@ resolve_upval(Sly_State *ss,
 	union uplookup upinfo = {0};
 	prototype *proto = GET_PTR(scope->proto);
 	if (parent->level != level) {
-		prop = resolve_upval(ss, parent, sym, prop, parent->level);
+		prop = resolve_upval(ss, parent, sym, prop, level);
 	}
 	if (prop.p.type == sym_upval) {
 		upinfo.u.isup = 1;
@@ -597,6 +597,7 @@ sanitize(Sly_State *ss, sly_value form, sly_value aliases)
 
 }
 
+#if 0
 static sly_value
 copy_syntax(Sly_State *ss, sly_value form)
 {
@@ -614,6 +615,7 @@ copy_syntax(Sly_State *ss, sly_value form)
 	}
 	return form;
 }
+#endif
 
 static int
 comp_funcall(Sly_State *ss, sly_value form, int reg)
@@ -646,7 +648,6 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 			vector_set(frame->R, 0, expr);
 			ss->frame = frame;
 			form = vm_run(ss, 0);
-			form = copy_syntax(ss, form);
 			ss->frame = NULL;
 			sly_value aliases = make_dictionary(ss);
 			sanitize(ss, form, aliases);

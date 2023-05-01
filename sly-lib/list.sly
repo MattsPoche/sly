@@ -1,0 +1,62 @@
+(define-syntax (comp-debug x)
+  (display "COMP-DEBUG :: ")
+  (display (car (cdr (syntax->datum x))))
+  (display "\n")
+  (datum->syntax x #f))
+
+(define (displayln x) (display x)(display "\n"))
+
+(define (fold-left f z xs)
+  (if (null? xs)
+	  z
+	  ((lambda (x xs)
+		 (fold-left f (f z x) xs))
+	   (car xs) (cdr xs))))
+
+(define (fold-right f z xs)
+  (if (null? xs)
+	  z
+	  ((lambda (x xs)
+		 (f x (fold-right f z xs)))
+	   (car xs) (cdr xs))))
+
+(define (append xs . rest)
+  (define (helper xs rest)
+	  (if (pair? rest)
+		  (helper (fold-right cons (car rest) xs) (cdr rest))
+		  xs))
+  (helper xs rest))
+
+(define (last-pair xs)
+  (if (pair? (cdr xs))
+	  (last-pair (cdr xs))
+	  xs))
+
+(define (append! xs . rest)
+  (define (helper xs rest)
+	(if (pair? rest)
+		(if (null? xs)
+			(helper (car rest) (cdr rest))
+			(begin
+			  ((lambda (lp) (set-cdr! lp (car rest))) (last-pair xs))
+			  (helper xs (cdr rest))))
+		xs))
+  (helper xs rest))
+
+(define (length xs)
+  (fold-left (lambda (x xs) (+ x 1)) 0 xs))
+
+(define (compose . fs)
+  (define (*compose* fs)
+	(if (null? fs)
+		(lambda (x) x)
+		(lambda (x) ((car fs) ((*compose* (cdr fs)) x)))))
+  (*compose* fs))
+
+
+(define (map f xs)
+  (fold-right (lambda (x xs) (cons (f x) xs)) '() xs))
+
+(define (for-each f xs)
+  (f (car xs))
+  (for-each f (cdr xs)))

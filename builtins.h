@@ -356,16 +356,28 @@ cgensym(Sly_State *ss, sly_value args)
 }
 
 static sly_value
-cmake_syntax(Sly_State *ss, sly_value args)
+csyntax_to_datum(Sly_State *ss, sly_value args)
 {
-	return make_syntax(ss, (token){0}, vector_ref(args, 0));
+	return strip_syntax(ss, vector_ref(args, 0));
 }
 
 static sly_value
-csyntax_to_datum(Sly_State *ss, sly_value args)
+csyntax_to_list(Sly_State *ss, sly_value args)
 {
 	UNUSED(ss);
-	return syntax_to_datum(vector_ref(args, 0));
+	sly_value val = vector_ref(args, 0);
+	if (syntax_pair_p(val)) {
+		return syntax_to_datum(val);
+	}
+	return SLY_FALSE;
+}
+
+static sly_value
+cdatum_to_syntax(Sly_State *ss, sly_value args)
+{
+	return datum_to_syntax(ss,
+						   vector_ref(args, 0),
+						   vector_ref(args, 1));
 }
 
 static sly_value
@@ -496,19 +508,7 @@ clist(Sly_State *ss, sly_value args)
 	return vector_ref(args, 0);
 }
 
-static sly_value
-clist_to_syntax(Sly_State *ss, sly_value args)
-{
-	sly_value list = vector_ref(args, 0);
-	syntax *s0 = GET_PTR(car(list));
-	sly_value stx = make_syntax(ss, (token){0}, list);
-	syntax *s1 = GET_PTR(stx);
-	s1->lex_info = s0->lex_info;
-	s1->tok = s0->tok;
-	s1->context = s0->context;
-	return stx;
-}
-
+#if 0
 static sly_value
 clist_tail(Sly_State *ss, sly_value args)
 {
@@ -532,6 +532,7 @@ clist_length(Sly_State *ss, sly_value args)
 	sly_value list = vector_ref(args, 0);
 	return make_int(ss, list_len(list));
 }
+#endif
 
 static sly_value
 craise_macro_exception(Sly_State *ss, sly_value args)
@@ -596,8 +597,9 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("void", cvoid, 0, 0);
 	ADD_BUILTIN("string->symbol", cstring_to_symbol, 1, 0);
 	ADD_BUILTIN("symbol->string", csymbol_to_string, 1, 0);
-	ADD_BUILTIN("make-syntax", cmake_syntax, 1, 0);
 	ADD_BUILTIN("syntax->datum", csyntax_to_datum, 1, 0);
+	ADD_BUILTIN("syntax->list", csyntax_to_list, 1, 0);
+	ADD_BUILTIN("datum->syntax", cdatum_to_syntax, 2, 0);
 	ADD_BUILTIN("make-vector", cmake_vector, 0, 1);
 	ADD_BUILTIN("vector-ref", cvector_ref, 2, 0);
 	ADD_BUILTIN("vector-set!", cvector_set, 3, 0);
@@ -611,10 +613,6 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("dictionary-ref", cdictionary_ref, 2, 0);
 	ADD_BUILTIN("dictionary-set!", cdictionary_set, 3, 0);
 	ADD_BUILTIN("list", clist, 0, 1);
-	ADD_BUILTIN("list->syntax", clist_to_syntax, 1, 0);
-	ADD_BUILTIN("list-tail", clist_tail, 1, 0);
-	ADD_BUILTIN("append", cappend, 2, 0);
-	ADD_BUILTIN("list-length", clist_length, 1, 0);
 	ADD_BUILTIN("raise-macro-exception", craise_macro_exception, 1, 0);
 }
 
