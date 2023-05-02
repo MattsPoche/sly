@@ -108,6 +108,8 @@ static void init_builtins(Sly_State *ss);
 static void init_symtable(Sly_State *ss, sly_value symtable);
 static size_t intern_constant(Sly_State *ss, sly_value value);
 static void setup_frame(Sly_State *ss);
+static void load_file(Sly_State *ss, sly_value form);
+static sly_value expand(Sly_State *ss, sly_value form);
 
 static void
 define_global_var(Sly_State *ss, sly_value var, sly_value val)
@@ -151,11 +153,7 @@ symbol_lookup_props(Sly_State *ss, sly_value sym, u32 *level, sly_value *uplist)
 		}
 		scope = scope->parent;
 	}
-	printf("Undefined symbol '");
-	sly_display(sym, 1);
-	printf("\n");
-	sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol");
-	return SLY_NULL;
+	return SLY_VOID;
 }
 
 static sly_value
@@ -170,11 +168,7 @@ lookup_macro(Sly_State *ss, sly_value sym)
 		}
 		scope = scope->parent;
 	}
-	printf("Undefined macro '");
-	sly_display(sym, 1);
-	printf("\n");
-	sly_raise_exception(ss, EXC_COMPILE, "Error undefined macro");
-	return SLY_NULL;
+	return SLY_VOID;
 }
 
 static size_t
@@ -415,6 +409,13 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 	sly_value uplist = SLY_NULL;
 	union symbol_properties st_prop;
 	st_prop.v = symbol_lookup_props(ss, datum, &level, &uplist);
+	if (void_p(st_prop.v)) {
+		printf("Undefined symbol '");
+		sly_display(datum, 1);
+		printf("\n");
+		sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol (418)");
+
+	}
 	if (cc->cscope->level != level && st_prop.p.type != sym_global) { /* is non local */
 		st_prop = resolve_upval(ss, cc->cscope, datum, st_prop, level);
 	}
@@ -469,6 +470,15 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 		sly_value uplist = SLY_NULL;
 		union symbol_properties st_prop;
 		st_prop.v = symbol_lookup_props(ss, datum, &level, &uplist);
+		if (void_p(st_prop.v)) {
+			printf("Undefined symbol '");
+			sly_display(datum, 1);
+			printf("\n");
+			syntax *s = GET_PTR(form);
+			printf("%s:%d:%d\n", ss->file_path, s->tok.ln, s->tok.cn);
+			sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol (479)");
+
+		}
 		if (cc->cscope->level != level && st_prop.p.type != sym_global) { /* is non local */
 			st_prop = resolve_upval(ss, cc->cscope, datum, st_prop, level);
 		}
@@ -594,28 +604,7 @@ sanitize(Sly_State *ss, sly_value form, sly_value aliases)
 			apply_alias(form, aliases);
 		}
 	}
-
 }
-
-#if 0
-static sly_value
-copy_syntax(Sly_State *ss, sly_value form)
-{
-	if (syntax_p(form)) {
-		sly_value stx = EMPTY_SYNTAX();
-		syntax *s0 = GET_PTR(stx);
-		syntax *s1 = GET_PTR(form);
-		*s0 = *s1;
-		s0->datum = copy_syntax(ss, s0->datum);
-		return stx;
-	}
-	if (pair_p(form)) {
-		return cons(ss, copy_syntax(ss, car(form)),
-					copy_syntax(ss, cdr(form)));
-	}
-	return form;
-}
-#endif
 
 static int
 comp_funcall(Sly_State *ss, sly_value form, int reg)
@@ -623,42 +612,10 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 	struct compile *cc = ss->cc;
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	syntax *stx = GET_PTR(form);
-	sly_value expr = form;
 	sly_value head = CAR(form);
 	form = CDR(form);
 	token tok;
 	tok.ln = -1;
-	if (identifier_p(head)) {
-		syntax *s = GET_PTR(head);
-		tok = s->tok;
-		u32 level = 0;
-		sly_value uplist = SLY_NULL;
-		union symbol_properties st_prop = {0};
-		st_prop.v = symbol_lookup_props(ss, s->datum, &level, &uplist);
-		if (st_prop.p.issyntax) {
-			/* call macro */
-			sly_value macro = lookup_macro(ss, s->datum);
-			closure *clos = GET_PTR(macro);
-			prototype *proto = GET_PTR(clos->proto);
-			stack_frame *frame = make_stack(ss, proto->nregs);
-			frame->U = clos->upvals;
-			frame->K = proto->K;
-			frame->code = proto->code;
-			frame->pc = proto->entry;
-			vector_set(frame->R, 0, expr);
-			ss->frame = frame;
-			form = vm_run(ss, 0);
-#if 0
-			printf("DEBUG:\n");
-			sly_display(strip_syntax(ss, form), 1);
-			printf("\n");
-#endif
-			ss->frame = NULL;
-			sly_value aliases = make_dictionary(ss);
-			sanitize(ss, form, aliases);
-			return comp_expr(ss, form, reg);
-		}
-	}
 	int start = reg;
 	int reg2 = comp_expr(ss, head, reg);
 	if (reg2 != -1 && reg2 != reg) {
@@ -768,6 +725,87 @@ strip_syntax(Sly_State *ss, sly_value form)
 	return form;
 }
 
+static void
+load_deps(Sly_State *ss, sly_value form)
+{
+	while (!null_p(form)) {
+		sly_value expr = CAR(form);
+		if (syntax_pair_p(expr)
+			&& identifier_p(CAR(expr))
+			&& symbol_eq(syntax_to_datum(CAR(expr)), make_symbol(ss, "load", 4))) {
+			load_file(ss, expr);
+		}
+		form = CDR(form);
+	}
+}
+
+static sly_value
+expand(Sly_State *ss, sly_value form)
+{
+	if (syntax_pair_p(form)) {
+		sly_value head = CAR(form);
+		if (identifier_p(head)) {
+			syntax *s = GET_PTR(head);
+			sly_value macro = lookup_macro(ss, s->datum);
+			if (!void_p(macro)) {
+				/* call macro */
+				closure *clos = GET_PTR(macro);
+				prototype *proto = GET_PTR(clos->proto);
+				stack_frame *frame = make_stack(ss, proto->nregs);
+				frame->U = clos->upvals;
+				frame->K = proto->K;
+				frame->code = proto->code;
+				frame->pc = proto->entry;
+				vector_set(frame->R, 0, form);
+				ss->frame = frame;
+				form = vm_run(ss, 0);
+				ss->frame = NULL;
+				sly_value aliases = make_dictionary(ss);
+				sanitize(ss, form, aliases);
+				return expand(ss, form);
+			}
+		}
+		syntax *s = GET_PTR(form);
+		s->datum = cons(ss,
+						expand(ss, car(s->datum)),
+						expand(ss, cdr(s->datum)));
+		return form;
+	}
+	if (pair_p(form)) {
+		return cons(ss,
+					expand(ss, car(form)),
+					expand(ss, cdr(form)));
+	}
+	return form;
+}
+
+static void
+load_file(Sly_State *ss, sly_value form)
+{
+	char *src;
+	char path[255] = {0};
+	struct scope *pscope = ss->cc->cscope;
+	char *ppath = ss->file_path;
+	sly_assert(ss->cc->cscope->level == 0,
+			   "Error: load form is only allowed in a top-level context");
+	form = CDR(form);
+	byte_vector *bv = GET_PTR(syntax_to_datum(CAR(form)));
+	memcpy(path, bv->elems, bv->len);
+	sly_value ast = parse_file(ss, path, &src);
+	ss->file_path = path;
+	ss->cc->cscope = make_scope(ss);
+	ss->cc->cscope->symtable = pscope->symtable;
+	ss->cc->cscope->macros = pscope->macros;
+	init_symtable(ss, ss->cc->cscope->symtable);
+	ss->cc->cscope->level = 0; /* top level */
+	sly_compile(ss, ast);
+	setup_frame(ss);
+	vm_run(ss, 0);
+	ss->file_path = ppath;
+	ss->cc->cscope = pscope;
+}
+
+
 int
 comp_expr(Sly_State *ss, sly_value form, int reg)
 {
@@ -868,16 +906,20 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 				sly_raise_exception(ss, EXC_COMPILE, "Error malformed display expression");
 			}
 		} break;
-		case kw_load: {
+		case kw_load: { /* do nothing */
+#if 0
 			char *src;
 			char path[255] = {0};
+			struct scope *pscope = ss->cc->cscope;
+			char *ppath = ss->file_path;
 			sly_assert(ss->cc->cscope->level == 0,
 					   "Error: load form is only allowed in a top-level context");
 			form = CDR(form);
 			byte_vector *bv = GET_PTR(syntax_to_datum(CAR(form)));
 			memcpy(path, bv->elems, bv->len);
 			sly_value ast = parse_file(ss, path, &src);
-			struct scope *pscope = ss->cc->cscope;
+			printf("%s\n", ss->file_path);
+			ss->file_path = path;
 			ss->cc->cscope = make_scope(ss);
 			ss->cc->cscope->symtable = pscope->symtable;
 			ss->cc->cscope->macros = pscope->macros;
@@ -886,7 +928,9 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			sly_compile(ss, ast);
 			setup_frame(ss);
 			vm_run(ss, 0);
+			ss->file_path = ppath;
 			ss->cc->cscope = pscope;
+#endif
 		} break;
 		case KW_COUNT: {
 			sly_raise_exception(ss, EXC_COMPILE, "(KW_COUNT) Not a real keyword");
@@ -955,6 +999,7 @@ sly_do_file(char *file_path, int debug_info)
 	Sly_State ss = {0};
 	sly_value globals;
 	sly_init_state(&ss);
+	ss.file_path = file_path;
 	sly_compile(&ss, parse_file(&ss, file_path, &ss.source_code));
 	setup_frame(&ss);
 	gc_collect(&ss);
@@ -979,15 +1024,21 @@ sly_do_file(char *file_path, int debug_info)
 int
 sly_compile(Sly_State *ss, sly_value ast)
 {
+#if 0
 	HANDLE_EXCEPTION(ss, {
 			fprintf(stderr, "Unhandled exception in %s ", ss->file_path);
 			fprintf(stderr, "during compilation:\n");
 			fprintf(stderr, "%s\n", ss->excpt_msg);
 			exit(1);
 		});
+#endif
 	prototype *proto = GET_PTR(ss->cc->cscope->proto);
+	load_deps(ss, ast);
+	ast = expand(ss, ast);
 	int r = comp_expr(ss, ast, 0);
 	vector_append(ss, proto->code, iA(OP_RETURN, r, -1));
+#if 0
 	END_HANDLE_EXCEPTION(ss);
+#endif
 	return 0;
 }

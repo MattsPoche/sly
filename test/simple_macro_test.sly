@@ -1,0 +1,3 @@
+(load "sly-lib/macros1.sly")
+
+(let ((apple 1)) (displayln apple))
