@@ -11,6 +11,9 @@
 #define GC_GRAY  1
 #define GC_BLACK 2
 
+#define mark_gray_safe(ss, v) if (heap_obj_p(v)) mark_gray(ss, GET_PTR(v))
+
+
 void
 gc_init(GC *gc)
 {
@@ -72,22 +75,15 @@ traverse_scope(Sly_State *ss, struct scope *scope)
 static void
 traverse_pair(Sly_State *ss, pair *p)
 {
-	if (pair_p(p->car) || ptr_p(p->car)) {
-		mark_gray(ss, GET_PTR(p->car));
-	}
-	if (pair_p(p->cdr) || ptr_p(p->cdr)) {
-		mark_gray(ss, GET_PTR(p->cdr));
-	}
+	mark_gray_safe(ss, p->car);
+	mark_gray_safe(ss, p->cdr);
 }
 
 static void
 traverse_vector(Sly_State *ss, vector *vec)
 {
 	for (size_t i = 0; i < vec->len; ++i) {
-		sly_value v = vec->elems[i];
-		if (pair_p(v) || ptr_p(v)) {
-			mark_gray(ss, GET_PTR(v));
-		}
+		mark_gray_safe(ss, vec->elems[i]);
 	}
 }
 
@@ -95,10 +91,7 @@ static void
 traverse_dictionary(Sly_State *ss, vector *vec)
 {
 	for (size_t i = 0; i < vec->cap; ++i) {
-		sly_value v = vec->elems[i];
-		if (pair_p(v) || ptr_p(v)) {
-			mark_gray(ss, GET_PTR(v));
-		}
+		mark_gray_safe(ss, vec->elems[i]);
 	}
 }
 
@@ -120,10 +113,7 @@ traverse_closure(Sly_State *ss, closure *clos)
 static void
 traverse_syntax(Sly_State *ss, syntax *stx)
 {
-	sly_value v = stx->datum;
-	if (pair_p(v) || ptr_p(v)) {
-		mark_gray(ss, GET_PTR(v));
-	}
+	mark_gray_safe(ss, stx->datum);
 	mark_gray(ss, GET_PTR(stx->lex_info));
 }
 
@@ -140,11 +130,9 @@ traverse_upvalue(Sly_State *ss, upvalue *uv)
 {
 	mark_gray(ss, (gc_object *)uv->next);
 	if (uv->isclosed) {
-		if (pair_p(uv->u.val) || ptr_p(uv->u.val)) {
-			mark_gray(ss, GET_PTR(uv->u.val));
-		}
+		mark_gray_safe(ss, uv->u.val);
 	} else {
-		mark_gray(ss, GET_PTR(*uv->u.ptr));
+		mark_gray_safe(ss, *uv->u.ptr);
 	}
 }
 

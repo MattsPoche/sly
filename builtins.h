@@ -250,8 +250,9 @@ cidentifier_eq(Sly_State *ss, sly_value args)
 	sly_value id0 = vector_ref(args, 0);
 	sly_value id1 = vector_ref(args, 1);
 	if (identifier_p(id0) && identifier_p(id1)) {
-		return ctobool(sly_equal(syntax_to_datum(id0),
-								 syntax_to_datum(id1)));
+		syntax *s0 = GET_PTR(id0);
+		syntax *s1 = GET_PTR(id1);
+		return ctobool(sly_equal(s0->datum, s1->datum));
 	}
 	return SLY_FALSE;
 }
@@ -364,20 +365,19 @@ csyntax_to_datum(Sly_State *ss, sly_value args)
 static sly_value
 csyntax_to_list(Sly_State *ss, sly_value args)
 {
-	UNUSED(ss);
-	sly_value val = vector_ref(args, 0);
-	if (syntax_pair_p(val)) {
-		return syntax_to_datum(val);
-	}
-	return SLY_FALSE;
+	return syntax_to_list(ss, vector_ref(args, 0));
 }
 
 static sly_value
 cdatum_to_syntax(Sly_State *ss, sly_value args)
 {
-	return datum_to_syntax(ss,
-						   vector_ref(args, 0),
-						   vector_ref(args, 1));
+	sly_value id = vector_ref(args, 0);
+	sly_value stx = vector_ref(args, 1);
+	stx = datum_to_syntax(ss, id, stx);
+	syntax *_stx = GET_PTR(stx);
+	syntax *_id  = GET_PTR(id);
+	_stx->context &= _id->context & ctx_tail_pos;
+	return stx;
 }
 
 static sly_value

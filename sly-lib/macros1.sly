@@ -1,15 +1,16 @@
-(load "sly-lib/std.sly")
+(load "sly-lib/list.sly")
 
 (define-syntax (and form)
-  (define *form (cdr (syntax->datum form)))
+  (define *form (cdr (syntax->list form)))
   (define x (car *form))
   (define xs (cdr *form))
   (if (null? xs)
 	  (datum->syntax form x)
 	  (datum->syntax form (list 'if x (cons 'and xs) #f))))
 
+
 (define-syntax (or form)
-  (define *form (cdr (syntax->datum form)))
+  (define *form (cdr (syntax->list form)))
   (define x (car *form))
   (define xs (cdr *form))
   (if (null? xs)
@@ -17,7 +18,7 @@
 	  (datum->syntax form (list 'if x #t (cons 'or xs)))))
 
 (define-syntax (let form)
-  (define *form (cdr (syntax->datum form)))
+  (define *form (cdr (syntax->list form)))
   (define (-let bindings bodies)
 	(set! bindings (fold-right
 					(lambda (x y)
@@ -41,7 +42,7 @@
 									 (cdr (cdr *form))))))
 
 (define-syntax (let* form)
-  (define *form (cdr (syntax->datum form)))
+  (define *form (cdr (syntax->list form)))
   (define bindings (car *form))
   (define bodies (cdr *form))
   (if (< (length bindings) 2)
@@ -49,30 +50,10 @@
 	  (datum->syntax form (list 'let (list (car bindings))
 								(append (list 'let* (cdr bindings)) bodies)))))
 
-(display "(and #t #t) => ")(display (and #t #t))(display "\n")
-(display "(and #t #f) => ")(display (and #t #f))(display "\n")
-(display "(and #f #t) => ")(display (and #f #t))(display "\n")
-(display "(and #f #f) => ")(display (and #f #f))(display "\n")
-(display "(or #t #t)  => ")(display (or #t #t))(display "\n")
-(display "(or #t #f)  => ")(display (or #t #f))(display "\n")
-(display "(or #f #t)  => ")(display (or #f #t))(display "\n")
-(display "(or #f #f)  => ")(display (or #f #f))(display "\n")
-
-(let ((x "hello")
-	  (y "world"))
-  (display x)(display "\n")
-  (display y)(display "\n"))
-
-(let loop ((i 0))
-  (if (< i 10)
-	  (begin
-		(displayln i)
-		(loop (+ i 1)))
-	  (displayln "End of loop")))
-
-(let* ((x 69)
-	   (y 420)
-	   (z (+ x y)))
-  (displayln x)
-  (displayln y)
-  (displayln z))
+(define-syntax (cond form)
+  (define clauses (cdr (syntax->list form)))
+  (define head (car clauses))
+  (define rest (cdr clauses))
+  (if (identifier=? (car (car rest)) #'else)
+	  (datum->syntax form (list 'if (car head) (car (cdr head)) (car (cdr (car rest)))))
+	  (datum->syntax form (list 'if (car head) (car (cdr head)) (cons 'cond rest)))))

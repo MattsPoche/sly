@@ -1057,11 +1057,9 @@ syntax_to_datum(sly_value syn)
 static sly_value
 datum_to_syntax_rec(Sly_State *ss, sly_value id, sly_value datum)
 {
-	token t = {0};
-	if (syntax_p(id)) {
-		syntax *s = GET_PTR(id);
-		t = s->tok;
-	}
+	sly_assert(syntax_p(id), "Type Error expected #<syntax>");
+	syntax *s = GET_PTR(id);
+	token t = s->tok;
 	if (null_p(datum)
 		|| void_p(datum)
 		|| syntax_p(datum)) {
@@ -1078,23 +1076,48 @@ datum_to_syntax_rec(Sly_State *ss, sly_value id, sly_value datum)
 sly_value
 datum_to_syntax(Sly_State *ss, sly_value id, sly_value datum)
 {
-	token t = {0};
-	if (syntax_p(id)) {
-		syntax *s = GET_PTR(id);
-		t = s->tok;
-	}
+	sly_assert(syntax_p(id), "Type Error expected #<syntax>");
+	syntax *s = GET_PTR(id);
+	token t = s->tok;
 	if (null_p(datum)
 		|| void_p(datum)
 		|| syntax_p(datum)) {
 		return datum;
 	}
+	sly_value stx;
 	if (pair_p(datum)) {
-		return make_syntax(ss, t,
-						   cons(ss,
-								datum_to_syntax(ss, id, car(datum)),
-								datum_to_syntax_rec(ss, id, cdr(datum))));
+		stx = make_syntax(ss, t,
+						  cons(ss,
+							   datum_to_syntax(ss, id, car(datum)),
+							   datum_to_syntax_rec(ss, id, cdr(datum))));
+	} else {
+		stx = make_syntax(ss, t, datum);
 	}
-	return make_syntax(ss, t, datum);
+	return stx;
+}
+
+static sly_value
+syntax_to_list_rec(Sly_State *ss, sly_value form)
+{
+	if (syntax_pair_p(form)) {
+		syntax *s = GET_PTR(form);
+		sly_value p = s->datum;
+		return cons(ss, syntax_to_list_rec(ss, car(p)),
+					syntax_to_list_rec(ss, cdr(p)));
+	}
+	if (pair_p(form)) {
+		return cons(ss, syntax_to_list_rec(ss, car(form)),
+					syntax_to_list_rec(ss, cdr(form)));
+	}
+	return form;
+}
+
+sly_value
+syntax_to_list(Sly_State *ss, sly_value form)
+{
+	sly_assert(syntax_pair_p(form),
+			   "Type error expected syntax pair");
+	return syntax_to_list_rec(ss, form);
 }
 
 static sly_value
@@ -1233,43 +1256,47 @@ close_upvalue(sly_value _uv)
 {
 	sly_assert(upvalue_p(_uv), "Type Error expected <upvalue>");
 	upvalue *uv = GET_PTR(_uv);
-	if (!uv->isclosed) {
-		uv->isclosed = 1;
-		uv->u.val = *uv->u.ptr;
+	sly_assert(uv->isclosed == 0, "Error upvalue is already closed");
+	uv->isclosed = 1;
+	uv->u.val = *uv->u.ptr;
+	uv->next = NULL;
+}
+
+static upvalue *
+_find_open_upvalue(upvalue *list, sly_value *ptr, upvalue **parent)
+{
+	upvalue *uv = list->next;
+	if (uv == NULL) {
+		return NULL;
 	}
+	if (uv->u.ptr == ptr) {
+		if (parent) *parent = list;
+		return uv;
+	}
+	return _find_open_upvalue(uv, ptr, parent);
 }
 
 upvalue *
 find_open_upvalue(Sly_State *ss, sly_value *ptr, upvalue **parent)
 {
-	upvalue *uv = ss->open_upvals;
-	upvalue *p;
-	if (uv == NULL) return NULL;
-	if (uv->u.ptr == ptr) {
-		if (parent) *parent = NULL;
-		return uv;
+	upvalue *list = ss->open_upvals;
+	if (list == NULL) {
+		return NULL;
 	}
-	p = uv;
-	uv = uv->next;
-	while (uv) {
-		if (uv->u.ptr == ptr) {
-			if (parent) *parent = p;
-			return uv;
-		}
-		p = uv;
-		uv = uv->next;
+	if (list->u.ptr == ptr) {
+		return list;
 	}
-	return NULL;
+	return _find_open_upvalue(list, ptr, parent);
 }
 
 sly_value
 make_closed_upvalue(Sly_State *ss, sly_value val)
 {
 	upvalue *uv = gc_alloc(ss, sizeof(*uv));
-	*uv = (upvalue){0};
 	uv->h.type = tt_upvalue;
 	uv->isclosed = 1;
 	uv->u.val = val;
+	uv->next = NULL;
 	return (sly_value)uv;
 }
 

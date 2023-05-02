@@ -14,10 +14,11 @@ static void
 close_upvalues(Sly_State *ss, stack_frame *frame)
 {
 	vector *vec = GET_PTR(frame->R);
-	upvalue *uv, *parent;
+	upvalue *uv = NULL;
+	upvalue *parent = NULL;
 	closure *clos = GET_PTR(frame->clos);
 	prototype *proto = GET_PTR(clos->proto);
-	for (size_t i = 0; i < proto->nvars; ++i) {
+	for (size_t i = 0; i < proto->nregs; ++i) {
 		uv = find_open_upvalue(ss, &vec->elems[i], &parent);
 		if (uv) {
 			if (parent == NULL) {

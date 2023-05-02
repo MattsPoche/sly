@@ -1,0 +1,46 @@
+(load "sly-lib/macros1.sly")
+
+(display "(and #t #t) => ")(display (and #t #t))(display "\n")
+(display "(and #t #f) => ")(display (and #t #f))(display "\n")
+(display "(and #f #t) => ")(display (and #f #t))(display "\n")
+(display "(and #f #f) => ")(display (and #f #f))(display "\n")
+(display "(or #t #t)  => ")(display (or #t #t))(display "\n")
+(display "(or #t #f)  => ")(display (or #t #f))(display "\n")
+(display "(or #f #t)  => ")(display (or #f #t))(display "\n")
+(display "(or #f #f)  => ")(display (or #f #f))(display "\n")
+
+(let ((x "hello")
+	  (y "world"))
+  (display x)(display "\n")
+  (display y)(display "\n"))
+
+(displayln "Begin loop")
+(let loop ((i 0))
+  (if (< i 10)
+	  (begin
+		(displayln i)
+		(loop (+ i 1)))
+	  (displayln "End loop")))
+
+(let* ((x 69)
+	   (y 420)
+	   (z (+ x y)))
+  (displayln x)
+  (displayln y)
+  (displayln z))
+
+(for-each (lambda (x) (displayln x)) '(a b c d e f g . h))
+
+(define (fizz-buzz n)
+  (cond ((and (= (% n 3) 0) (= (% n 5) 0))
+		 (display "fizz buzz, "))
+		((= (% n 3) 0)
+		 (display "fizz, "))
+		((= (% n 5) 0)
+		 (display "buzz, "))
+		(else
+		 (begin
+		   (display n)
+		   (display ", ")))))
+
+(for-each fizz-buzz (range 0 100)) (display "\n")

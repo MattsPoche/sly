@@ -202,11 +202,9 @@ struct scope {
 };
 
 enum syntax_context {
-	ctx_none			= 0,
-	ctx_tail_pos		= 1,
-	ctx_binding			= 1 << 1,
-	ctx_macro_body		= 1 << 2,
-	ctx_macro_expansion	= 1 << 3,
+	ctx_none		= 0,
+	ctx_tail_pos	= 1,
+	ctx_macro_body	= 1 << 1,
 };
 
 typedef struct _syntax {
@@ -284,6 +282,7 @@ int sly_equal(sly_value o1, sly_value o2);
 sly_value make_syntax(Sly_State *ss, token tok, sly_value datum);
 sly_value syntax_to_datum(sly_value syn);
 sly_value datum_to_syntax(Sly_State *ss, sly_value id, sly_value syn);
+sly_value syntax_to_list(Sly_State *ss, sly_value form);
 sly_value make_dictionary(Sly_State *ss);
 int slot_is_free(sly_value slot);
 void dictionary_set(Sly_State *ss, sly_value d, sly_value key, sly_value value);

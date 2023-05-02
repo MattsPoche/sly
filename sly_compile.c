@@ -648,6 +648,11 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 			vector_set(frame->R, 0, expr);
 			ss->frame = frame;
 			form = vm_run(ss, 0);
+#if 0
+			printf("DEBUG:\n");
+			sly_display(strip_syntax(ss, form), 1);
+			printf("\n");
+#endif
 			ss->frame = NULL;
 			sly_value aliases = make_dictionary(ss);
 			sanitize(ss, form, aliases);
