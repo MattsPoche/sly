@@ -546,6 +546,16 @@ clist_length(Sly_State *ss, sly_value args)
 #endif
 
 static sly_value
+cclear_screen(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	UNUSED(args);
+	printf("\033[2J\033[H");
+	return SLY_VOID;
+}
+
+
+static sly_value
 craise_macro_exception(Sly_State *ss, sly_value args)
 {
 	sly_value str = vector_ref(args, 0);
@@ -625,6 +635,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("dictionary-ref", cdictionary_ref, 2, 0);
 	ADD_BUILTIN("dictionary-set!", cdictionary_set, 3, 0);
 	ADD_BUILTIN("list", clist, 0, 1);
+	ADD_BUILTIN("console-clear-screen", cclear_screen, 0, 0);
 	ADD_BUILTIN("raise-macro-exception", craise_macro_exception, 1, 0);
 }
 

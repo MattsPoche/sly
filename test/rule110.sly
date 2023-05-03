@@ -4,23 +4,6 @@
 
 (load "sly-lib/macros1.sly")
 
-(define (cadr p)
-  (car (cdr p)))
-
-(define (cddr p)
-  (cdr (cdr p)))
-
-(define (caddr p)
-  (car (cddr p)))
-
-(define (cdddr p)
-  (cdr (cddr p)))
-
-(define (cadddr p)
-  (car (cdddr p)))
-
-
-
 ;;; Current pattern            111	110	101	100	011	010	001	000
 ;;; New state for center cell	0 	 1	 1	 0	 1	 1	 1	 0
 

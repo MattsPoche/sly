@@ -70,3 +70,29 @@
   (define condition (car (cdr *form)))
   (define bodies (cdr (cdr *form)))
   (datum->syntax form (list #'if condition (void) (cons #'begin bodies))))
+
+(define-syntax (inc form)
+  (define *form (syntax->list form))
+  (define var (cadr *form))
+  (datum->syntax form (list #'+ var #'1)))
+
+(define-syntax (dec form)
+  (define *form (syntax->list form))
+  (define var (cadr *form))
+  (datum->syntax form (list #'- var #'1)))
+
+(define-syntax (inc! form)
+  (define *form (syntax->list form))
+  (define var (cadr *form))
+  (datum->syntax
+   form (list #'begin
+			  (list #'set! var (list #'+ var #'1))
+			  var)))
+
+(define-syntax (dec! form)
+  (define *form (syntax->list form))
+  (define var (cadr *form))
+  (datum->syntax
+   form (list #'begin
+			  (list #'set! var (list #'- var #'1))
+			  var)))

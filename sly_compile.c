@@ -692,7 +692,9 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 	}
 	proto->nvars = proto->nregs;
 	int tmp = reg;
-	{
+	if (null_p(form)) {
+		sly_raise_exception(ss, EXC_COMPILE, "Compile Error empty function body");
+	} else {
 		while (!null_p(CDR(form))) {
 			comp_expr(ss, CAR(form), proto->nvars);
 			form = CDR(form);

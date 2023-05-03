@@ -1,0 +1,127 @@
+(load "sly-lib/macros1.sly")
+
+(define rows 20)    ;; constant
+(define columns 50) ;; constant
+
+(define (cell-ref state r c)
+  (vector-ref state (+ (* r columns) c)))
+
+(define (cell-set! state r c v)
+  (vector-set! state (+ (* r columns) c) v))
+
+(define (make-state)
+  (let ([state (make-vector (* rows columns))])
+	(let loop ([i 0])
+	  (when (< i (vector-length state))
+		(vector-set! state i #f)
+		(loop (inc i)))
+	  state)))
+
+(define (display-cell cell)
+  (if cell
+	  (display "#")
+	  (display " ")))
+
+(define (display-state state)
+  (let l0 ([r 0])
+	(when (< r rows)
+	  (let l1 ([c 0])
+		(when (< c columns)
+		  (display-cell (cell-ref state r c))
+		  (l1 (inc c))))
+	  (display "\n")
+	  (l0 (inc r)))))
+
+(define (vector-count value vec)
+  (let ([c 0])
+	(let loop ([i 0])
+	  (when (< i (vector-length vec))
+		(when (equal? (vector-ref vec i) value)
+		  (inc! c))
+		(loop (inc i)))
+	  c)))
+
+(define (alive nbors)
+  (vector-count #t nbors))
+
+(define (wrap-row r)
+  (cond ((< r 0) (dec rows))
+		((>= r rows) 0)
+		(else r)))
+
+(define (wrap-col c)
+  (cond ((< c 0) (dec columns))
+		((>= c columns) 0)
+		(else c)))
+
+(define (get-neighbors state r c)
+  (vector (cell-ref state (wrap-row (dec r))
+					(wrap-col (dec c)))
+		  (cell-ref state (wrap-row (dec r))
+					(wrap-col c))
+		  (cell-ref state (wrap-row (dec r))
+					(wrap-col (inc c)))
+		  (cell-ref state (wrap-row r)
+					(wrap-col (dec c)))
+		  (cell-ref state (wrap-row r)
+					(wrap-col (inc c)))
+		  (cell-ref state (wrap-row (inc r))
+					(wrap-col (dec c)))
+		  (cell-ref state (wrap-row (inc r))
+					(wrap-col c))
+		  (cell-ref state (wrap-row (inc r))
+					(wrap-col (inc c)))))
+
+
+(define (rules state r c)
+  ;; 1. Any live cell with two or three live neighbours survives.
+  ;; 2. Any dead cell with three live neighbours becomes a live cell.
+  ;; 3. All other live cells die in the next generation.
+  ;; Similarly, all other dead cells stay dead.
+  (let ([living (alive (get-neighbors state r c))]
+		[cell (cell-ref state r c)])
+	(cond ((and cell (or (= living 2) (= living 3))) #t) ; 1
+		  ((and (not cell) (= living 3)) #t)             ; 2
+		  (else #f))))                                   ; 3
+
+(define (next-gen state)
+  (let ([new-state (make-state)])
+	(let rl ([r 0])
+	  (when (< r rows)
+		(let cl ([c 0])
+		  (when (< c columns)
+			(cell-set! new-state r c (rules state r c))
+			(cl (inc c))))
+		(rl (inc r))))
+	new-state))
+
+(define glider #(#f #t #f
+				 #f #f #t
+				 #t #t #t))
+
+(define (draw-glider state r c)
+  (let l0 ([i 0])
+	(when (< i 3)
+	  (let l1 ([j 0])
+		(when (< j 3)
+		  (cell-set! state
+					 (wrap-row (+ r i))
+					 (wrap-col (+ c j))
+					 (vector-ref glider (+ (* i 3) j)))
+		  (l1 (inc j))))
+	  (l0 (inc i)))))
+
+(define (simulate state iterations)
+  (console-clear-screen)
+  (let loop ([i 0]
+			 [state state])
+	(when (< i iterations)
+	  (display "generation: ")
+	  (displayln i)
+	  (display-state state)
+	  (console-clear-screen)
+	  (loop (inc i) (next-gen state)))))
+
+(define state (make-state))
+(draw-glider state 0 0)
+(simulate state 1000)

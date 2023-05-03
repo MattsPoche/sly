@@ -6,6 +6,21 @@
 
 (define (displayln x) (display x)(display "\n"))
 
+(define (cadr p)
+  (car (cdr p)))
+
+(define (cddr p)
+  (cdr (cdr p)))
+
+(define (caddr p)
+  (car (cddr p)))
+
+(define (cdddr p)
+  (cdr (cddr p)))
+
+(define (cadddr p)
+  (car (cdddr p)))
+
 (define (fold-left f z xs)
   (if (null? xs)
 	  z
@@ -53,6 +68,10 @@
 		(lambda (x) ((car fs) ((*compose* (cdr fs)) x)))))
   (*compose* fs))
 
+(define (count val xs)
+  (fold-right
+   (lambda (x c) (if (equal? x val) (+ c 1) c))
+   0 xs))
 
 (define (map f xs)
   (fold-right (lambda (x xs) (cons (f x) xs)) '() xs))

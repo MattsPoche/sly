@@ -61,8 +61,14 @@ vm_run(Sly_State *ss, int run_gc)
 	sly_value ret_val = SLY_VOID;
 	int do_tailcall = 0;
 	union instr instr;
+//	int line = 0;
     for (;;) {
 		instr.v = next_instr();
+/*
+		if (instr.i.ln != -1) {
+			line = instr.i.ln;
+		}
+*/
 		enum opcode i = GET_OP(instr);
 		switch (i) {
 		case OP_NOP: break;
@@ -185,10 +191,12 @@ vm_run(Sly_State *ss, int run_gc)
 					}
 					vector_set(nframe->R, proto->nargs, vargs);
 				} else {
-					if (nargs != proto->nargs) {
-						sly_display(val, 1);
-						printf("\n");
-					}
+/*
+					printf("Expected: %zu, passed: %zu\n",
+						   proto->nargs,
+						   nargs);
+					printf("Location: %s:%d\n", ss->file_path, line);
+*/
 					sly_assert(nargs == proto->nargs,
 							   "Error wrong number of arguments (188)");
 				}
