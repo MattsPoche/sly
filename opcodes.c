@@ -113,7 +113,8 @@ dis(INSTR ins)
 	} break;
 	case OP_CALLWCC: {
 		u8 a = GET_A(instr);
-		printf("(CALL/CC %d)%n", a, &pad);
+		u8 b = GET_B(instr);
+		printf("(CALL/CC %d %d)%n", a, b, &pad);
 	} break;
 	case OP_TAILCALL: {
 		u8 a = GET_A(instr);

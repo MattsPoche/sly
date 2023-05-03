@@ -44,3 +44,6 @@
 		   (display ", ")))))
 
 (for-each fizz-buzz (range 0 100)) (display "\n")
+
+(when #t
+  (displayln "when is it not?"))

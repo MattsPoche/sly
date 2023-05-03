@@ -313,10 +313,12 @@ comp_if(Sly_State *ss, sly_value form, int reg)
 	if (!null_p(form)) {
 		sly_raise_exception(ss, EXC_COMPILE, "Compile Error malformed if expression");
 	}
-	if (stx->context & ctx_tail_pos) {
+	if (tbranch && stx->context & ctx_tail_pos) {
 		syntax *s = GET_PTR(tbranch);
 		s->context = FLAG_ON(s->context, ctx_tail_pos);
-		s = GET_PTR(fbranch);
+	}
+	if (fbranch && stx->context & ctx_tail_pos) {
+		syntax *s = GET_PTR(fbranch);
 		s->context = FLAG_ON(s->context, ctx_tail_pos);
 	}
 	int be_res = comp_expr(ss, boolexpr, reg);
@@ -458,13 +460,14 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 	int line_number = -1;
 	if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 	sly_value datum;
-	if (!syntax_p(form)) {
-		sly_display(form, 1);
-		printf("\n");
+	syntax *syn;
+	if (null_p(form) || void_p(form)) {
+		datum = form;
+	} else {
+		datum = syntax_to_datum(form);
+		syn = GET_PTR(form);
+		line_number = syn->tok.ln;
 	}
-	datum = syntax_to_datum(form);
-	syntax *syn = GET_PTR(form);
-	line_number = syn->tok.ln;
 	if (symbol_p(datum)) {
 		u32 level = 0;
 		sly_value uplist = SLY_NULL;
@@ -553,6 +556,7 @@ apply_alias(sly_value id, sly_value aliases)
 static void
 gen_aliases(Sly_State *ss, sly_value form, sly_value aliases)
 {
+	if (null_p(form)) return;
 	if (syntax_pair_p(form)) {
 		while (!null_p(form)) {
 			sly_value id = CAR(form);
@@ -897,11 +901,7 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			syntax *s = GET_PTR(stx);
 			form = CDR(form);
 			int reg2 = comp_expr(ss, CAR(form), reg);
-			if (reg2 == -1) {
-				vector_append(ss, proto->code, iA(OP_CALLWCC, reg, s->tok.ln));
-			} else {
-				vector_append(ss, proto->code, iA(OP_CALLWCC, reg2, s->tok.ln));
-			}
+			vector_append(ss, proto->code, iAB(OP_CALLWCC, reg, reg2, s->tok.ln));
 			if (!null_p(CDR(form))) {
 				sly_raise_exception(ss, EXC_COMPILE, "Error malformed display expression");
 			}
@@ -1024,21 +1024,17 @@ sly_do_file(char *file_path, int debug_info)
 int
 sly_compile(Sly_State *ss, sly_value ast)
 {
-#if 0
 	HANDLE_EXCEPTION(ss, {
 			fprintf(stderr, "Unhandled exception in %s ", ss->file_path);
 			fprintf(stderr, "during compilation:\n");
 			fprintf(stderr, "%s\n", ss->excpt_msg);
 			exit(1);
 		});
-#endif
 	prototype *proto = GET_PTR(ss->cc->cscope->proto);
 	load_deps(ss, ast);
 	ast = expand(ss, ast);
 	int r = comp_expr(ss, ast, 0);
 	vector_append(ss, proto->code, iA(OP_RETURN, r, -1));
-#if 0
 	END_HANDLE_EXCEPTION(ss);
-#endif
 	return 0;
 }

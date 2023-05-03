@@ -249,7 +249,8 @@ vm_run(Sly_State *ss, int run_gc)
 		} break;
 		case OP_CALLWCC: {
 			u8 a = GET_A(instr);
-			sly_value proc = get_reg(a);
+			u8 b = GET_B(instr);
+			sly_value proc = get_reg(b);
 			sly_value cc = make_continuation(ss, ss->frame, ss->frame->pc, a);
 			if (closure_p(proc)) {
 				closure *clos = GET_PTR(proc);

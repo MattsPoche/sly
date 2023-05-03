@@ -1,0 +1,34 @@
+(load "sly-lib/macros1.sly")
+
+(define (iter-range start end step)
+  (let ((i start))
+	(lambda (yield)
+	  (cond ((equal? yield '*reset-iter*)
+			 (set! i start))
+			((< i end)
+			 (let ((n i))
+			   (set! i (+ i step))
+			   (yield n)))
+			(else
+			 (yield '*iter-end*))))))
+
+(define (iter-next iter)
+  (call/cc iter))
+
+(define (iter-for-each f iter)
+  (let ((i (iter-next iter)))
+	(unless (equal? i '*iter-end*)
+	  (f i)
+	  (iter-for-each f iter))))
+
+(define iter (iter-range 0 10 1))
+
+(displayln (iter-next iter))
+(displayln (iter-next iter))
+(displayln (iter-next iter))
+(iter '*reset-iter*)
+(displayln (iter-next iter))
+(displayln (iter-next iter))
+(displayln (iter-next iter))
+(iter '*reset-iter*)
+(iter-for-each (lambda (x) (displayln x)) iter)

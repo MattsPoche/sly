@@ -17,7 +17,7 @@ enum opcode {
 	OP_JMP,			// iAx  | PC := <u64> Ax
 	OP_FJMP,		// iABx | if R[A] == #f then PC := Bx
 	OP_CALL,		// iAB  | R[A] := (R[A] R[A+1] ... R[A+B-1])
-	OP_CALLWCC,     // iA   | R[A] := (R[A] (current-continuation)) ; call/cc
+	OP_CALLWCC,     // iAB  | R[A] := (R[B] (current-continuation)) ; call/cc
 	OP_TAILCALL,	// iAB  | R[A] := (R[A] R[A+1] ... R[A+B-1])
 	OP_RETURN,		// iA   | return R[A]
 	OP_CLOSURE,		// iABx | R[A] := make_closure(<prototype> K[Bx])
