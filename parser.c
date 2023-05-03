@@ -146,7 +146,7 @@ build_list:
 		sly_raise_exception(ss, EXC_COMPILE, "Parse Error mismatched bracket");
 	} break;
 	case tok_vector: {
-		sly_value stx = make_syntax(ss, t, cstr_to_symbol("make-vector"));
+		sly_value stx = make_syntax(ss, t, cstr_to_symbol("vector"));
 		list = cons(ss, stx, SLY_NULL);
 		goto build_list;
 	} break;

@@ -381,7 +381,7 @@ cdatum_to_syntax(Sly_State *ss, sly_value args)
 }
 
 static sly_value
-cmake_vector(Sly_State *ss, sly_value args)
+cvector(Sly_State *ss, sly_value args)
 {
 	sly_value list = vector_ref(args, 0);
 	size_t len = list_len(list);
@@ -389,6 +389,17 @@ cmake_vector(Sly_State *ss, sly_value args)
 	for (size_t i = 0; i < len; ++i) {
 		vector_set(vec, i, car(list));
 		list = cdr(list);
+	}
+	return vec;
+}
+
+static sly_value
+cmake_vector(Sly_State *ss, sly_value args)
+{
+	size_t len = get_int(vector_ref(args, 0));
+	sly_value vec = make_vector(ss, len, len);
+	for (size_t i = 0; i < len; ++i) {
+		vector_set(vec, i, SLY_FALSE);
 	}
 	return vec;
 }
@@ -600,7 +611,8 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("syntax->datum", csyntax_to_datum, 1, 0);
 	ADD_BUILTIN("syntax->list", csyntax_to_list, 1, 0);
 	ADD_BUILTIN("datum->syntax", cdatum_to_syntax, 2, 0);
-	ADD_BUILTIN("make-vector", cmake_vector, 0, 1);
+	ADD_BUILTIN("make-vector", cmake_vector, 1, 0);
+	ADD_BUILTIN("vector", cvector, 0, 1);
 	ADD_BUILTIN("vector-ref", cvector_ref, 2, 0);
 	ADD_BUILTIN("vector-set!", cvector_set, 3, 0);
 	ADD_BUILTIN("vector-length", cvector_length, 1, 0);

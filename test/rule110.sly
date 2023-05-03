@@ -1,0 +1,80 @@
+;;; Rule110
+;;; https://en.wikipedia.org/wiki/Rule_110
+;;; if this fails we are no longer turing complete :(
+
+(load "sly-lib/macros1.sly")
+
+(define (cadr p)
+  (car (cdr p)))
+
+(define (cddr p)
+  (cdr (cdr p)))
+
+(define (caddr p)
+  (car (cddr p)))
+
+(define (cdddr p)
+  (cdr (cddr p)))
+
+(define (cadddr p)
+  (car (cdddr p)))
+
+
+
+;;; Current pattern            111	110	101	100	011	010	001	000
+;;; New state for center cell	0 	 1	 1	 0	 1	 1	 1	 0
+
+(define (rule110 group)
+  (not (or (equal? group #(#t #t #t))
+		   (equal? group #(#t #f #f))
+		   (equal? group #(#f #f #f)))))
+
+(define (get-neighbors state i)
+  (define x (if (= i 0)
+				(vector-ref state (- (vector-length state) 1))
+				(vector-ref state (- i 1))))
+  (define y (vector-ref state i))
+  (define z (if (= i (- (vector-length state) 1))
+				(vector-ref state 0)
+				(vector-ref state (+ i 1))))
+  (vector x y z))
+
+(define (next-gen state)
+  (define new-state (make-vector (vector-length state)))
+  (let loop ([i 0])
+	(when (< i (vector-length state))
+	  (vector-set! new-state i (rule110 (get-neighbors state i)))
+	  (loop (+ i 1)))
+	new-state))
+
+(define (print-state state)
+  (display "|")
+  (let loop ([i 0])
+	(when (< i (vector-length state))
+	  (if (vector-ref state i)
+		  (display "#")
+		  (display " "))
+	  (loop (+ i 1))))
+  (display "|\n"))
+
+(define (simulate state iterations)
+  (let loop ([i 0]
+			 [state state])
+	(when (< i iterations)
+	  (print-state state)
+	  (loop (+ i 1) (next-gen state)))))
+
+(define state0 #(#f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f
+					#f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f
+					#f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f
+					#f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f
+					#f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #t))
+
+;; (define state1 #(#f #f #f #t #f #f #t #t #f #t #t #t #t #t     #f #f #f #t #t #t #f #t #t #t
+;; 					#f #f #f #t #f #f #t #t #f #t #t #t #t #t  #f #f #f #t #t #t #f #t #t #t
+;; 					#f #f #f #t #f #f #t #t #f #t #t #t #t #t  #f #f #f #t #t #t #f #t #t #t
+;; 					#f #f #f #t #f #f #t #t #f #t #t #t #t #t  #f #f #f #t #t #t #f #t #t #t
+;; 					#f #f #f #t #f #f #t #t #f #t #t #t #t #t  #f #f #f #t #t #t #f #t #t #t
+;; 					#f #f #f #t #f #f #t #t #f #t #t #t #t #t  #f #f #f #t #t #t #f #t #t #t))
+
+(simulate state0 50)
