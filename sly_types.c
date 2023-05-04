@@ -661,6 +661,7 @@ make_prototype(Sly_State *ss, sly_value uplist, sly_value constants, sly_value c
 	proto->nvars = 0;
 	proto->entry = entry;
 	proto->has_varg = has_varg;
+	proto->syntax_info = make_vector(ss, 0, 8);
 	return (sly_value)proto;
 }
 
@@ -1040,16 +1041,7 @@ make_syntax(Sly_State *ss, token tok, sly_value datum)
 sly_value
 syntax_to_datum(sly_value syn)
 {
-	if (!syntax_p(syn)) {
-		if (closure_p(syn)) {
-			closure *clos = GET_PTR(syn);
-			prototype* proto = GET_PTR(clos->proto);
-			dis_code(proto->code);
-			sly_display(proto->K, 1);
-			printf("\n");
-		}
-		sly_assert(0, "Type Error expected <syntax>");
-	}
+	sly_assert(syntax_p(syn), "Type Error expected <syntax>");
 	syntax *s = GET_PTR(syn);
 	return s->datum;
 }
@@ -1118,6 +1110,16 @@ syntax_to_list(Sly_State *ss, sly_value form)
 	sly_assert(syntax_pair_p(form),
 			   "Type error expected syntax pair");
 	return syntax_to_list_rec(ss, form);
+}
+
+token
+syntax_get_token(Sly_State *ss, sly_value stx)
+{
+	UNUSED(ss);
+	sly_assert(syntax_p(stx),
+			   "Type error expected <syntax>");
+	syntax *s = GET_PTR(stx);
+	return s->tok;
 }
 
 static sly_value

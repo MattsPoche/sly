@@ -74,8 +74,8 @@ union instr {
 
 stack_frame *make_stack(Sly_State *ss, size_t nregs);
 stack_frame *make_eval_stack(Sly_State *ss);
-void dis(INSTR instr);
-void dis_code(sly_value code);
+void dis(INSTR instr, sly_value si);
+void dis_code(sly_value code, sly_value si);
 void dis_all(stack_frame *frame, int lstk);
 
 #ifdef OPCODES_INCLUDE_INLINE

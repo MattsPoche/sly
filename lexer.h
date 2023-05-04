@@ -43,16 +43,22 @@ typedef struct _token {
 	enum token tag;
 	int so, eo;
 	int ln, cn;
+	char *src;
 } token;
 
 typedef struct {
-	size_t cur;
-	size_t len;
+	u32 cur;
+	u32 len;
 	size_t max;
 	token *ts;
 } token_buff;
 
+#define PEEK_TOKEN(tb) ((tb).ts[(tb).cur])
+#define NEXT_TOKEN(tb) ((tb).cur == (tb).len ? (tb).ts[(tb).cur-1] \
+					                         : (tb).ts[(tb).cur++])
+
 char *tok_to_string(enum token t);
 int lex_str(char *str, token_buff *_tokens);
+void push_token(token_buff *tokens, token t);
 
 #endif /* SLY_LEXER_H_ */

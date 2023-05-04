@@ -12,6 +12,25 @@
 		   (equal? group #(#t #f #f))
 		   (equal? group #(#f #f #f)))))
 
+;;; current pattern         	111	110	101	100	011	010	001	000
+;;; new state for center cell	 0	 0	 0	 1	 1	 1	 1	 0
+
+(define (rule30 group)
+  (or (equal? group #(#t #f #f))
+	  (equal? group #(#f #t #t))
+	  (equal? group #(#f #t #f))
+	  (equal? group #(#f #f #t))))
+
+;; (define (get-neighbors state i)
+;;   (let ([x (if (= i 0)
+;; 			   (vector-ref state (- (vector-length state) 1))
+;; 			   (vector-ref state (- i 1)))]
+;; 		[y (vector-ref state i)]
+;; 		[z (if (= i (- (vector-length state) 1))
+;; 			   (vector-ref state 0)
+;; 			   (vector-ref state (+ i 1)))])
+;; 	(vector x y z)))
+
 (define (get-neighbors state i)
   (define x (if (= i 0)
 				(vector-ref state (- (vector-length state) 1))
@@ -22,11 +41,18 @@
 				(vector-ref state (+ i 1))))
   (vector x y z))
 
-(define (next-gen state)
+(define (next-gen state rule)
   (define new-state (make-vector (vector-length state)))
   (let loop ([i 0])
 	(when (< i (vector-length state))
-	  (vector-set! new-state i (rule110 (get-neighbors state i)))
+	  ;; (display rule)
+	  ;; TODO: Upvalues are somehow getting switched.
+	  ;; * It has something to do with the fact that the order in wich they
+	  ;; * appear in body is different than the order they appear in the
+	  ;; * enclosing scope. Uncomment above line and program works. Possibly
+	  ;; * because it forces 'rule' to appear before 'new-state', the same
+	  ;; * order they appear in enclosing scope.
+	  (vector-set! new-state i (rule (get-neighbors state i)))
 	  (loop (+ i 1)))
 	new-state))
 
@@ -40,18 +66,21 @@
 	  (loop (+ i 1))))
   (display "|\n"))
 
-(define (simulate state iterations)
+(define (simulate state rule iterations)
   (let loop ([i 0]
 			 [state state])
 	(when (< i iterations)
 	  (print-state state)
-	  (loop (+ i 1) (next-gen state)))))
+	  (loop (+ i 1) (next-gen state rule)))))
 
 (define state0 #(#f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f
 					#f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f
 					#f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f
 					#f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f
 					#f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #t))
+
+(define state30 #(#f #f #f #f #f #f #f #f #f #f #t
+					 #f #f #f #f #f #f #f #f #f #f))
 
 ;; (define state1 #(#f #f #f #t #f #f #t #t #f #t #t #t #t #t     #f #f #f #t #t #t #f #t #t #t
 ;; 					#f #f #f #t #f #f #t #t #f #t #t #t #t #t  #f #f #f #t #t #t #f #t #t #t
@@ -60,4 +89,4 @@
 ;; 					#f #f #f #t #f #f #t #t #f #t #t #t #t #t  #f #f #f #t #t #t #f #t #t #t
 ;; 					#f #f #f #t #f #f #t #t #f #t #t #t #t #t  #f #f #f #t #t #t #f #t #t #t))
 
-(simulate state0 50)
+(simulate state0 rule110 50)

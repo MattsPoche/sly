@@ -6,9 +6,8 @@
 #include "sly_alloc.h"
 
 #define syntax_cons(car, cdr) make_syntax(ss, t, cons(ss, car, cdr))
-#define peek() (tokens.ts[tokens.cur])
-#define next_token() (tokens.cur == tokens.len ? \
-					  tokens.ts[tokens.cur-1] : tokens.ts[tokens.cur++])
+#define peek() PEEK_TOKEN(tokens)
+#define next_token() NEXT_TOKEN(tokens)
 
 static token_buff tokens;
 

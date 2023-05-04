@@ -6,6 +6,7 @@
 #include <ctype.h>
 #include <sys/types.h>
 #include <regex.h>
+#include "common_def.h"
 #include "lexer.h"
 #include "sly_alloc.h"
 
@@ -41,7 +42,6 @@ static regex_t rexpr = {0};
 static size_t off = 0;
 static int line_number = 0;
 static int column_number = 0;
-static token tpeek = { .so = -1, .eo = -1};
 static char *text;
 
 static void strip_ws(void);
@@ -117,15 +117,8 @@ next_token(void)
 		.eo = -1,
 		.ln = -1,
 		.cn = -1,
+		.src = text,
 	};
-	if (tpeek.so != -1) {
-		t = tpeek;
-		tpeek = (token) {
-			.so = -1,
-			.eo = -1,
-		};
-		return t;
-	}
 	strip_ws();
 	if (text[off] == '\0') {
 		t.tag = tok_eof;
@@ -176,7 +169,7 @@ grow_token_buff(token_buff *tokens)
 	tokens->ts = realloc(tokens->ts, sizeof(token) * tokens->max);
 }
 
-static void
+void
 push_token(token_buff *tokens, token t)
 {
 	if (tokens->len >= tokens->max) {

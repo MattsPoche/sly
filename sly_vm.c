@@ -61,14 +61,12 @@ vm_run(Sly_State *ss, int run_gc)
 	sly_value ret_val = SLY_VOID;
 	int do_tailcall = 0;
 	union instr instr;
-//	int line = 0;
+	//int line = 0;
     for (;;) {
 		instr.v = next_instr();
-/*
-		if (instr.i.ln != -1) {
-			line = instr.i.ln;
-		}
-*/
+		/* if (instr.i.ln != -1) { */
+		/* 	line = instr.i.ln; */
+		/* } */
 		enum opcode i = GET_OP(instr);
 		switch (i) {
 		case OP_NOP: break;
@@ -173,6 +171,7 @@ vm_run(Sly_State *ss, int run_gc)
 				for (size_t i = 0; i < nargs; ++i) {
 					vector_set(args, i, get_reg(a + 1 + i));
 				}
+				//printf("Location: %s:%d\n", ss->file_path, line);
 				sly_value r = clos->fn(ss, args);
 				set_reg(a, r);
 			} else if (closure_p(val)) {
@@ -251,6 +250,10 @@ vm_run(Sly_State *ss, int run_gc)
 					uv = uv->next;
 				}
 #endif
+				dis_all(ss->frame, 1);
+				printf("a = %d\n", a);
+				sly_display(val, 1);
+				printf("\n");
 				sly_assert(0, "Type Error expected procedure");
 			}
 			do_tailcall = 0;

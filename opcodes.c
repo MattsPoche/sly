@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include "sly_types.h"
 #include "opcodes.h"
 #include "sly_alloc.h"
@@ -34,7 +35,7 @@ make_eval_stack(Sly_State *ss)
 }
 
 void
-dis(INSTR ins)
+dis(INSTR ins, sly_value si)
 {
 	union instr instr;
 	instr.v = ins;
@@ -138,19 +139,57 @@ dis(INSTR ins)
 	if (instr.i.ln < 0) {
 		printf("\n");
 	} else {
-		printf("%*s;; line %d\n", 20 - pad, "", instr.i.ln + 1);
+		syntax *s = GET_PTR(vector_ref(si, instr.i.ln));
+		token t = s->tok;
+		printf("%*s", 20 - pad, "");
+		printf(";; %d:%d%n", t.ln + 1, t.cn, &pad);
+		if (t.src) {
+			int start = t.so;
+			int end = t.eo;
+			while (start > 0) {
+				if (t.src[start] == '\n') {
+					while (isspace((int)t.src[start])) start++;
+					break;
+				}
+				if (t.src[start] == '(') {
+					break;
+				}
+				start--;
+			}
+			int bal = 0;
+			while (t.src[end] != '\0') {
+				if (t.src[end] == '\n') {
+					break;
+				}
+				if (t.src[end] == ')') {
+					if (bal == 0) {
+						end++;
+						break;
+					}
+					bal--;
+				}
+				if (t.src[end] == '(') {
+					bal++;
+				}
+				end++;
+			}
+			printf("%*s%.*s\x1b[1;31m", 14 - pad, "", t.so - start, &t.src[start]);
+			printf("%.*s", t.eo - t.so, &t.src[t.so]);
+			printf("\x1b[0m%.*s", end - t.eo, &t.src[t.eo]);
+		}
+		printf("\n");
 	}
 }
 
 void
-dis_code(sly_value code)
+dis_code(sly_value code, sly_value si)
 {
 	size_t len = vector_len(code);
 	int pad;
 	for (size_t i = 0; i < len; ++i) {
 		printf("[%zu]%n", i, &pad);
 		printf("%*s", 10 - pad, "");
-		dis(vector_ref(code, i));
+		dis(vector_ref(code, i), si);
 	}
 }
 
@@ -158,7 +197,7 @@ static void
 dis_prototype(prototype *proto, int lstk)
 {
 	printf("Disassembly of function @ 0x%lx\n", (uintptr_t)proto);
-	dis_code(proto->code);
+	dis_code(proto->code, proto->syntax_info);
 	size_t len = vector_len(proto->K);
 	if (lstk) {
 		printf("Constants\n");
@@ -185,10 +224,11 @@ dis_all(stack_frame *frame, int lstk)
 		closure *clos = GET_PTR(frame->clos);
 		proto = clos->proto;
 	}
+	prototype *_proto = GET_PTR(proto);
 	printf("Disassembly of top-level code ");
 	sly_display(proto, 1);
 	printf("\n");
-	dis_code(frame->code);
+	dis_code(frame->code, _proto->syntax_info);
 	size_t len = vector_len(frame->K);
 	if (lstk) {
 		printf("Constants\n");

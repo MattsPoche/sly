@@ -101,6 +101,7 @@ traverse_prototype(Sly_State *ss, prototype *proto)
 	mark_object(GET_PTR(proto->uplist), GC_BLACK);
 	mark_object(GET_PTR(proto->code), GC_BLACK);
 	mark_gray(ss, GET_PTR(proto->K));
+	mark_gray(ss, GET_PTR(proto->syntax_info));
 }
 
 static void

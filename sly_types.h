@@ -152,6 +152,7 @@ typedef struct _proto {
 	OBJ_HEADER;
 	sly_value uplist;   // <vector> list of upval locations
 	sly_value K;        // <vector> constants
+	sly_value syntax_info; // <vector> syntax
 	sly_value code;     // <vector> Byte code segment
 	size_t entry;       // entry point
 	size_t nregs;       // count of registers needed
@@ -283,6 +284,7 @@ sly_value make_syntax(Sly_State *ss, token tok, sly_value datum);
 sly_value syntax_to_datum(sly_value syn);
 sly_value datum_to_syntax(Sly_State *ss, sly_value id, sly_value syn);
 sly_value syntax_to_list(Sly_State *ss, sly_value form);
+token syntax_get_token(Sly_State *ss, sly_value stx);
 sly_value make_dictionary(Sly_State *ss);
 int slot_is_free(sly_value slot);
 void dictionary_set(Sly_State *ss, sly_value d, sly_value key, sly_value value);
