@@ -1,6 +1,6 @@
 TAGS
+tags
 sly
-sly.exe*
-*.txt
+*.exe*
 *.d
 *.o
