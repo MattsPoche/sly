@@ -173,9 +173,16 @@ dis(INSTR ins, sly_value si)
 				}
 				end++;
 			}
-			printf("%*s%.*s\x1b[1;31m", 14 - pad, "", t.so - start, &t.src[start]);
+#if 0
+			char red[] = "\x1b[1;31m";
+			char color_end[] = "\x1b[0m";
+#else
+			char red[] = "";
+			char color_end[] = "";
+#endif
+			printf("%*s%.*s%s", 14 - pad, "", t.so - start, &t.src[start], red);
 			printf("%.*s", t.eo - t.so, &t.src[t.so]);
-			printf("\x1b[0m%.*s", end - t.eo, &t.src[t.eo]);
+			printf("%s%.*s", color_end, end - t.eo, &t.src[t.eo]);
 		}
 		printf("\n");
 	}
@@ -199,7 +206,16 @@ dis_prototype(prototype *proto, int lstk)
 	printf("Disassembly of function @ 0x%lx\n", (uintptr_t)proto);
 	dis_code(proto->code, proto->syntax_info);
 	size_t len = vector_len(proto->K);
+	size_t ulen = vector_len(proto->uplist);
 	if (lstk) {
+		printf("Regs: %zu\n", proto->nregs);
+		printf("Upvalues: %zu\n", vector_len(proto->uplist));
+		printf("Upinfo\n");
+		union uplookup uv;
+		for (size_t i = 0; i < ulen; ++i) {
+			uv.v = vector_ref(proto->uplist, i);
+			printf("%-10zu%d; %d\n", i, uv.u.isup, uv.u.reg);
+		}
 		printf("Constants\n");
 		for (size_t i = 0; i < len; ++i) {
 			printf("%-10zu", i);

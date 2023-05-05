@@ -218,6 +218,17 @@ symbol_eq(sly_value o1, sly_value o2)
 	return s1->hash == s2->hash;
 }
 
+int
+identifier_eq(sly_value o1, sly_value o2)
+{
+	if (identifier_p(o1) && identifier_p(o2)) {
+		syntax *s1 = GET_PTR(o1);
+		syntax *s2 = GET_PTR(o2);
+		return symbol_eq(s1->datum, s2->datum);
+	}
+	return 0;
+}
+
 i64
 get_int(sly_value v)
 {

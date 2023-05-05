@@ -249,12 +249,7 @@ cidentifier_eq(Sly_State *ss, sly_value args)
 	UNUSED(ss);
 	sly_value id0 = vector_ref(args, 0);
 	sly_value id1 = vector_ref(args, 1);
-	if (identifier_p(id0) && identifier_p(id1)) {
-		syntax *s0 = GET_PTR(id0);
-		syntax *s1 = GET_PTR(id1);
-		return ctobool(sly_equal(s0->datum, s1->datum));
-	}
-	return SLY_FALSE;
+	return ctobool(identifier_eq(id0, id1));
 }
 
 static sly_value
@@ -574,7 +569,6 @@ init_builtins(Sly_State *ss)
 	sly_value symtable = cc->cscope->symtable;
 	union symbol_properties st_prop = {0};
 	sly_value sym;
-	st_prop.p.islocal = 0;
 	st_prop.p.type = sym_global;
 	cc->globals = make_dictionary(ss);
 	ADD_BUILTIN("+", cadd, 0, 1);

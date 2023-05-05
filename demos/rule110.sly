@@ -4,65 +4,75 @@
 
 (load "sly-lib/macros1.sly")
 
-;;; Current pattern            111	110	101	100	011	010	001	000
-;;; New state for center cell	0 	 1	 1	 0	 1	 1	 1	 0
+;;; NOTE: keep for historical reasons
+;;; TODO: Need to do more research to figure out exactly why this is happening.
+;; (define (next-gen state rule)
+;;   (define new-state (make-vector (vector-length state)))
+;;   (let loop ([i 0])
+;; 	(when (< i (vector-length state))
+;; 	  ;;rule
+;; 	  ;; (display rule)
+;; 	  ;; NOTE: Upvalues are somehow getting switched.
+;; 	  ;; * It has something to do with the fact that the order in wich they
+;; 	  ;; * appear in body is different than the order they appear in the
+;; 	  ;; * enclosing scope. Uncomment above line and program works. Possibly
+;; 	  ;; * because it forces 'rule' to appear before 'new-state', the same
+;; 	  ;; * order they appear in enclosing scope.
+;; 	  (vector-set! new-state i (rule (get-neighbors state i)))
+;; 	  (loop (+ i 1))))
+;; 	new-state))
 
 (define (rule110 group)
+  ;; Current pattern            111	110	101	100	011	010	001	000
+  ;; New state for center cell	0 	 1	 1	 0	 1	 1	 1	 0
   (not (or (equal? group #(#t #t #t))
 		   (equal? group #(#t #f #f))
 		   (equal? group #(#f #f #f)))))
 
-;;; current pattern         	111	110	101	100	011	010	001	000
-;;; new state for center cell	 0	 0	 0	 1	 1	 1	 1	 0
-
 (define (rule30 group)
+  ;; current pattern         	111	110	101	100	011	010	001	000
+  ;; new state for center cell	 0	 0	 0	 1	 1	 1	 1	 0
   (or (equal? group #(#t #f #f))
 	  (equal? group #(#f #t #t))
 	  (equal? group #(#f #t #f))
 	  (equal? group #(#f #f #t))))
 
-;; (define (get-neighbors state i)
-;;   (let ([x (if (= i 0)
-;; 			   (vector-ref state (- (vector-length state) 1))
-;; 			   (vector-ref state (- i 1)))]
-;; 		[y (vector-ref state i)]
-;; 		[z (if (= i (- (vector-length state) 1))
-;; 			   (vector-ref state 0)
-;; 			   (vector-ref state (+ i 1)))])
-;; 	(vector x y z)))
+(define (rule90 group)
+  ;; current pattern           	111	110	101	100	011	010	001	000
+  ;; new state for center cell	 0	 1	 0	 1	 1	 0	 1	 0
+  (or (equal? group #(#t #t #f))
+	  (equal? group #(#t #f #f))
+	  (equal? group #(#f #t #t))
+	  (equal? group #(#f #f #t))))
 
 (define (get-neighbors state i)
-  (define x (if (= i 0)
-				(vector-ref state (- (vector-length state) 1))
-				(vector-ref state (- i 1))))
-  (define y (vector-ref state i))
-  (define z (if (= i (- (vector-length state) 1))
-				(vector-ref state 0)
-				(vector-ref state (+ i 1))))
-  (vector x y z))
+  (let ([x (if (= i 0)
+			   (vector-ref state (- (vector-length state) 1))
+			   (vector-ref state (- i 1)))]
+		[y (vector-ref state i)]
+		[z (if (= i (- (vector-length state) 1))
+			   (vector-ref state 0)
+			   (vector-ref state (+ i 1)))])
+	(vector x y z)))
 
 (define (next-gen state rule)
   (define new-state (make-vector (vector-length state)))
   (let loop ([i 0])
 	(when (< i (vector-length state))
-	  ;; (display rule)
-	  ;; TODO: Upvalues are somehow getting switched.
-	  ;; * It has something to do with the fact that the order in wich they
-	  ;; * appear in body is different than the order they appear in the
-	  ;; * enclosing scope. Uncomment above line and program works. Possibly
-	  ;; * because it forces 'rule' to appear before 'new-state', the same
-	  ;; * order they appear in enclosing scope.
 	  (vector-set! new-state i (rule (get-neighbors state i)))
-	  (loop (+ i 1)))
-	new-state))
+	  (loop (+ i 1))))
+	new-state)
+
+(define live-char "#")
+(define dead-char ".")
 
 (define (print-state state)
   (display "|")
   (let loop ([i 0])
 	(when (< i (vector-length state))
 	  (if (vector-ref state i)
-		  (display "#")
-		  (display " "))
+		  (display live-char)
+		  (display dead-char))
 	  (loop (+ i 1))))
   (display "|\n"))
 
@@ -79,14 +89,16 @@
 					#f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f
 					#f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #t))
 
-(define state30 #(#f #f #f #f #f #f #f #f #f #f #t
+(define state30 #(#f #f #f #f #f #f #f #f #f #f #f
+					 #f #f #f #f #f #f #f #f #f #f
+					 #f #f #f #f #f #f #f #f #f #t
+					 #f #f #f #f #f #f #f #f #f #f
+					 #f #f #f #f #f #f #f #f #f #f
+					 #f #f #f #f #f #f #f #f #f #f
+					 #f #f #f #f #f #f #f #f #f #f
+					 #f #f #f #f #f #f #f #f #f #f
 					 #f #f #f #f #f #f #f #f #f #f))
 
-;; (define state1 #(#f #f #f #t #f #f #t #t #f #t #t #t #t #t     #f #f #f #t #t #t #f #t #t #t
-;; 					#f #f #f #t #f #f #t #t #f #t #t #t #t #t  #f #f #f #t #t #t #f #t #t #t
-;; 					#f #f #f #t #f #f #t #t #f #t #t #t #t #t  #f #f #f #t #t #t #f #t #t #t
-;; 					#f #f #f #t #f #f #t #t #f #t #t #t #t #t  #f #f #f #t #t #t #f #t #t #t
-;; 					#f #f #f #t #f #f #t #t #f #t #t #t #t #t  #f #f #f #t #t #t #f #t #t #t
-;; 					#f #f #f #t #f #f #t #t #f #t #t #t #t #t  #f #f #f #t #t #t #f #t #t #t))
-
 (simulate state0 rule110 50)
+(simulate state30 rule30 50)
+(simulate state30 rule90 50)

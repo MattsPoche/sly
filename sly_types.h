@@ -8,7 +8,7 @@
 #include "lexer.h"
 #include "gc.h"
 
-typedef uintptr_t sly_value;
+typedef u64 sly_value;
 
 #define st_ptr   0x0
 #define st_pair  0x1
@@ -222,6 +222,7 @@ void sly_raise_exception(Sly_State *ss, int excpt, char *msg);
 void sly_display(sly_value v, int lit);
 u64 sly_hash(sly_value v);
 int symbol_eq(sly_value o1, sly_value o2);
+int identifier_eq(sly_value o1, sly_value o2);
 i64 get_int(sly_value v);
 f64 get_float(sly_value v);
 sly_value make_int(Sly_State *ss, i64 i);
@@ -298,7 +299,6 @@ sly_value make_closed_upvalue(Sly_State *ss, sly_value val);
 int upvalue_isclosed(sly_value uv);
 sly_value upvalue_get(sly_value uv);
 void upvalue_set(sly_value uv, sly_value value);
-
 
 #define cstr_to_symbol(cstr) (make_symbol(ss, (cstr), strlen(cstr)))
 

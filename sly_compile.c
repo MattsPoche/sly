@@ -18,6 +18,11 @@
 /* TODO: macros are unable to call functions defined in the same file.
  */
 
+/* TODO: properly implement vector literals
+ */
+
+/* NOTE: try storing globals as upvalues for faster global access.
+ */
 enum kw {
 	kw_define = 0,
 	kw_lambda,
@@ -47,9 +52,8 @@ union symbol_properties {
 	sly_value v;
 	struct {
 		u8 type;
-		u8 islocal;
 		u8 issyntax;
-		u8 _pad[1];
+		u8 isundefined;
 		i32 reg;
 	} p;
 };
@@ -109,6 +113,7 @@ static void init_symtable(Sly_State *ss, sly_value symtable);
 static size_t intern_constant(Sly_State *ss, sly_value value);
 static void setup_frame(Sly_State *ss);
 static void load_file(Sly_State *ss, sly_value form);
+static void forward_scan_block(Sly_State *ss, sly_value form);
 static sly_value expand(Sly_State *ss, sly_value form);
 
 static void
@@ -243,13 +248,12 @@ apply_context(sly_value form, int ctx)
 static int
 comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 {
-	/* TODO: Definitions should only be allowed at the top-level
-	 * or the begining of bodies.
-	 */
 	struct compile *cc = ss->cc;
+	sly_value globals  = cc->globals;
 	sly_value stx = CAR(form);
+	sly_value symtable = cc->cscope->symtable;
+	prototype *proto = GET_PTR(cc->cscope->proto);
 	sly_value var;
-	if (is_syntax) apply_context(form, ctx_macro_body);
 	if (syntax_pair_p(stx)) { /* function definition */
 		var = syntax_to_datum(CAR(stx));
 		sly_value params = CDR(stx);
@@ -257,25 +261,31 @@ comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 		/* build lambda form */
 		form = syntax_cons(syntax_cons(make_syntax(ss, (token){0}, make_symbol(ss, "lambda", 6)),
 									   cons(ss, params, CDR(form))), SLY_NULL);
+		if (is_syntax) apply_context(form, ctx_macro_body);
 	} else {
 		var = syntax_to_datum(stx);
 		form = CDR(form);
 	}
-	sly_value symtable = cc->cscope->symtable;
-	prototype *proto = GET_PTR(cc->cscope->proto);
 	union symbol_properties st_prop = {0};
+	st_prop.v = symbol_lookup_props(ss, var, NULL, NULL);
+	if (void_p(st_prop.v)) {
+		sly_raise_exception(ss, EXC_COMPILE,
+							"Error definition form ouside definition context");
+	}
+	if (st_prop.p.isundefined == 0) {
+		sly_raise_exception(ss, EXC_COMPILE,
+							"Error re-definition of local variable");
+	}
 	if (!symbol_p(var)) {
 		sly_display(var, 1);
 		printf("\n");
 		sly_raise_exception(ss, EXC_COMPILE, "Error variable name must be a symbol");
 	}
-	sly_value globals  = cc->globals;
-	if (IS_GLOBAL(cc->cscope)) {
+	/* define variable */
+	st_prop.p.isundefined = 0; // no longer undefined
+	dictionary_set(ss, symtable, var, st_prop.v);
+	if (st_prop.p.type == sym_global) {
 		sly_value datum = syntax_to_datum(stx);
-		st_prop.p.islocal = 0;
-		st_prop.p.type = sym_global;
-		st_prop.p.reg = intern_constant(ss, var);
-		dictionary_set(ss, symtable, var, st_prop.v);
 		if (pair_p(datum) || symbol_p(datum)) {
 			dictionary_set(ss, globals, var, SLY_VOID);
 			comp_expr(ss, CAR(form), reg);
@@ -294,10 +304,6 @@ comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 		}
 		return reg;
 	} else {
-		st_prop.p.reg = proto->nvars++;
-		st_prop.p.islocal = 1;
-		st_prop.p.type = sym_variable;
-		dictionary_set(ss, symtable, var, st_prop.v);
 		comp_expr(ss, CAR(form), st_prop.p.reg);
 		if (is_syntax) {
 			STORE_MACRO_CLOSURE();
@@ -367,7 +373,7 @@ comp_if(Sly_State *ss, sly_value form, int reg)
 	} else {
 		vector_set(proto->code, fjmp, iABx(OP_FJMP, be_res, jmp + 1, t));
 	}
-	vector_set(proto->code, jmp,  iAx(OP_JMP, end, -1));
+	vector_set(proto->code, jmp, iAx(OP_JMP, end, -1));
 	return reg;
 }
 
@@ -423,6 +429,10 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 		printf("\n");
 		sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol (418)");
 	}
+	if (cc->cscope->level == level && st_prop.p.isundefined) {
+		sly_raise_exception(ss, EXC_COMPILE,
+							"Error symbol assigned before it is defined (418)");
+	}
 	if (cc->cscope->level != level && st_prop.p.type != sym_global) { /* is non local */
 		st_prop = resolve_upval(ss, cc->cscope, datum, st_prop, level);
 	}
@@ -438,7 +448,6 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 	} else if (st_prop.p.type == sym_global) {
 		st_prop.p.reg = intern_constant(ss, datum);
 		if (!IS_GLOBAL(cc->cscope)) {
-			st_prop.p.islocal = 1;
 			dictionary_set(ss, cc->cscope->symtable, datum, st_prop.v);
 		}
 		if (reg == -1) reg = preg;
@@ -484,6 +493,13 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 			printf("%s:%d:%d\n", ss->file_path, s->tok.ln, s->tok.cn);
 			sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol (479)");
 		}
+/* TODO: Fix this
+		if (cc->cscope->level == level && st_prop.p.isundefined) {
+			sly_display(datum, 1);
+			printf("\n");
+			sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol (493)");
+		}
+*/
 		if (cc->cscope->level != level && st_prop.p.type != sym_global) { /* is non local */
 			st_prop = resolve_upval(ss, cc->cscope, datum, st_prop, level);
 		}
@@ -509,7 +525,6 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 		case sym_global: {
 			st_prop.p.reg = intern_constant(ss, datum);
 			if (!IS_GLOBAL(cc->cscope)) {
-				st_prop.p.islocal = 1;
 				dictionary_set(ss, cc->cscope->symtable, datum, st_prop.v);
 			}
 			vector_append(ss, proto->code, iABx(OP_LOADK, reg, st_prop.p.reg, src_info));
@@ -524,7 +539,6 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 		} else if (null_p(datum)) {
 			vector_append(ss, proto->code, iA(OP_LOADNULL, reg, src_info));
 		} else if (void_p(datum)) {
-			printf("LOADVOID???\n");
 			vector_append(ss, proto->code, iA(OP_LOADVOID, reg, src_info));
 		} else {
 			if (int_p(datum)) {
@@ -666,7 +680,6 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 	form = CDR(form);
 	union symbol_properties st_prop = {0};
 	st_prop.p.type = sym_arg;
-	st_prop.p.islocal = 1;
 	proto->nargs = 0;
 	proto->nregs = 0;
 	while (pair_p(args) || syntax_pair_p(args)) {
@@ -678,9 +691,9 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 			printf("\n");
 			sly_raise_exception(ss, EXC_COMPILE, "Compile error function parameter must be a symbol");
 		}
+		st_prop.p.reg = proto->nregs++;
 		proto->nargs++;
-		st_prop.p.reg = proto->nregs;
-		proto->nregs++;
+		proto->nvars++;
 		dictionary_set(ss, symtable, sym, st_prop.v);
 		args = CDR(args);
 	}
@@ -689,8 +702,8 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 		sym = syntax_to_datum(args);
 		if (symbol_p(sym)) {
 			proto->has_varg = 1;
-			st_prop.p.reg =	proto->nregs;
-			proto->nregs++;
+			st_prop.p.reg =	proto->nregs++;
+			proto->nvars++;
 			dictionary_set(ss, symtable, sym, st_prop.v);
 		} else {
 			sly_display(sym, 1);
@@ -698,7 +711,7 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 			sly_raise_exception(ss, EXC_COMPILE, "Compile error function parameter must be a symbol");
 		}
 	}
-	proto->nvars = proto->nregs;
+	forward_scan_block(ss, form);
 	int tmp = reg;
 	if (null_p(form)) {
 		sly_raise_exception(ss, EXC_COMPILE, "Compile Error empty function body");
@@ -753,6 +766,60 @@ load_deps(Sly_State *ss, sly_value form)
 		form = CDR(form);
 	}
 }
+
+static void
+forward_scan_block(Sly_State *ss, sly_value form)
+{ /* Call at start of top-level and procedure block
+   * after creating new scope to scan for variables.
+   */
+	struct scope *scope = ss->cc->cscope;
+	sly_value symtable = scope->symtable;
+	sly_value globals = ss->cc->globals;
+	sly_value expr, name, var;
+	prototype *proto = GET_PTR(scope->proto);
+	union symbol_properties st_prop = {0};
+	st_prop.p.isundefined = 1;
+	while (!null_p(form)) {
+		expr = CAR(form);
+		if (pair_p(expr) || syntax_pair_p(expr)) {
+			if (identifier_p(CAR(expr))) {
+				name = syntax_to_datum(CAR(expr));
+				expr = CDR(expr);
+				if (symbol_eq(name, cstr_to_symbol("begin"))) {
+					forward_scan_block(ss, expr);
+				} else if (symbol_eq(name, cstr_to_symbol("define-syntax"))) {
+					name = CAR(expr);
+					if (pair_p(name) || syntax_pair_p(name)) {
+						name = CAR(name);
+					}
+					st_prop.p.issyntax = 1;
+					goto defvar;
+				} else if (symbol_eq(name, cstr_to_symbol("define"))) {
+					name = CAR(expr);
+					if (pair_p(name) || syntax_pair_p(name)) {
+						name = CAR(name);
+					}
+				    // name := identifier of variable
+					// var  := raw symbol of variable
+				defvar:
+					var = syntax_to_datum(name);
+					if (IS_GLOBAL(scope)) {
+						st_prop.p.type = sym_global;
+						st_prop.p.reg = intern_constant(ss, var);
+						dictionary_set(ss, globals, var, SLY_VOID);
+					} else {
+						st_prop.p.type = sym_variable;
+						st_prop.p.reg = proto->nregs++;
+						proto->nvars++;
+					}
+					dictionary_set(ss, symtable, var, st_prop.v);
+				}
+			}
+		}
+		form = CDR(form);
+	}
+}
+
 
 static sly_value
 expand(Sly_State *ss, sly_value form)
@@ -1044,6 +1111,7 @@ sly_compile(Sly_State *ss, sly_value ast)
 	prototype *proto = GET_PTR(ss->cc->cscope->proto);
 	load_deps(ss, ast);
 	ast = expand(ss, ast);
+	forward_scan_block(ss, ast);
 	int r = comp_expr(ss, ast, 0);
 	vector_append(ss, proto->code, iA(OP_RETURN, r, -1));
 	END_HANDLE_EXCEPTION(ss);
