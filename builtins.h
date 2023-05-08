@@ -514,31 +514,42 @@ clist(Sly_State *ss, sly_value args)
 	return vector_ref(args, 0);
 }
 
-#if 0
 static sly_value
-clist_tail(Sly_State *ss, sly_value args)
+capply(Sly_State *ss, sly_value args)
 {
-	UNUSED(ss);
-	return tail(vector_ref(args, 0));
+	sly_value fn = vector_ref(args, 0);
+	sly_value fst = vector_ref(args, 1);
+	sly_value rest = vector_ref(args, 2);
+	sly_value regs = make_vector(ss, 0, 8);
+	vector_append(ss, regs, fn); /* push function */
+	if (void_p(rest) || null_p(rest)) {
+		if (pair_p(fst)) {
+			while (!null_p(fst)) {
+				vector_append(ss, regs, car(fst));
+				fst = cdr(fst);
+			}
+		} else {
+			vector_append(ss, regs, fst);
+		}
+	} else {
+		vector_append(ss, regs, fst);
+		while (!null_p(cdr(rest))) {
+			vector_append(ss, regs, car(rest));
+			rest = cdr(rest);
+		}
+		rest = car(rest);
+		if (pair_p(rest)) {
+			while (!null_p(rest)) {
+				vector_append(ss, regs, car(rest));
+				rest = cdr(rest);
+			}
+		} else {
+			vector_append(ss, regs, rest);
+		}
+	}
+	return call_closure(ss, regs);
 }
 
-static sly_value
-cappend(Sly_State *ss, sly_value args)
-{
-	UNUSED(ss);
-	sly_value list = vector_ref(args, 0);
-	sly_value val = vector_ref(args, 1);
-	append(list, val);
-	return SLY_VOID;
-}
-
-static sly_value
-clist_length(Sly_State *ss, sly_value args)
-{
-	sly_value list = vector_ref(args, 0);
-	return make_int(ss, list_len(list));
-}
-#endif
 
 static sly_value
 cclear_screen(Sly_State *ss, sly_value args)
@@ -629,6 +640,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("dictionary-ref", cdictionary_ref, 2, 0);
 	ADD_BUILTIN("dictionary-set!", cdictionary_set, 3, 0);
 	ADD_BUILTIN("list", clist, 0, 1);
+	ADD_BUILTIN("apply", capply, 2, 1);
 	ADD_BUILTIN("console-clear-screen", cclear_screen, 0, 0);
 	ADD_BUILTIN("raise-macro-exception", craise_macro_exception, 1, 0);
 }

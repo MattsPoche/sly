@@ -20,12 +20,12 @@ make_stack(Sly_State *ss, size_t nregs)
 }
 
 stack_frame *
-make_eval_stack(Sly_State *ss)
+make_eval_stack(Sly_State *ss, sly_value regs)
 {
 	stack_frame *frame = gc_alloc(ss, sizeof(*frame));
 	frame->h.type = tt_stack_frame;
 	frame->parent = NULL;
-	frame->R = make_vector(ss, 0, 12);
+	frame->R = regs;
 	frame->code = make_vector(ss, 0, 4);
 	frame->pc = 0;
 	frame->level = 0;
@@ -136,9 +136,7 @@ dis(INSTR ins, sly_value si)
 		sly_assert(0, "Error invalid opcode");
 	} break;
 	}
-	if (instr.i.ln < 0) {
-		printf("\n");
-	} else {
+	if (instr.i.ln != -1 && vector_p(si)) {
 		syntax *s = GET_PTR(vector_ref(si, instr.i.ln));
 		token t = s->tok;
 		printf("%*s", 20 - pad, "");
@@ -184,8 +182,8 @@ dis(INSTR ins, sly_value si)
 			printf("%.*s", t.eo - t.so, &t.src[t.so]);
 			printf("%s%.*s", color_end, end - t.eo, &t.src[t.eo]);
 		}
-		printf("\n");
 	}
+	printf("\n");
 }
 
 void

@@ -338,13 +338,11 @@ set_cdr(sly_value obj, sly_value value)
 sly_value
 tail(sly_value obj)
 {
-	for (;;) {
-		if (!pair_p(cdr(obj))) {
-			return obj;
-		}
+	if (!pair_p(obj)) return obj;
+	while (pair_p(cdr(obj))) {
 		obj = cdr(obj);
 	}
-	return SLY_NULL;
+	return obj;
 }
 
 void

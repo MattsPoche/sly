@@ -6,6 +6,12 @@
 
 (define (displayln x) (display x)(display "\n"))
 
+(define (caar p)
+  (car (car p)))
+
+(define (cdar p)
+  (cdr (car p)))
+
 (define (cadr p)
   (car (cdr p)))
 
@@ -73,8 +79,38 @@
    (lambda (x c) (if (equal? x val) (+ c 1) c))
    0 xs))
 
-(define (map f xs)
-  (fold-right (lambda (x xs) (cons (f x) xs)) '() xs))
+
+(define (heads xs)
+  (if (null? xs)
+	  '()
+	  (cons (caar xs) (heads (cdr xs)))))
+
+(define (tails xs)
+  (if (null? xs)
+	  '()
+	  (cons (cdar xs) (tails (cdr xs)))))
+
+(define (map f . xs)
+  (define fst '())
+  (define lst '())
+  (if (null? (car xs))
+	  '()
+	  (cons (apply f (heads xs)) (apply map f (tails xs)))))
+
+;; (define (heads xs)
+;;   (if (null? xs)
+;; 	  xs
+;; 	  (cons (caar xs) (heads (cdr xs)))))
+
+;; (define (tails xs)
+;;   (if (null? xs)
+;; 	  xs
+;; 	  (cons (cdr (car xs)) (tails (cdr xs)))))
+
+;; (define (map f . xs)
+;;   (if (null? (car xs))
+;; 	  '()
+;; 	  (cons (apply f (heads xs)) (apply map f (tails xs)))))
 
 (define (for-each f xs)
   (if (pair? xs)

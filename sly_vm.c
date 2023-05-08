@@ -2,6 +2,7 @@
 #include "opcodes.h"
 #include "sly_compile.h"
 #include "gc.h"
+#include "sly_vm.h"
 
 #define next_instr()    vector_ref(ss->frame->code, ss->frame->pc++)
 #define get_const(i)    vector_ref(ss->frame->K, (i))
@@ -9,6 +10,9 @@
 #define set_reg(i, v)   vector_set(ss->frame->R, (i), (v))
 #define get_upval(i)    upvalue_get(vector_ref(ss->frame->U, (i)))
 #define set_upval(i, v) upvalue_set(vector_ref(ss->frame->U, (i)), (v))
+
+#define TOP_LEVEL_P(frame) ((frame)->level == 0 || (frame)->parent == NULL)
+
 
 static void
 close_upvalues(Sly_State *ss, stack_frame *frame)
@@ -56,11 +60,110 @@ form_closure(Sly_State *ss, sly_value _proto)
 	return _clos;
 }
 
+static int
+funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall)
+{
+	int a = idx;
+	int b = idx + nargs + 1;
+	sly_value val = get_reg(a);
+	if (cclosure_p(val)) {
+		cclosure *clos = GET_PTR(val);
+		sly_value args;
+		if (clos->has_varg) {
+			sly_assert(nargs >= clos->nargs,
+					   "Error wrong number of arguments (152)");
+			size_t nvargs = nargs - clos->nargs;
+			sly_value vargs = SLY_NULL;
+			args = make_vector(ss, clos->nargs + 1, clos->nargs + 1);
+			for (size_t i = b - 1; nvargs--; --i) {
+				vargs = cons(ss, get_reg(i), vargs);
+			}
+			vector_set(args, clos->nargs, vargs);
+			nargs = clos->nargs;
+		} else {
+			sly_assert(nargs == clos->nargs,
+					   "Error wrong number of arguments (163)");
+			args = make_vector(ss, clos->nargs, clos->nargs);
+		}
+		for (size_t i = 0; i < nargs; ++i) {
+			vector_set(args, i, get_reg(a + 1 + i));
+		}
+		//printf("Location: %s:%d\n", ss->file_path, line);
+		sly_value r = clos->fn(ss, args);
+		set_reg(a, r);
+	} else if (closure_p(val)) {
+		closure *clos = GET_PTR(val);
+		prototype *proto = GET_PTR(clos->proto);
+		stack_frame *nframe = make_stack(ss, proto->nregs);
+		nframe->clos = val;
+		nframe->U = clos->upvals;
+		if (proto->has_varg) {
+			sly_assert(nargs >= proto->nargs,
+					   "Error wrong number of arguments (179)");
+			size_t nvargs = nargs - proto->nargs;
+			sly_value vargs = SLY_NULL;
+			for (size_t i = b - 1; nvargs--; --i) {
+				vargs = cons(ss, get_reg(i), vargs);
+			}
+			vector_set(nframe->R, proto->nargs, vargs);
+		} else {
+			sly_assert(nargs == proto->nargs,
+					   "Error wrong number of arguments (188)");
+		}
+		for (size_t i = 0; i < proto->nargs; ++i) {
+			vector_set(nframe->R, i, get_reg(a + 1 + i));
+		}
+		nframe->K = proto->K;
+		nframe->code = proto->code;
+		nframe->pc = proto->entry;
+		if (!TOP_LEVEL_P(ss->frame) && as_tailcall) {
+			nframe->ret_slot = ss->frame->ret_slot;
+			nframe->level = ss->frame->level;
+			nframe->parent = ss->frame->parent;
+			close_upvalues(ss, ss->frame);
+		} else {
+			nframe->ret_slot = a;
+			nframe->parent = ss->frame;
+			nframe->level = ss->frame->level + 1;
+		}
+		ss->frame = nframe;
+	} else if (continuation_p(val)) {
+		/* TODO: continuations should take a vararg?
+		 */
+		sly_assert(nargs == 1,
+				   "Error Wrong number of arguments for continuation");
+		continuation *cc = GET_PTR(val);
+		sly_value arg = get_reg(a+1);
+		ss->frame = cc->frame;
+		ss->frame->pc = cc->pc;
+		vector_set(ss->frame->R, cc->ret_slot, arg);
+	} else {
+		dis_all(ss->frame, 1);
+		printf("a = %d\n", a);
+		sly_display(val, 1);
+		printf("\n");
+		sly_assert(0, "Type Error expected procedure");
+	}
+	return TYPEOF(val);
+}
+
+sly_value
+vm_run_procedure(Sly_State *ss, u32 idx, u32 nargs)
+{
+	printf("idx :: %u, %u\n", idx, nargs);
+	int type = funcall(ss, idx, nargs, 0);
+	printf("type :: %d\n", type);
+	if (type == tt_cclosure) {
+		return vector_ref(ss->frame->R, idx);
+	} else {
+		return vm_run(ss, 0);
+	}
+}
+
 sly_value
 vm_run(Sly_State *ss, int run_gc)
 {
 	sly_value ret_val = SLY_VOID;
-	int do_tailcall = 0;
 	union instr instr;
 	//int line = 0;
     for (;;) {
@@ -142,122 +245,15 @@ vm_run(Sly_State *ss, int run_gc)
 				ss->frame->pc = b;
 			}
 		} break;
-		case OP_TAILCALL:
-			do_tailcall = 1;
-			__attribute__((fallthrough));
+		case OP_TAILCALL: {
+			u8 a = GET_A(instr);
+			u8 b = GET_B(instr);
+			funcall(ss, a, b - a - 1, 1);
+		} break;
 		case OP_CALL: {
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
-			sly_value val = get_reg(a);
-			size_t nargs = b - a - 1;
-			if (cclosure_p(val)) {
-				cclosure *clos = GET_PTR(val);
-				sly_value args;
-				if (clos->has_varg) {
-					sly_assert(nargs >= clos->nargs,
-							   "Error wrong number of arguments (152)");
-					size_t nvargs = nargs - clos->nargs;
-					sly_value vargs = SLY_NULL;
-					args = make_vector(ss, clos->nargs + 1, clos->nargs + 1);
-					for (size_t i = b - 1; nvargs--; --i) {
-						vargs = cons(ss, get_reg(i), vargs);
-					}
-					vector_set(args, clos->nargs, vargs);
-					nargs = clos->nargs;
-				} else {
-					sly_assert(nargs == clos->nargs,
-							   "Error wrong number of arguments (163)");
-					args = make_vector(ss, clos->nargs, clos->nargs);
-				}
-				for (size_t i = 0; i < nargs; ++i) {
-					vector_set(args, i, get_reg(a + 1 + i));
-				}
-				//printf("Location: %s:%d\n", ss->file_path, line);
-				sly_value r = clos->fn(ss, args);
-				set_reg(a, r);
-			} else if (closure_p(val)) {
-				closure *clos = GET_PTR(val);
-				prototype *proto = GET_PTR(clos->proto);
-				stack_frame *nframe = make_stack(ss, proto->nregs);
-				nframe->clos = val;
-				nframe->U = clos->upvals;
-				if (proto->has_varg) {
-					sly_assert(nargs >= proto->nargs,
-							   "Error wrong number of arguments (179)");
-					size_t nvargs = nargs - proto->nargs;
-					sly_value vargs = SLY_NULL;
-					for (size_t i = b - 1; nvargs--; --i) {
-						vargs = cons(ss, get_reg(i), vargs);
-					}
-					vector_set(nframe->R, proto->nargs, vargs);
-				} else {
-/*
-					printf("Expected: %zu, passed: %zu\n",
-						   proto->nargs,
-						   nargs);
-					printf("Location: %s:%d\n", ss->file_path, line);
-*/
-					sly_assert(nargs == proto->nargs,
-							   "Error wrong number of arguments (188)");
-				}
-				for (size_t i = 0; i < proto->nargs; ++i) {
-					vector_set(nframe->R, i, get_reg(a + 1 + i));
-				}
-				nframe->K = proto->K;
-				nframe->code = proto->code;
-				nframe->pc = proto->entry;
-				if (ss->frame->level > 0 && do_tailcall) {
-#if 0
-					printf("level :: %d\n", ss->frame->level);
-					printf("pc :: %zu\n", ss->frame->pc);
-					sly_display(val, 1);
-					printf("\n");
-					dis_all(ss->frame, 1);
-#endif
-					nframe->ret_slot = ss->frame->ret_slot;
-					nframe->level = ss->frame->level;
-					nframe->parent = ss->frame->parent;
-					close_upvalues(ss, ss->frame);
-				} else {
-					nframe->ret_slot = a;
-					nframe->parent = ss->frame;
-					nframe->level = ss->frame->level + 1;
-				}
-				ss->frame = nframe;
-			} else if (continuation_p(val)) {
-				/* TODO: continuations should take a vararg?
-				 */
-				sly_assert(nargs == 1,
-						   "Error Wrong number of arguments for continuation");
-				continuation *cc = GET_PTR(val);
-				sly_value arg = get_reg(a+1);
-				ss->frame = cc->frame;
-				ss->frame->pc = cc->pc;
-				vector_set(ss->frame->R, cc->ret_slot, arg);
-			} else {
-#if 0
-				dis_all(ss->frame, 1);
-				printf("pc :: %zu\n", ss->frame->pc-1);
-				printf("level :: %u\n", ss->frame->level);
-				sly_display(val, 1);
-				printf("\n");
-				printf("%d, %d\n", a, b);
-				sly_display(ss->cc->globals, 1);
-				printf("\n\n");
-				upvalue *uv = ss->open_upvals;
-				while (uv) {
-					sly_display((sly_value)uv, 1);
-					printf("\n");
-					uv = uv->next;
-				}
-#endif
-				dis_all(ss->frame, 1);
-				printf("a = %d\n", a);
-				sly_display(val, 1);
-				printf("\n");
-				sly_assert(0, "Type Error expected procedure");
-			}
-			do_tailcall = 0;
+			funcall(ss, a, b - a - 1, 0);
 		} break;
 		case OP_CALLWCC: {
 			u8 a = GET_A(instr);
@@ -285,7 +281,7 @@ vm_run(Sly_State *ss, int run_gc)
 		} break;
 		case OP_RETURN: {
 			u8 a = GET_A(instr);
-			if (ss->frame->level == 0) {
+			if (TOP_LEVEL_P(ss->frame)) {
 				ret_val = get_reg(a);
 				goto vm_exit;
 			}
