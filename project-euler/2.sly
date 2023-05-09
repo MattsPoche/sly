@@ -1,0 +1,22 @@
+(load "sly-lib/macros1.sly")
+
+(define (fib-iter)
+  (let ([n 0] [m 1])
+	(lambda ()
+	  (define tmp m)
+	  (set! m (+ n m))
+	  (set! n tmp)
+	  tmp)))
+
+(define fib (fib-iter))
+(define acc 0)
+
+(let loop ([f (fib)])
+  (if (< f 4000000)
+	  (begin
+		(when (= (% f 2) 0)
+		  (set! acc (+ acc f)))
+		(loop (fib)))
+	  f))
+
+(displayln acc)

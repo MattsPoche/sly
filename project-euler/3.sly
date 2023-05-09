@@ -1,0 +1,20 @@
+(load "sly-lib/macros1.sly")
+
+(define (prime-factors n)
+  (let ([factors '()]
+		[d 2])
+	(let loop1 ()
+	  (when (> n 1)
+		(let loop2 ()
+		  (when (= (% n d) 0)
+			(set! factors (cons d factors))
+			(set! n (/ n d))
+			(loop2)))
+		(set! d (+ d 1))
+		(if (> (* d d) n)
+			(when (> n 1)
+			  (set! factors (cons n factors)))
+			(loop1))))
+	factors))
+
+(displayln (car (prime-factors 600851475143)))

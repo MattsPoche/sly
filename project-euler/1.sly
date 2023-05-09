@@ -1,0 +1,12 @@
+(load "sly-lib/macros1.sly")
+
+(define (m3&5 n) (or (= (% n 3) 0) (= (% n 5) 0)))
+(define acc 0)
+
+(let loop ([i 0])
+  (when (< i 1000)
+	(when (m3&5 i)
+	  (set! acc (+ acc i)))
+	(loop (+ i 1))))
+
+(displayln acc)

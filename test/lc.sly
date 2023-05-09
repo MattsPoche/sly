@@ -1,0 +1,16 @@
+(define (displayln x) (display x) (display "\n"))
+
+(define ZERO (lambda (f) (lambda (x) x)))
+(define ONE  (lambda (f) (lambda (x) (f x))))
+
+(define SUCC (lambda (n) (lambda (f) (lambda (x) (f (n (f x)))))))
+(define PLUS (lambda (m) (lambda (n) (m (SUCC n)))))
+
+(define TRUE  (lambda (x) (lambda (y) x)))
+(define FALSE (lambda (x) (lambda (y) y)))
+(define AND (lambda (p) (lambda (q) (p (q p)))))
+
+(displayln ((TRUE 5) 6))
+(displayln ((FALSE 5) 6))
+
+(displayln ((((AND TRUE) TRUE) #t) #f))
