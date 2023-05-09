@@ -1,0 +1,7 @@
+(load "sly-lib/quasiquote.sly")
+
+(displayln `foo)
+(displayln `(foo bar))
+(displayln `(foo ,(+ 69 420) baz))
+(displayln `(foo ,@(list 'a 'b 'c) baz bang))
+(displayln `(foo ,@(list 'a 'b 'c) baz bang))
