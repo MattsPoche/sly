@@ -1043,6 +1043,7 @@ make_syntax(Sly_State *ss, token tok, sly_value datum)
 	stx->h.type = tt_syntax;
 	stx->tok = tok;
 	stx->datum = datum;
+	stx->context = 0;
 	stx->lex_info = make_vector(ss, 0, 4);
 	return (sly_value)stx;
 }

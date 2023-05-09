@@ -1042,7 +1042,7 @@ setup_frame(Sly_State *ss)
 {
 	ss->proto = ss->cc->cscope->proto;
 	prototype *proto = GET_PTR(ss->proto);
-	stack_frame *frame = make_stack(ss, proto->nregs);
+	stack_frame *frame = make_stack(ss, proto->nregs ? proto->nregs : 1);
 	frame->U = make_vector(ss, 12, 12);
 	for (size_t i = 0; i < 12; ++i) {
 		vector_set(frame->U, i, SLY_VOID);

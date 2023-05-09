@@ -30,7 +30,7 @@ sly_free(void *ptr)
 	net_allocations--;
 }
 
-char *
+static char *
 next_arg(int *argc, char **argv[])
 {
 	if (argc == 0) {

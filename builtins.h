@@ -376,6 +376,21 @@ cdatum_to_syntax(Sly_State *ss, sly_value args)
 }
 
 static sly_value
+craw_syntax(Sly_State *ss, sly_value args)
+{
+	sly_value stx = vector_ref(args, 0);
+	sly_assert(syntax_p(stx), "Type Error expected syntax");
+	syntax *s1 = GET_PTR(stx);
+	syntax *s2 = gc_alloc(ss, sizeof(*s2));
+	s2->h.type = tt_syntax;
+	s2->tok = s1->tok;
+	s2->datum = SLY_VOID;
+	s2->lex_info = s2->lex_info;
+	s2->context = s2->context;
+	return (sly_value)s2;
+}
+
+static sly_value
 cvector(Sly_State *ss, sly_value args)
 {
 	sly_value list = vector_ref(args, 0);
@@ -550,7 +565,6 @@ capply(Sly_State *ss, sly_value args)
 	return call_closure(ss, regs);
 }
 
-
 static sly_value
 cclear_screen(Sly_State *ss, sly_value args)
 {
@@ -559,7 +573,6 @@ cclear_screen(Sly_State *ss, sly_value args)
 	printf("\033[2J\033[H");
 	return SLY_VOID;
 }
-
 
 static sly_value
 craise_macro_exception(Sly_State *ss, sly_value args)
@@ -626,6 +639,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("syntax->datum", csyntax_to_datum, 1, 0);
 	ADD_BUILTIN("syntax->list", csyntax_to_list, 1, 0);
 	ADD_BUILTIN("datum->syntax", cdatum_to_syntax, 2, 0);
+	ADD_BUILTIN("raw-syntax", craw_syntax, 1, 0);
 	ADD_BUILTIN("make-vector", cmake_vector, 1, 0);
 	ADD_BUILTIN("vector", cvector, 0, 1);
 	ADD_BUILTIN("vector-ref", cvector_ref, 2, 0);

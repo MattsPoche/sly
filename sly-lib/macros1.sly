@@ -1,4 +1,4 @@
-(load "sly-lib/list.sly")
+(load "sly-lib/quasiquote.sly")
 
 (define-syntax (and form)
   (define *form (cdr (syntax->list form)))

@@ -109,7 +109,7 @@ strip_ws(void)
 	}
 }
 
-token
+static token
 next_token(void)
 {
 	token t = {

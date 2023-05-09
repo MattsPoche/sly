@@ -10,31 +10,11 @@
 #define set_reg(i, v)   vector_set(ss->frame->R, (i), (v))
 #define get_upval(i)    upvalue_get(vector_ref(ss->frame->U, (i)))
 #define set_upval(i, v) upvalue_set(vector_ref(ss->frame->U, (i)), (v))
-
 #define TOP_LEVEL_P(frame) ((frame)->level == 0 || (frame)->parent == NULL)
 
+static void close_upvalues(Sly_State *ss, stack_frame *frame);
+static int funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall);
 
-static void
-close_upvalues(Sly_State *ss, stack_frame *frame)
-{
-	vector *vec = GET_PTR(frame->R);
-	upvalue *uv = NULL;
-	upvalue *parent = NULL;
-	closure *clos = GET_PTR(frame->clos);
-	prototype *proto = GET_PTR(clos->proto);
-	size_t nvars = proto->nvars + proto->has_varg;
-	for (size_t i = 0; i < nvars; ++i) {
-		uv = find_open_upvalue(ss, &vec->elems[i], &parent);
-		if (uv) {
-			if (parent == NULL) {
-				ss->open_upvals = uv->next;
-			} else {
-				parent->next = uv->next;
-			}
-			close_upvalue((sly_value)uv);
-		}
-	}
-}
 
 sly_value
 form_closure(Sly_State *ss, sly_value _proto)
@@ -147,16 +127,25 @@ funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall)
 	return TYPEOF(val);
 }
 
-sly_value
-vm_run_procedure(Sly_State *ss, u32 idx, u32 nargs)
+static void
+close_upvalues(Sly_State *ss, stack_frame *frame)
 {
-	printf("idx :: %u, %u\n", idx, nargs);
-	int type = funcall(ss, idx, nargs, 0);
-	printf("type :: %d\n", type);
-	if (type == tt_cclosure) {
-		return vector_ref(ss->frame->R, idx);
-	} else {
-		return vm_run(ss, 0);
+	vector *vec = GET_PTR(frame->R);
+	upvalue *uv = NULL;
+	upvalue *parent = NULL;
+	closure *clos = GET_PTR(frame->clos);
+	prototype *proto = GET_PTR(clos->proto);
+	size_t nvars = proto->nvars + proto->has_varg;
+	for (size_t i = 0; i < nvars; ++i) {
+		uv = find_open_upvalue(ss, &vec->elems[i], &parent);
+		if (uv) {
+			if (parent == NULL) {
+				ss->open_upvals = uv->next;
+			} else {
+				parent->next = uv->next;
+			}
+			close_upvalue((sly_value)uv);
+		}
 	}
 }
 
@@ -165,6 +154,9 @@ vm_run(Sly_State *ss, int run_gc)
 {
 	sly_value ret_val = SLY_VOID;
 	union instr instr;
+	if (vector_len(ss->frame->code) == 0) {
+		return ret_val;
+	}
 	//int line = 0;
     for (;;) {
 		instr.v = next_instr();

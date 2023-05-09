@@ -1,5 +1,7 @@
 CC=gcc
-CFLAGS=-Werror -Wextra -pedantic -Wall -Wswitch-enum -ggdb -std=c11
+WARNINGS=-Wmissing-prototypes -Werror -Wextra -pedantic -Wall -Wswitch-enum
+CFLAGS=-ggdb -std=c11
+CFLAGS += $(WARNINGS)
 RELEASE=-O3 -Werror -Wextra -pedantic -Wall -Wswitch-enum -std=c11
 DEFS=-DUSE_SLY_ALLOC
 LFLAGS=

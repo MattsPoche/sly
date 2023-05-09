@@ -1,7 +1,14 @@
-(load "sly-lib/quasiquote.sly")
+(load "sly-lib/base.sly")
 
 (displayln `foo)
 (displayln `(foo bar))
 (displayln `(foo ,(+ 69 420) baz))
+(displayln `(foo (a b c) baz bang))
 (displayln `(foo ,@(list 'a 'b 'c) baz bang))
-(displayln `(foo ,@(list 'a 'b 'c) baz bang))
+
+(displayln #`foo)
+(displayln #`(foo bar))
+(displayln #`(foo #,(+ 69 420) baz))
+(displayln #`(foo (a b c) baz bang))
+(displayln #`(foo #,@(list #'a #'b #'c) baz bang))
+(displayln #'(a b c))
