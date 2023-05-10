@@ -8,17 +8,18 @@
 #include "sly_vm.h"
 #include "sly_alloc.h"
 
-/* TODO: Associate syntactic info with opcodes (semi-done)
- */
-
 /* TODO: procedures cannot refer to variables defined
  * after they are.
+ * Note: simi-done; bugs.
  */
 
 /* TODO: macros are unable to call functions defined in the same file.
  */
 
 /* TODO: properly implement vector literals
+ */
+
+/* TODO: Implement module system
  */
 
 /* NOTE: try storing globals as upvalues for faster global access.
