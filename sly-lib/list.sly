@@ -27,6 +27,8 @@
 (define (cadddr p)
   (car (cdddr p)))
 
+(define (zero? n) (= n 0))
+
 (define (fold-left f z xs)
   (if (null? xs)
 	  z
@@ -79,47 +81,28 @@
    (lambda (x c) (if (equal? x val) (+ c 1) c))
    0 xs))
 
-
-(define (heads xs)
+(define (*heads* xs)
   (if (null? xs)
 	  '()
-	  (cons (caar xs) (heads (cdr xs)))))
+	  (cons (caar xs) (*heads* (cdr xs)))))
 
-(define (tails xs)
+(define (*tails* xs)
   (if (null? xs)
 	  '()
-	  (cons (cdar xs) (tails (cdr xs)))))
+	  (cons (cdar xs) (*tails* (cdr xs)))))
 
 (define (map f . xs)
-  (define fst '())
-  (define lst '())
   (if (null? (car xs))
 	  '()
-	  (cons (apply f (heads xs)) (apply map f (tails xs)))))
+	  (cons (apply f (*heads* xs))
+			(apply map f (*tails* xs)))))
 
-;; (define (heads xs)
-;;   (if (null? xs)
-;; 	  xs
-;; 	  (cons (caar xs) (heads (cdr xs)))))
-
-;; (define (tails xs)
-;;   (if (null? xs)
-;; 	  xs
-;; 	  (cons (cdr (car xs)) (tails (cdr xs)))))
-
-;; (define (map f . xs)
-;;   (if (null? (car xs))
-;; 	  '()
-;; 	  (cons (apply f (heads xs)) (apply map f (tails xs)))))
-
-(define (for-each f xs)
-  (if (pair? xs)
+(define (for-each f . xs)
+  (if (null? (car xs))
+	  '()
 	  (begin
-		(f (car xs))
-		(for-each f (cdr xs)))
-	  (if (not (null? xs))
-		  (f  xs)
-		  #f)))
+		(apply f (*heads* xs))
+		(apply map f (*tails* xs)))))
 
 (define (range arg . rest)
   (define (*range start end step)

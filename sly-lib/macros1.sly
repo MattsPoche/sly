@@ -1,5 +1,7 @@
 (load "sly-lib/quasiquote.sly")
 
+;;; TODO: Implement syntax-case and syntax-rules
+
 (define-syntax (and form)
   (define *form (cdr (syntax->list form)))
   (define x (car *form))
@@ -17,38 +19,89 @@
 	  #`(if #,x #t (or #,@xs))))
 
 (define-syntax (let form)
-  ;(displayln *form)
   (define *form (cdr (syntax->list form)))
   (define name     '())
   (define bindings '())
   (define bodies   '())
-  (displayln *form)
   (if (pair? (car *form))
 	  (begin
 		(set! bindings (car *form))
 		(set! bodies (cdr *form))
-		(set! *form #`((lambda #,(map car bindings) #,@bodies) #,@(map cadr bindings))))
+		#`((lambda #,(map car bindings) #,@bodies) #,@(map cadr bindings)))
 	  (begin
 		(set! name (car *form))
 		(set! bindings (cadr *form))
 		(set! bodies (cddr *form))
-		(set! *form #`((lambda ()
-						 (define (#,name #,@(map car bindings))
-						   #,@(map cadr bindings))
-						 (#,name #,@(map cadr bindings)))))))
-  (displayln *form)
-  *form)
+		#`((lambda ()
+			 (define (#,name #,@(map car bindings))
+			   #,@(map cadr bindings))
+			 (#,name #,@(map cadr bindings)))))))
 
 (define-syntax (let* form)
   (define *form (cdr (syntax->list form)))
   (define bindings (car *form))
   (define bodies (cdr *form))
   (if (< (length bindings) 2)
-	  (datum->syntax form (append (list #'let bindings) bodies))
-	  (datum->syntax form (list #'let (list (car bindings))
-								(append (list #'let* (cdr bindings)) bodies)))))
+	  #`(let #,bindings #,@bodies)
+	  #`(let (#,(car bindings))
+		  (let* #,(cdr bindings) #,@bodies))))
+
+(define (gen-temporaries n)
+  (if (<= n 0)
+	  '()
+	  (cons (gensym) (gen-temporaries (- n 1)))))
+
+(define (cons-cons p ls)
+  (list (cons (car p) (car ls))
+		(cons (cadr p) (cadr ls))))
+
+(define (split ls)
+  (define fst '())
+  (define snd '())
+  (if (null? ls)
+	  '(() ())
+	  (cons-cons (car ls) (split (cdr ls)))))
+
+(define-syntax (letrec form)
+  (define *form (cdr (syntax->list form)))
+  (define bindings (split (car *form)))
+  (define vars (car bindings))
+  (define exps (cadr bindings))
+  (define bodies (cdr *form))
+  (define tmps (gen-temporaries (length vars)))
+  (displayln bodies)
+  #`(let #,(map (lambda (x) (list x (void))) vars)
+	  (let #,(map list tmps exps)
+		#,@(map (lambda (x y) (list #'set! x y)) vars tmps))
+	  #,@bodies))
+
+(define-syntax (letrec*-helper form)
+  (define *form (cdr (syntax->list form)))
+  (define bindings (car *form))
+  (define bodies (cdr *form))
+  (if (null? bindings)
+	  #`(begin #,@bodies)
+	  #`(begin
+		  (define #,@(car bindings))
+		  (letrec*-helper #,(cdr bindings) #,@bodies))))
+
+(define-syntax (letrec* form)
+  (define *form (cdr (syntax->list form)))
+  (define bindings (car *form))
+  (define bodies (cdr *form))
+  #`((lambda ()
+	   (letrec*-helper #,bindings #,@bodies))))
+
 
 (define-syntax (cond form)
+;;; TODO: This implementation of cond does not
+;;; * meet the standard specified here:
+;;; * https://www.scheme.com/tspl4/control.html
+;;; Each clause may be one of the below forms:
+;;; (test)
+;;; (test expr expr* ...)
+;;; (test => expr)
+;;; (else expr expr* ...)
   (define clauses (cdr (syntax->list form)))
   (define head (car clauses))
   (define rest (cdr clauses))
@@ -57,6 +110,15 @@
 	  (if (identifier=? (caar rest) #'else)
 		  #`(if #,(car head) #,(cadr head) #,(car (cdar rest)))
 		  #`(if #,(car head) #,(cadr head) (cond #,@rest)))))
+
+;;; TODO: Implement `case' form
+;;; * case evaluates it's clauses using eqv?
+;;; * which has not been implemented.
+
+;;; TODO: Implement eqv?
+;;; * finally sort out comparison operators.
+
+;;; TODO: Implement `do' form.
 
 (define-syntax (when form)
   (define *form (syntax->list form))

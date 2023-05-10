@@ -27,15 +27,11 @@
 
   (define (transform term form)
 	(define term* (qq term))
-	;; (display "term :: ") (displayln term*)
-	;; (display "form :: ") (displayln form)
 	(if (if (pair? term*) (equal? (car term*) '**UNQUOTE-SPLICE**) #f)
 		(set! term* (cons '**UNQUOTE-SPLICE** (list #'append (cdr term*) form)))
 		(if (if (pair? form) (equal? (car form) '**UNQUOTE-SPLICE**) #f)
 			(set! term* (list #'cons term* (cdr form)))
 			(set! term* (list #'cons term* form))))
-	;; (display "term :: ") (displayln term*)
-	;; (displayln "===================")
 	term*)
 
   (define form* (cadr (syntax->list form)))
@@ -70,33 +66,19 @@
 
   (define (transform term form)
 	(define term* (qq term))
-	(if (pair? term*)
-		(if (if (pair? form) (equal? (car form) '**SPLICE-ME**) #f)
-			(if (if (pair? term*) (equal? (car term*) '**UNQUOTE-SPLICE**) #f)
-				(set! term* (list '**UNQUOTE-SPLICE** (list #'append (cdr term*) (cadr form))))
-				(set! term* (list #'cons term* (cadr form))))
-			(if (if (pair? term*) (equal? (car term*) '**UNQUOTE-SPLICE**) #f)
-				(set! term* (list '**SPLICE-ME** (list #'append (cdr term*) (cons #'list form))))
-				(set! term* (cons term* form))))
-		(if (if (pair? form) (equal? (car form) '**SPLICE-ME**) #f)
-			(set! term* (list #'cons term* (cadr form)))
-			(set! term* (cons term* form))))
+	(if (if (pair? term*) (equal? (car term*) '**UNQUOTE-SPLICE**) #f)
+		(set! term* (cons '**UNQUOTE-SPLICE** (list #'append (cdr term*) form)))
+		(if (if (pair? form) (equal? (car form) '**UNQUOTE-SPLICE**) #f)
+			(set! term* (list #'cons term* (cdr form)))
+			(set! term* (list #'cons term* form))))
 	term*)
 
   (define form* (cadr (syntax->list form)))
   (if (pair? form*)
 	  (begin
 		(set! form* (fold-right transform '() form*))
-		(if (if (pair? form*) (identifier=? (car form*) #'cons) #f)
-			(datum->syntax form
-						   (list #'datum->syntax
-								 (list #'syntax-quote (raw-syntax form))
-								 form*))
-			(datum->syntax form
-						   (list #'datum->syntax
-								 (list #'syntax-quote (raw-syntax form))
-								 (cons #'list form*)))))
-	  (datum->syntax form
-					 (list #'datum->syntax
-						   (list #'syntax-quote (raw-syntax form))
-						   (list #'syntax-quote form*)))))
+		(datum->syntax form
+					   (list #'datum->syntax
+							 (list #'syntax-quote (raw-syntax form))
+							 form*)))
+	  (datum->syntax form (list #'syntax-quote form*))))

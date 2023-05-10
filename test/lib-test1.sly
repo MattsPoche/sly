@@ -22,6 +22,7 @@
 		(loop (+ i 1)))
 	  (displayln "End loop")))
 
+(displayln "begin let*")
 (let* ((x 69)
 	   (y 420)
 	   (z (+ x y)))
@@ -29,7 +30,7 @@
   (displayln y)
   (displayln z))
 
-(for-each (lambda (x) (displayln x)) '(a b c d e f g . h))
+(for-each (lambda (x) (displayln x)) '(a b c d e f g))
 
 (define (fizz-buzz n)
   (cond ((and (= (% n 3) 0) (= (% n 5) 0))
@@ -47,3 +48,32 @@
 
 (when #t
   (displayln "when is it not?"))
+
+(displayln "Begin letrec")
+(displayln
+ (letrec ((even? (lambda (n)
+                   (if (zero? n)
+                       #t
+                       (odd? (- n 1)))))
+          (odd? (lambda (n)
+                  (if (zero? n)
+                      #f
+                      (even? (- n 1))))))
+   (even? 88)))
+(displayln "End letrec")
+
+(when #f ;; this should fail
+  (letrec ((a 42)
+           (b (+ a 10)))  ;; Illegal access
+	(* a b)))
+
+(displayln
+ (letrec* ((x (lambda (n)
+				(if (> n 3) n (x (+ n 1)))))
+           (y 1))
+   (x y)))
+
+(displayln
+ (letrec* ((a 42)
+           (b (+ a 10)))
+   (* a b)))
