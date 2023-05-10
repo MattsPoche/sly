@@ -147,7 +147,12 @@ static sly_value
 clist_p(Sly_State *ss, sly_value args)
 {
 	UNUSED(ss);
-	return ctobool(null_p(cdr(tail(vector_ref(args, 0)))));
+	sly_value var = vector_ref(args, 0);
+	if (!pair_p(var)) {
+		return SLY_FALSE;
+	} else {
+		return ctobool(null_p(cdr(tail(var))));
+	}
 }
 
 static sly_value
@@ -315,6 +320,11 @@ static sly_value
 ccdr(Sly_State *ss, sly_value args)
 {
 	UNUSED(ss);
+	sly_value obj = vector_ref(args, 0);
+	if (!pair_p(obj)) {
+		sly_display(obj, 1);
+		printf("\n");
+	}
 	return cdr(vector_ref(args, 0));
 }
 

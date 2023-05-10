@@ -1,0 +1,55 @@
+(load "sly-lib/macros1.sly")
+
+;;; TODO: syntax-case; finish this.
+
+(define (contains xs x)
+  (cond ((null? xs) #f)
+		((identifier=? x (car xs)) #t)
+		(else (contains x (cdr xs)))))
+
+(define (make-match-vars template)
+  (let ([match-vars (make-dictionary)])
+	(define (*make-match-vars template)
+	  (cond ((null? template) #f)
+			((pair? template)
+			 (begin (*make-match-vars (car template))
+					(*make-match-vars (cdr template))))
+			(else (dictionary-set! match-vars (syntax->datum template) '()))))
+	(*make-match-vars template)
+	match-vars))
+
+(define (syntax-match template literals form)
+  (let* ([*template (syntax->list template)]
+		 [*form (syntax->list form)]
+		 [match-vars (make-match-vars *template)]
+		 [prev '()])
+	(define (*syntax-match template literals form)
+	  (if (identifier=? template #'...)
+		  (displayln "elipsis detected")
+		  (set! prev template))
+	  (display "form     :: ") (displayln form)
+	  (display "template :: ") (displayln template)
+	  (display "prev     :: ") (displayln prev)
+	  (displayln "===============")
+	  (cond ((and (null? prev) (null? form)) #t)
+			((and (pair? prev) (pair? form))
+			 (let ([*prev prev])
+			   (and (*syntax-match (car *prev) literals (car form))
+					(*syntax-match (cdr *prev) literals (cdr form)))))
+			((and (identifier? prev) (contains literals prev))
+			 (if (identifier=? prev form) #t #f))
+			((identifier? prev)
+			 (let* ([pvar  (syntax->datum prev)]
+					[var-list (dictionary-ref match-vars pvar)])
+			   (dictionary-set! match-vars pvar (cons form var-list))
+			   #t))
+			(else #f)))
+	(*syntax-match *template literals *form)
+	match-vars))
+
+(define (reverse ls)
+  (fold-left cons '() ls))
+
+;;(displayln (reverse '(a b c d e)))
+
+(displayln (syntax-match #'((x y) z ...) '() #'((foo bar) baz zaz)))

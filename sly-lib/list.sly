@@ -33,7 +33,7 @@
   (if (null? xs)
 	  z
 	  ((lambda (x xs)
-		 (fold-left f (f z x) xs))
+		 (fold-left f (f x z) xs))
 	   (car xs) (cdr xs))))
 
 (define (fold-right f z xs)
@@ -67,7 +67,7 @@
   (helper xs rest))
 
 (define (length xs)
-  (fold-left (lambda (x xs) (+ x 1)) 0 xs))
+  (fold-left (lambda (x y) (+ y 1)) 0 xs))
 
 (define (compose . fs)
   (define (*compose* fs)
