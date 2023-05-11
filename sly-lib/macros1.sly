@@ -34,7 +34,7 @@
 		(set! bodies (cddr *form))
 		#`((lambda ()
 			 (define (#,name #,@(map car bindings))
-			   #,@(map cadr bindings))
+			   #,@bodies)
 			 (#,name #,@(map cadr bindings)))))))
 
 (define-syntax (let* form)

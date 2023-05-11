@@ -58,6 +58,9 @@
 	  (last-pair (cdr xs))
 	  xs))
 
+(define (list-copy xs)
+  (fold-right cons '() xs))
+
 (define (append! xs . rest)
   (define (helper xs rest)
 	(if (pair? rest)
@@ -71,6 +74,13 @@
 
 (define (length xs)
   (fold-left (lambda (x y) (+ y 1)) 0 xs))
+
+(define (list-ref xs i)
+  (if (null? xs)
+	  '**END-OF-LIST**
+	  (if (zero? i)
+		  (car xs)
+		  (list-ref (cdr xs) (- i 1)))))
 
 (define (compose . fs)
   (define (*compose* fs)

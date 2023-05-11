@@ -525,6 +525,19 @@ cdictionary_set(Sly_State *ss, sly_value args)
 }
 
 static sly_value
+cdictionary_has_key(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	sly_value dict = vector_ref(args, 0);
+	sly_value key = vector_ref(args, 1);
+	if (slot_is_free(dictionary_entry_ref(dict, key))) {
+		return SLY_FALSE;
+	} else {
+		return SLY_TRUE;
+	}
+}
+
+static sly_value
 cvoid(Sly_State *ss, sly_value args)
 {
 	UNUSED(ss);
@@ -663,6 +676,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("make-dictionary", cmake_dictionary, 0, 1);
 	ADD_BUILTIN("dictionary-ref", cdictionary_ref, 2, 0);
 	ADD_BUILTIN("dictionary-set!", cdictionary_set, 3, 0);
+	ADD_BUILTIN("dictionary-has-key?", cdictionary_has_key, 2, 0);
 	ADD_BUILTIN("list", clist, 0, 1);
 	ADD_BUILTIN("apply", capply, 2, 1);
 	ADD_BUILTIN("console-clear-screen", cclear_screen, 0, 0);

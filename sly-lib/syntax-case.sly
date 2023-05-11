@@ -1,76 +1,198 @@
 (load "sly-lib/macros1.sly")
 
 ;;; TODO: syntax-case; finish this.
+;;; TODO: Test patterns/templates in tail position
+;;; TODO: More tests
 
 (define ellipsis #'...)
 
-(define (check-ellipsis template)
-  (and (pair? template)
-	   (pair? (cdr template))
-	   (identifier=? (cadr template) ellipsis)))
+(define (check-ellipsis pattern)
+  (and (pair? pattern)
+	   (pair? (cdr pattern))
+	   (identifier=? (cadr pattern) ellipsis)))
 
 (define (contains xs x)
   (cond ((null? xs) #f)
-		((identifier=? x (car xs)) #t)
-		(else (contains x (cdr xs)))))
+		((equal? x (car xs)) #t)
+		(else (contains (cdr xs) x))))
 
-(define (make-match-vars template literals)
+(define (make-match-vars pattern literals)
   (let ([match-vars (make-dictionary)])
-	(define (*make-match-vars template)
-	  (cond ((null? template) #f)
-			((pair? template)
-			 (begin (*make-match-vars (car template))
-					(*make-match-vars (cdr template))))
-			(else (unless (or (identifier=? template ellipsis)
-							  (contains literals template))
-					(dictionary-set! match-vars (syntax->datum template) '())))))
-	(*make-match-vars template)
+	(define (*make-match-vars pattern)
+	  (cond ((null? pattern) #f)
+			((pair? pattern)
+			 (begin (*make-match-vars (car pattern))
+					(*make-match-vars (cdr pattern))))
+			(else (unless (or (identifier=? pattern ellipsis)
+							  (contains literals pattern))
+					(dictionary-set! match-vars (syntax->datum pattern) '())))))
+	(*make-match-vars pattern)
 	match-vars))
 
-(define (syntax-match template literals form)
-  (define (match template literals form)
-	(cond ((and (null? template) (null? form)) #t)
-		  ((and (identifier? template)
-				(contains literals template)
-				(identifier=? template form)) #t)
-		  ((identifier? template)
-		   (let* ([pvar  (syntax->datum template)]
-				  [var-list (dictionary-ref match-vars pvar)])
-			 (dictionary-set! match-vars pvar (cons form var-list))
-			 #t))
-		  (else #f)))
-
-  (define (match-repeat template literals form)
-	(if (syntax-match (car template) literals (car form))
-		(if (pair? (cdr form))
-			(match-repeat template literals (cdr form))
-			form)
-		form))
-
-
-  (display "form     :: ") (displayln form)
-  (display "template :: ") (displayln template)
-  (displayln "===============")
-  (if (pair? template)
-	  (if (check-ellipsis template)
-		  (if (pair? form)
-			  (syntax-match (cddr template)
-							literals
-							(cdr (match-repeat template literals form)))
-			  #f)
-		  (if (pair? form)
-			  (if (syntax-match (car template) literals (car form))
-				  (syntax-match (cdr template) literals (cdr form))
+(define (syntax-match pattern literals form)
+  (let* ([pattern (syntax->list pattern)]
+		 [form (if (syntax-pair? form) (syntax->list form) form)]
+		 [match-vars (make-match-vars pattern literals)])
+	(define (*syntax-match pattern literals form)
+	  (define (match pattern literals form)
+		(cond ((and (null? pattern) (null? form)) #t)
+			  ((and (identifier? pattern)
+					(contains literals pattern))
+			   (identifier=? pattern form))
+			  ((identifier? pattern)
+			   (let* ([pvar (syntax->datum pattern)]
+					  [var-list (dictionary-ref match-vars pvar)])
+				 (dictionary-set! match-vars pvar (append var-list (list form)))
+				 #t))
+			  (else #f)))
+	  (define (match-repeat pattern literals form)
+		(if (*syntax-match (car pattern) literals (car form))
+			(if (pair? (cdr form))
+				(match-repeat pattern literals (cdr form))
+				form)
+			form))
+	  (if (pair? pattern)
+		  (if (identifier? (cdr pattern))
+			  (if (*syntax-match (car pattern) literals (car form))
+				  (let ([pvar (syntax->datum (cdr pattern))])
+					(dictionary-set! match-vars pvar (cdr form))
+					#t)
 				  #f)
-			  #f)) ;; match fails
-	  (match template literals form)))
+			  (if (check-ellipsis pattern)
+				  (if (pair? form)
+					  (*syntax-match (cddr pattern)
+									 literals
+									 (cdr (match-repeat pattern literals form)))
+					  #f)
+				  (if (pair? form)
+					  (if (*syntax-match (car pattern) literals (car form))
+						  (*syntax-match (cdr pattern) literals (cdr form))
+						  #f)
+					  #f)))
+		  (match pattern literals form)))
+	(if (*syntax-match pattern literals form)
+		(cons #t match-vars)
+		(cons #f '()))))
 
-(define template #'((x y) z ...))
-(define literals '())
-(define form #'((foo bar) baz zaz))
-(define *template (syntax->list template))
-(define *form (syntax->list form))
-(define match-vars (make-match-vars *template literals))
+(define (construct-form template match-vars)
+  (let ([template (if (syntax-pair? template)
+					  (syntax->list template)
+					  template)])
+	(define (construct-repeat template match-vars)
+	  (let loop ([i 0] [form '()])
+		(let ([val (*construct-form template match-vars i)])
+		  (if (or (and (pair? val)
+					   (contains val '**END-OF-LIST**))
+				  (equal? val '**END-OF-LIST**))
+			  form
+			  (loop (+ i 1) (append form (list val)))))))
+	(define (*construct-form template match-vars repeat-level)
+	  (if (pair? template)
+		  (if (identifier? (cdr template))
+			  (let ([vals (let ([pvar (syntax->datum (cdr template))])
+							(if (dictionary-has-key? match-vars pvar)
+								(dictionary-ref match-vars pvar)
+								(cdr template)))])
+				(cons (*construct-form (car template) match-vars) vals) repeat-level)
+			  (if (check-ellipsis template)
+				  (let ([form (construct-repeat (car template) match-vars)])
+					(append form
+							(*construct-form (cddr template) match-vars repeat-level)))
+				  (cons (*construct-form (car template) match-vars repeat-level)
+						(*construct-form (cdr template) match-vars repeat-level))))
+		  (if (identifier? template)
+			  (let ([pvar (syntax->datum template)])
+				(if (dictionary-has-key? match-vars pvar)
+					(list-ref (dictionary-ref match-vars pvar) repeat-level)
+					template))
+			  template)))
+	(*construct-form template match-vars 0)))
 
-(displayln (syntax-match *template '() *form))
-(displayln match-vars)
+;; test 1
+(displayln (syntax-match #'((x y) z ...) '()
+						 #'((foo bar) baz zaz a b c)))
+
+;; test 2
+(displayln (syntax-match #'((x y) . z) '()
+						 #'((foo bar) baz zaz a b c)))
+
+;; test 3
+(displayln "======================")
+(displayln
+ (let* ([match-result (syntax-match
+					   #'(let ((var val) ...) body ...) (list #'let)
+					   #'(let ((x 5) (y z)) (+ x y) (display "hello")))]
+		[succeded (car match-result)]
+		[match-vars (cdr match-result)])
+   (displayln match-vars)
+   (if succeded
+	   (construct-form (syntax->list
+						#'((lambda (var ...) body ...) val ...))
+					   match-vars)
+	   #f)))
+
+;; test 4
+(displayln "======================")
+(displayln
+ (let* ([match-result (syntax-match
+					   #'(let ((var val) ...) body ...) (list #'let)
+					   #'(let ((x 5) (y z) (w 69)) (+ x y) (display "hello")))]
+		[succeded (car match-result)]
+		[match-vars (cdr match-result)])
+   (displayln match-vars)
+   (if succeded
+	   (construct-form (syntax->list
+						#'((lambda (var ...) body ...) val ...))
+					   match-vars)
+	   #f)))
+
+;; test 5
+(displayln "======================")
+(displayln
+ (let* ([match-result (syntax-match
+					   #'((a ...) (b ...)) '()
+					   #'((a b c d e f g e) (1 2 3 4 5 6 7 8)))]
+		[succeded (car match-result)]
+		[match-vars (cdr match-result)])
+   (displayln match-vars)
+   (if succeded
+	   (construct-form (syntax->list
+						#'((a b) ...))
+					   match-vars)
+	   #f)))
+(displayln "======================")
+
+;; test 6
+(displayln
+ (let* ([match-result (syntax-match
+					   #'((a ...) (b ...)) '()
+					   #'((a b c d e f g e) (1 2 3 4 5 6 7 8)))]
+		[succeded (car match-result)]
+		[match-vars (cdr match-result)])
+   (displayln match-vars)
+   (if succeded
+	   (construct-form (syntax->list
+						#'((a (b ...)) ...))
+					   match-vars)
+	   #f)))
+(displayln "======================")
+
+;; test 7
+(displayln (syntax-match
+			#'(let ((var val) ...) body ...) (list #'let)
+			#'(let x)))
+
+;; test 8
+(displayln (syntax-match
+			#'(let ((var val) ...) body ...) (list #'let)
+			#'(x)))
+
+;; test 9
+(displayln (syntax-match
+			#'(let ((var val) ...) body ...) (list #'let)
+			#'x))
+
+;; test 10
+(displayln (syntax-match
+			#'(let ((var val) ...) body ...) (list #'let)
+			#'(let () x)))

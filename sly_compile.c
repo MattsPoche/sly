@@ -829,6 +829,11 @@ expand(Sly_State *ss, sly_value form)
 		sly_value head = CAR(form);
 		if (identifier_p(head)) {
 			syntax *s = GET_PTR(head);
+			/* do not try to expand quoted forms */
+			if (symbol_eq(s->datum, cstr_to_symbol("quote"))
+				|| symbol_eq(s->datum, cstr_to_symbol("syntax-quote"))) {
+				return form;
+			}
 			sly_value macro = lookup_macro(ss, s->datum);
 			if (!void_p(macro)) {
 				/* call macro */
@@ -961,7 +966,7 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 				s = GET_PTR(CAR(form));
 				s->context = FLAG_ON(s->context, ctx_tail_pos);
 			}
-			comp_expr(ss, CAR(form), proto->nvars);
+			return comp_expr(ss, CAR(form), proto->nvars);
 		} break;
 		case kw_if: {
 			reg = comp_if(ss, form, reg);
