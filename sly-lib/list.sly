@@ -50,6 +50,9 @@
 		  xs))
   (helper xs rest))
 
+(define (reverse ls)
+  (fold-left cons '() ls))
+
 (define (last-pair xs)
   (if (pair? (cdr xs))
 	  (last-pair (cdr xs))
