@@ -54,8 +54,9 @@
 	  (if (pair? pattern)
 		  (if (identifier? (cdr pattern))
 			  (if (*syntax-match (car pattern) literals (car form))
-				  (let ([pvar (syntax->datum (cdr pattern))])
-					(dictionary-set! match-vars pvar (cdr form))
+				  (let* ([pvar (syntax->datum (cdr pattern))]
+						 [var-list (dictionary-ref match-vars pvar)])
+					(dictionary-set! match-vars pvar (append var-list (list (cdr form))))
 					#t)
 				  #f)
 			  (if (check-ellipsis pattern)
@@ -88,18 +89,12 @@
 			  (loop (+ i 1) (append form (list val)))))))
 	(define (*construct-form template match-vars repeat-level)
 	  (if (pair? template)
-		  (if (identifier? (cdr template))
-			  (let ([vals (let ([pvar (syntax->datum (cdr template))])
-							(if (dictionary-has-key? match-vars pvar)
-								(dictionary-ref match-vars pvar)
-								(cdr template)))])
-				(cons (*construct-form (car template) match-vars) vals) repeat-level)
-			  (if (check-ellipsis template)
-				  (let ([form (construct-repeat (car template) match-vars)])
-					(append form
-							(*construct-form (cddr template) match-vars repeat-level)))
-				  (cons (*construct-form (car template) match-vars repeat-level)
-						(*construct-form (cdr template) match-vars repeat-level))))
+		  (if (check-ellipsis template)
+			  (let ([form (construct-repeat (car template) match-vars)])
+				(append form
+						(*construct-form (cddr template) match-vars repeat-level)))
+			  (cons (*construct-form (car template) match-vars repeat-level)
+					(*construct-form (cdr template) match-vars repeat-level)))
 		  (if (identifier? template)
 			  (let ([pvar (syntax->datum template)])
 				(if (dictionary-has-key? match-vars pvar)
@@ -108,16 +103,33 @@
 			  template)))
 	(*construct-form template match-vars 0)))
 
-;; test 1
-(displayln (syntax-match #'((x y) z ...) '()
-						 #'((foo bar) baz zaz a b c)))
+(displayln "test 1")
+(displayln
+ (let* ([match-result (syntax-match
+					   #'((x y) z ...) '()
+					   #'((foo bar) baz zaz a b c))]
+		[succeded (car match-result)]
+		[match-vars (cdr match-result)])
+   (displayln match-vars)
+   (if succeded
+	   (construct-form #'(x z ...) match-vars)
+	   #f)))
 
-;; test 2
-(displayln (syntax-match #'((x y) . z) '()
-						 #'((foo bar) baz zaz a b c)))
-
-;; test 3
 (displayln "======================")
+(displayln "test 2")
+(displayln
+ (let* ([match-result (syntax-match
+					   #'((x y) . z) '()
+					   #'((foo bar) baz zaz a b c))]
+		[succeded (car match-result)]
+		[match-vars (cdr match-result)])
+   (displayln match-vars)
+   (if succeded
+	   (construct-form #'(the zs . z) match-vars)
+	   #f)))
+
+(displayln "======================")
+(displayln "test 3")
 (displayln
  (let* ([match-result (syntax-match
 					   #'(let ((var val) ...) body ...) (list #'let)
@@ -126,13 +138,11 @@
 		[match-vars (cdr match-result)])
    (displayln match-vars)
    (if succeded
-	   (construct-form (syntax->list
-						#'((lambda (var ...) body ...) val ...))
-					   match-vars)
+	   (construct-form #'((lambda (var ...) body ...) val ...) match-vars)
 	   #f)))
 
-;; test 4
 (displayln "======================")
+(displayln "test 4")
 (displayln
  (let* ([match-result (syntax-match
 					   #'(let ((var val) ...) body ...) (list #'let)
@@ -141,13 +151,11 @@
 		[match-vars (cdr match-result)])
    (displayln match-vars)
    (if succeded
-	   (construct-form (syntax->list
-						#'((lambda (var ...) body ...) val ...))
-					   match-vars)
+	   (construct-form #'((lambda (var ...) body ...) val ...) match-vars)
 	   #f)))
 
-;; test 5
 (displayln "======================")
+(displayln "test 5")
 (displayln
  (let* ([match-result (syntax-match
 					   #'((a ...) (b ...)) '()
@@ -156,13 +164,11 @@
 		[match-vars (cdr match-result)])
    (displayln match-vars)
    (if succeded
-	   (construct-form (syntax->list
-						#'((a b) ...))
-					   match-vars)
+	   (construct-form #'((a b) ...) match-vars)
 	   #f)))
 (displayln "======================")
 
-;; test 6
+(displayln "test 6")
 (displayln
  (let* ([match-result (syntax-match
 					   #'((a ...) (b ...)) '()
@@ -171,28 +177,26 @@
 		[match-vars (cdr match-result)])
    (displayln match-vars)
    (if succeded
-	   (construct-form (syntax->list
-						#'((a (b ...)) ...))
-					   match-vars)
+	   (construct-form #'((a (b ...)) ...) match-vars)
 	   #f)))
 (displayln "======================")
 
-;; test 7
+(displayln "test 7")
 (displayln (syntax-match
 			#'(let ((var val) ...) body ...) (list #'let)
 			#'(let x)))
 
-;; test 8
+(displayln "test 8")
 (displayln (syntax-match
 			#'(let ((var val) ...) body ...) (list #'let)
 			#'(x)))
 
-;; test 9
+(displayln "test 9")
 (displayln (syntax-match
 			#'(let ((var val) ...) body ...) (list #'let)
 			#'x))
 
-;; test 10
+(displayln "test 10")
 (displayln (syntax-match
 			#'(let ((var val) ...) body ...) (list #'let)
 			#'(let () x)))
