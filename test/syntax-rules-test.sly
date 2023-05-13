@@ -1,0 +1,10 @@
+(load "test/my-let.sly")
+
+(displayln "hello")
+
+(displayln
+ (my-let ([x 69]
+		  [y 420])
+   (+ x y)))
+
+(displayln "world")

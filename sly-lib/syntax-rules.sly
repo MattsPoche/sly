@@ -1,0 +1,9 @@
+(load "sly-lib/syntax-case.sly")
+
+(define-syntax (syntax-rules form)
+  (syntax-case form ()
+    ((_ (k ...) ((keyword . pattern) template) ...)
+     #'(lambda (form)
+         (syntax-case form (k ...)
+           ((dummy . pattern) #'template)
+           ...)))))

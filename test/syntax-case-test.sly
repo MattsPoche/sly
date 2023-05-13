@@ -1,14 +1,15 @@
 (load "sly-lib/syntax-case.sly")
 
 (displayln
- (syntax-case  #'(swap foo bar) ()
-   [(swap x y)
-	(if (and (identifier? #'x)
-             (identifier? #'y))
-		#'(let ([tmp x])
-			(set! x y)
-			(set! y tmp))
-		(begin
-		  (displayln "Error not an identifier")
-		  (unless (identifier? #'x) (displayln #'x))
-		  (unless (identifier? #'y) (displayln #'y))))]))
+ (syntax->datum
+  (syntax-case  #'(swap foo bar) ()
+	[(swap x y)
+	 (if (and (identifier? #'x)
+			  (identifier? #'y))
+		 #'(let ([tmp x])
+			 (set! x y)
+			 (set! y tmp))
+		 (begin
+		   (displayln "Error not an identifier")
+		   (unless (identifier? #'x) (displayln #'x))
+		   (unless (identifier? #'y) (displayln #'y))))])))

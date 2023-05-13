@@ -39,9 +39,10 @@
 	   (identifier=? (cadr pattern) ellipsis)))
 
 (define (contains xs x)
-  (cond ((null? xs) #f)
-		((equal? x (car xs)) #t)
-		(else (contains (cdr xs) x))))
+  (cond ((pair? xs)
+		 (or (contains (car xs) x)
+			 (contains (cdr xs) x)))
+		(else (equal? xs x))))
 
 (define (make-match-vars pattern literals)
   (let ([match-vars (make-dictionary)])
@@ -58,7 +59,7 @@
 
 (define (syntax-match pattern literals form)
   (let* ([pattern (cdr (syntax->list pattern))]
-		 [form (cdr (syntax->list form))]
+		 [form (cdr (if (syntax-pair? form) (syntax->list form) form))]
 		 [match-vars (make-match-vars pattern literals)])
 	(define (*syntax-match pattern literals form)
 	  (define (match pattern literals form)
@@ -99,9 +100,7 @@
 						  #f)
 					  #f)))
 		  (match pattern literals form)))
-	(if (*syntax-match pattern literals form)
-		(cons #t match-vars)
-		(cons #f '()))))
+	(if (*syntax-match pattern literals form) match-vars #f)))
 
 (define (construct-form template match-vars)
   (let ([*template (if (syntax-pair? template)
@@ -134,78 +133,60 @@
 (define (syntax-case/run-tests)
   (displayln "test 1")
   (displayln
-   (let* ([match-result (syntax-match
-						 #'(macro (x y) z ...) '()
-						 #'(macro (foo bar) baz zaz a b c))]
-		  [succeded (car match-result)]
-		  [match-vars (cdr match-result)])
-	 (displayln match-vars)
-	 (if succeded
+   (let ([match-vars (syntax-match
+					  #'(macro (x y) z ...) '()
+					  #'(macro (foo bar) baz zaz a b c))])
+	 (if match-vars
 		 (construct-form #'(x z ...) match-vars)
 		 #f)))
 
   (displayln "======================")
   (displayln "test 2")
   (displayln
-   (let* ([match-result (syntax-match
-						 #'(macro (x y) . z) '()
-						 #'(macro (foo bar) baz zaz a b c))]
-		  [succeded (car match-result)]
-		  [match-vars (cdr match-result)])
-	 (displayln match-vars)
-	 (if succeded
+   (let ([match-vars (syntax-match
+					  #'(macro (x y) . z) '()
+					  #'(macro (foo bar) baz zaz a b c))])
+	 (if match-vars
 		 (construct-form #'(the zs . z) match-vars)
 		 #f)))
 
   (displayln "======================")
   (displayln "test 3")
   (displayln
-   (let* ([match-result (syntax-match
-						 #'(let (macro (var val) ...) body ...) '()
-						 #'(let (macro (x 5) (y z)) (+ x y) (display "hello")))]
-		  [succeded (car match-result)]
-		  [match-vars (cdr match-result)])
-	 (displayln match-vars)
-	 (if succeded
+   (let ([match-vars (syntax-match
+					  #'(let (macro (var val) ...) body ...) '()
+					  #'(let (macro (x 5) (y z)) (+ x y) (display "hello")))])
+	 (if match-vars
 		 (construct-form #'((lambda (var ...) body ...) val ...) match-vars)
 		 #f)))
 
   (displayln "======================")
   (displayln "test 4")
   (displayln
-   (let* ([match-result (syntax-match
-						 #'(let ((var val) ...) body ...) '()
-						 #'(let ((x 5) (y z) (w 69)) (+ x y) (display "hello")))]
-		  [succeded (car match-result)]
-		  [match-vars (cdr match-result)])
-	 (displayln match-vars)
-	 (if succeded
+   (let ([match-vars (syntax-match
+					  #'(let ((var val) ...) body ...) '()
+					  #'(let ((x 5) (y z) (w 69)) (+ x y) (display "hello")))])
+	 (if match-vars
 		 (construct-form #'((lambda (var ...) body ...) val ...) match-vars)
 		 #f)))
 
   (displayln "======================")
   (displayln "test 5")
   (displayln
-   (let* ([match-result (syntax-match
-						 #'(macro (a ...) (b ...)) '()
-						 #'(macro (a b c d e f g e) (1 2 3 4 5 6 7 8)))]
-		  [succeded (car match-result)]
-		  [match-vars (cdr match-result)])
-	 (displayln match-vars)
-	 (if succeded
+   (let ([match-vars (syntax-match
+					  #'(macro (a ...) (b ...)) '()
+					  #'(macro (a b c d e f g e) (1 2 3 4 5 6 7 8)))])
+	 (if match-vars
 		 (construct-form #'((a b) ...) match-vars)
 		 #f)))
   (displayln "======================")
 
   (displayln "test 6")
   (displayln
-   (let* ([match-result (syntax-match
-						 #'(macro (a ...) (b ...)) '()
-						 #'(macro (a b c d e f g e) (1 2 3 4 5 6 7 8)))]
-		  [succeded (car match-result)]
-		  [match-vars (cdr match-result)])
-	 (displayln match-vars)
-	 (if succeded
+   (let ([match-vars (syntax-match
+					  #'(macro (a ...) (b ...)) '()
+					  #'(macro (a b c d e f g e) (1 2 3 4 5 6 7 8)))])
+	 (if match-vars
 		 (construct-form #'((a (b ...)) ...) match-vars)
 		 #f)))
   (displayln "======================")
@@ -223,13 +204,10 @@
 
   (displayln "test 9")
   (displayln
-   (let* ([match-result (syntax-match
-						 #'(let ((var val) ...) body ...) '()
-						 #'(let () x))]
-		  [succeded (car match-result)]
-		  [match-vars (cdr match-result)])
-	 (displayln match-vars)
-	 (if succeded
+   (let* ([match-vars (syntax-match
+					   #'(let ((var val) ...) body ...) '()
+					   #'(let () x))])
+	 (if match-vars
 		 (construct-form #'((lambda (var ...) body ...) val ...) match-vars)
 		 #f)))
   (displayln "======================"))
@@ -256,10 +234,8 @@
 		 [rest (cdr (cddr *form))]
 		 [pattern (car clause)]
 		 [expr (transform-expr (cadr clause))])
-	#`(let* ([result (syntax-match (syntax-quote #,pattern) #,literals #,stx)]
-			 [succeded (car result)]
-			 [match-vars (cdr result)])
-		(if succeded
+	#`(let ([match-vars (syntax-match (syntax-quote #,pattern) #,literals #,stx)])
+		(if match-vars
 			#,expr
 			#,(if (null? rest)
 				  #'(displayln "Error invalid syntax for syntax-case.")
