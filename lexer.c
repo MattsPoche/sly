@@ -14,28 +14,29 @@
 #define RE_SEP "([][(){};[:space:]]|$)"
 
 static char retok[] =
-	"^(')."														// 1
-	"|^(`)."													// 2
-	"|^(,)."													// 3
-	"|^(,@)."													// 4
-	"|^(#')."													// 5
-	"|^(#`)."													// 6
-	"|^(#,)."													// 7
-	"|^(#,@)."													// 8
-	"|^(;.*)$"													// 9
-	"|^([[({])"													// 10
-	"|^([])}])"													// 11
-	"|^(\\.)"RE_SEP												// 12
-	"|^(#\\()"      										    // 13
-	"|^(#uv8\\()"     										    // 14
-	"|^(#dict\\()"     										    // 15
-	"|^(λ|\\\\)"RE_SEP											// 16
-	"|^(\"([^\"]|\\\\.)*\")"RE_SEP								// 17
-	"|^(#t|#f)"RE_SEP											// 18
-	"|^(-?[0-9]+\\.[0-9]+)"RE_SEP								// 19
-	"|^(#[xX][0-9A-Fa-f]+)"RE_SEP								// 20
-	"|^(-?[0-9]+)"RE_SEP										// 21
-	"|^([^][(){};'`\"#,[:space:]][^][(){};[:space:]]*)"RE_SEP;	// 22
+	"^(')"													// 1  quote
+	"|^(`)"													// 2  quasiquote
+	"|^(,@)"												// 3  unquote-splice
+	"|^(,)"													// 4  unquote
+	"|^(#')"												// 5  syntax-quote
+	"|^(#`)"												// 6  syntax-quasiquote
+	"|^(#,@)"												// 7  syntax-unquote-splice
+	"|^(#,)"												// 8  syntax-unquote
+	"|^(;.*)$"												// 9  comment
+	"|^([[({])"												// 10 left brace
+	"|^([])}])"												// 11 right brace
+	"|^(\\.)"												// 12 dot
+	"|^(#\\()"												// 13 vector
+	"|^(#uv8\\()"											// 14 byte-vector
+	"|^(#dict\\()"											// 15 dictionary
+	"|^(#t|#f)"												// 18 boolean
+	"|^(#[xX][0-9A-Fa-f]+)"									// 19 hex
+	"|^([-+]?[0-9]+\\.[0-9]+)"								// 20 float
+	"|^([-+]?[0-9]+)"										// 21 int
+	"|^(#\\\\[^[:space:]][^][(){};[:space:]]*)"				// 22 char
+	"|^(#:[^][(){};'`\"#,[:space:]][^][(){};[:space:]]*)"	// 23 keyword
+	"|^([^][(){};'`\"#,[:space:]][^][(){};[:space:]]*)"		// 24 identifier
+	"|^(\"([^\"]|\\\\.)*\")";								// 25 string
 
 static regmatch_t pmatch[tok_max] = {0};
 static regex_t rexpr = {0};
@@ -66,25 +67,17 @@ tok_to_string(enum token t)
 	case tok_byte_vector: return "byte-vector";
 	case tok_dictionary: return "dictionary";
 	case tok_dot: return "dot";
+	case tok_char: return "character";
 	case tok_bool: return "bool";
-	case tok_lambda: return "λ";
 	case tok_string: return "string";
 	case tok_float: return "float";
 	case tok_hex: return "hex";
-	case tok_int: return "int";
-	case tok_sym: return "sym";
+	case tok_int: return "integer";
+	case tok_keyword: return "keyword";
+	case tok_ident: return "identifier";
 	case tok_max: return "max";
 	case tok_nomatch: return "nomatch";
 	case tok_eof: return "eof";
-	case tok__nocap0: return "nocapture0";
-	case tok__nocap1: return "nocapture1";
-	case tok__nocap2: return "nocapture2";
-	case tok__nocap3: return "nocapture3";
-	case tok__nocap4: return "nocapture4";
-	case tok__nocap5: return "nocapture5";
-	case tok__nocap6: return "nocapture6";
-	case tok__nocap7: return "nocapture7";
-	case tok__nocap8: return "nocapture8";
 	default: return NULL;
 	}
 }

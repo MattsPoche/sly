@@ -162,8 +162,8 @@ build_list:
 	case tok_dot: {
 		sly_raise_exception(ss, EXC_COMPILE, "Parse Error bad dot");
 	} break;
-	case tok_lambda: {
-		return make_syntax(ss, t, cstr_to_symbol("lambda"));
+	case tok_char: {
+		sly_raise_exception(ss, EXC_COMPILE, "Error character parsing is not implemented");
 	} break;
 	case tok_string: {
 		char *s = escape_string(ss, &cstr[t.so+1], t.eo - t.so - 2);
@@ -187,7 +187,11 @@ build_list:
 	case tok_int: {
 		return make_syntax(ss, t, make_int(ss, strtol(&cstr[t.so], NULL, 0)));
 	} break;
-	case tok_sym: {
+	case tok_keyword: {
+		return syntax_cons(make_syntax(ss, t, cstr_to_symbol("quote")),
+						   make_syntax(ss, t, make_symbol(ss, &cstr[t.so], t.eo - t.so)));
+	} break;
+	case tok_ident: {
 		size_t len = t.eo - t.so;
 		sly_value stx = make_syntax(ss, t, make_symbol(ss, &cstr[t.so], len));
 		return stx;
@@ -201,17 +205,6 @@ build_list:
 		sly_assert(0, "(parse_value, tok_nomatch) UNEMPLEMENTED");
 	} break;
 	case tok_eof: {
-	} break;
-	case tok__nocap0:
-	case tok__nocap1:
-	case tok__nocap2:
-	case tok__nocap3:
-	case tok__nocap4:
-	case tok__nocap5:
-	case tok__nocap6:
-	case tok__nocap7:
-	case tok__nocap8: {
-		sly_raise_exception(ss, EXC_COMPILE, "Parse Error undefined token (nocapture0)");
 	} break;
 	}
 	return SLY_NULL;
