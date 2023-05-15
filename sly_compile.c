@@ -35,7 +35,7 @@ enum kw {
 	kw_define_syntax,
 	kw_call_with_continuation,
 	kw_call_cc,
-	kw_load,
+	kw_require,
 	KW_COUNT,
 };
 
@@ -64,7 +64,10 @@ union symbol_properties {
 	do {																\
 		sym = make_symbol(ss, name, strlen(name));						\
 		dictionary_set(ss, symtable, sym, st_prop.v);					\
-		dictionary_set(ss, cc->builtins, sym, make_cclosure(ss, fn, nargs, has_vargs)); \
+		sly_value entry = cons(ss, sym,									\
+							   make_cclosure(ss, fn, nargs, has_vargs)); \
+		dictionary_set(ss, cc->globals, car(entry), cdr(entry));		\
+		cc->builtins = cons(ss, entry, cc->builtins);					\
 	} while (0)
 #define STORE_MACRO_CLOSURE()								\
 	do {													\
@@ -98,7 +101,7 @@ keywords(int idx)
 	case kw_define_syntax: return "define-syntax";
 	case kw_call_with_continuation: return "call-with-continuation";
 	case kw_call_cc: return "call/cc";
-	case kw_load: return "load";
+	case kw_require: return "require";
 	case KW_COUNT: break;
 	}
 	sly_assert(0, "Error, No such keyword");
@@ -114,6 +117,8 @@ static void init_symtable(Sly_State *ss, sly_value symtable);
 static size_t intern_constant(Sly_State *ss, sly_value value);
 static void setup_frame(Sly_State *ss);
 static sly_value load_file(Sly_State *ss, sly_value form);
+static void resolve_requires(Sly_State *ss, sly_value form);
+static void require(Sly_State *ss, sly_value form);
 static void forward_scan_block(Sly_State *ss, sly_value form);
 static sly_value expand(Sly_State *ss, sly_value form);
 
@@ -820,9 +825,6 @@ expand(Sly_State *ss, sly_value form)
 				|| symbol_eq(s->datum, cstr_to_symbol("syntax-quote"))) {
 				return form;
 			}
-			if (symbol_eq(s->datum, cstr_to_symbol("load"))) {
-				return datum_to_syntax(ss, form, load_file(ss, form));
-			}
 			sly_value macro = lookup_macro(ss, s->datum);
 			if (!void_p(macro)) {
 				/* call macro */
@@ -849,6 +851,25 @@ expand(Sly_State *ss, sly_value form)
 	return form;
 }
 
+static void
+resolve_requires(Sly_State *ss, sly_value form)
+{
+	sly_value expr;
+	while (!null_p(form)) {
+		expr = CAR(form);
+		if (pair_p(expr) || syntax_pair_p(expr)) {
+			if (identifier_p(CAR(expr))) {
+				if (symbol_eq(syntax_to_datum(CAR(expr)),
+							  cstr_to_symbol("require"))) {
+					require(ss, expr);
+				}
+			}
+		}
+		form = CDR(form);
+	}
+}
+
+
 static sly_value
 load_file(Sly_State *ss, sly_value form)
 {
@@ -861,14 +882,23 @@ load_file(Sly_State *ss, sly_value form)
 	byte_vector *bv = GET_PTR(syntax_to_datum(CAR(form)));
 	memcpy(path, bv->elems, bv->len);
 	sly_value ast = parse_file(ss, path, &src);
-	ss->cc->globals = make_dictionary(ss);
-	dictionary_import(ss, ss->cc->globals, ss->cc->builtins);
 	ss->file_path = path;
 	ss->cc->cscope = make_scope(ss);
-	ss->cc->cscope->symtable = pscope->symtable;
-	ss->cc->cscope->macros = pscope->macros;
-	init_symtable(ss, ss->cc->cscope->symtable);
-	ss->cc->cscope->level = 0; /* top level */
+	ss->cc->cscope->level = 0;
+	ss->cc->globals = make_dictionary(ss);
+	{ /* init globals and symtable from builtins */
+		sly_value symtable = ss->cc->cscope->symtable;
+		init_symtable(ss, symtable);
+		sly_value builtins = ss->cc->builtins;
+		union symbol_properties st_prop = {0};
+		st_prop.p.type = sym_global;
+		while (!null_p(builtins)) {
+			sly_value entry = car(builtins);
+			dictionary_set(ss, ss->cc->globals, car(entry), cdr(entry));
+			dictionary_set(ss, symtable, car(entry), st_prop.v);
+			builtins = cdr(builtins);
+		}
+	}
 	sly_compile(ss, ast);
 	setup_frame(ss);
 	sly_value ret = vm_run(ss, 0);
@@ -878,6 +908,47 @@ load_file(Sly_State *ss, sly_value form)
 	return ret;
 }
 
+static void
+require(Sly_State *ss, sly_value form)
+{ /* TODO: requires need be resolved before expansion.
+   * Exports should be provided in the following format:
+   * (variables macros)
+   * Variables and macros should be assoc lists
+   */
+
+	/* TODO: resolve module path/name
+	 * update modules dictionary.
+	 */
+	sly_value module_import = load_file(ss, form);
+	sly_value vars = car(module_import);
+	sly_value macros = car(cdr(module_import));
+	sly_value entry, name, datum;
+	union symbol_properties st_prop;
+	while (!null_p(vars)) {
+		st_prop.v = 0;
+		entry = car(vars);
+		name = car(entry);
+		datum = cdr(entry);
+		st_prop.p.type = sym_global;
+		st_prop.p.reg = intern_constant(ss, name);
+		dictionary_set(ss, ss->cc->globals, name, datum);
+		dictionary_set(ss, ss->cc->cscope->symtable, name, st_prop.v);
+		vars = cdr(vars);
+	}
+	while (!null_p(macros)) {
+		st_prop.v = 0;
+		entry = car(macros);
+		name = car(entry);
+		datum = cdr(entry);
+		st_prop.p.type = sym_global;
+		st_prop.p.issyntax = 1;
+		st_prop.p.reg = intern_constant(ss, name);
+		dictionary_set(ss, ss->cc->globals, name, datum);
+		dictionary_set(ss, ss->cc->cscope->symtable, name, st_prop.v);
+		dictionary_set(ss, ss->cc->cscope->macros, name, datum);
+		macros = cdr(macros);
+	}
+}
 
 int
 comp_expr(Sly_State *ss, sly_value form, int reg)
@@ -974,31 +1045,11 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 				sly_raise_exception(ss, EXC_COMPILE, "Error malformed display expression");
 			}
 		} break;
-		case kw_load: { /* do nothing */
-#if 0
-			char *src;
-			char path[255] = {0};
-			struct scope *pscope = ss->cc->cscope;
-			char *ppath = ss->file_path;
-			sly_assert(ss->cc->cscope->level == 0,
-					   "Error: load form is only allowed in a top-level context");
-			form = CDR(form);
-			byte_vector *bv = GET_PTR(syntax_to_datum(CAR(form)));
-			memcpy(path, bv->elems, bv->len);
-			sly_value ast = parse_file(ss, path, &src);
-			printf("%s\n", ss->file_path);
-			ss->file_path = path;
-			ss->cc->cscope = make_scope(ss);
-			ss->cc->cscope->symtable = pscope->symtable;
-			ss->cc->cscope->macros = pscope->macros;
-			init_symtable(ss, ss->cc->cscope->symtable);
-			ss->cc->cscope->level = 0; /* top level */
-			sly_compile(ss, ast);
-			setup_frame(ss);
-			vm_run(ss, 0);
-			ss->file_path = ppath;
-			ss->cc->cscope = pscope;
-#endif
+		case kw_require: { /* do nothing */
+			if (ss->cc->cscope->level > 0) {
+				sly_raise_exception(ss, EXC_COMPILE,
+									"Error: load form is only allowed in a top-level context");
+			}
 		} break;
 		case KW_COUNT: {
 			sly_raise_exception(ss, EXC_COMPILE, "(KW_COUNT) Not a real keyword");
@@ -1021,6 +1072,7 @@ sly_init_state(Sly_State *ss)
 	ss->cc->globals = make_dictionary(ss);
 	ss->cc->cscope = make_scope(ss);
 	ss->interned = make_dictionary(ss);
+	ss->modules =  make_dictionary(ss);
 	init_symtable(ss, ss->cc->cscope->symtable);
 	ss->cc->cscope->level = 0;
 	init_builtins(ss);
@@ -1099,7 +1151,7 @@ sly_compile(Sly_State *ss, sly_value ast)
 			exit(1);
 		});
 	prototype *proto = GET_PTR(ss->cc->cscope->proto);
-	//load_deps(ss, ast);
+	resolve_requires(ss, ast);
 	ast = expand(ss, ast);
 	forward_scan_block(ss, ast);
 	int r = comp_expr(ss, ast, 0);

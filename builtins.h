@@ -624,9 +624,8 @@ init_builtins(Sly_State *ss)
 	union symbol_properties st_prop = {0};
 	sly_value sym;
 	st_prop.p.type = sym_global;
-	cc->builtins = make_dictionary(ss);
-	dictionary_set(ss, cc->builtins,
-				   cstr_to_symbol("MODULES"), make_dictionary(ss));
+	cc->globals = make_dictionary(ss);
+	cc->builtins = SLY_NULL;
 	ADD_BUILTIN("+", cadd, 0, 1);
 	ADD_BUILTIN("-", csub, 0, 1);
 	ADD_BUILTIN("*", cmul, 0, 1);
@@ -691,8 +690,6 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("apply", capply, 2, 1);
 	ADD_BUILTIN("console-clear-screen", cclear_screen, 0, 0);
 	ADD_BUILTIN("raise-macro-exception", craise_macro_exception, 1, 0);
-	cc->globals = make_dictionary(ss);
-	dictionary_import(ss, ss->cc->globals, ss->cc->builtins);
 }
 
 #endif /* SLY_BUILTINS_H_ */

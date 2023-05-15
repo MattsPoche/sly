@@ -1,6 +1,20 @@
+;;; TODO: Create api for defining/exporting modules
+;;; below is ruffly the process for exporting
+;;; modules.
+;;; Create an api to standardize this process.
+
 (define (secret-message) (display "hello, world\n"))
+
+(define-syntax (macro form)
+  (display "hello, from compile-time!!!\n")
+  (datum->syntax form (list 'display "this is a macro\n")))
+
 (display "hello, from loadme.sly!!!\n")
-(dictionary-set! (*MODULES*)
-				 'loadme
-				 (make-dictionary (cons 'secret-message secret-message)))
-(dictionary-ref (*MODULES*) 'loadme)
+
+(define exported-variables (list (cons 'secret-message
+									   secret-message)))
+
+(define exported-macros (list (cons 'macro
+									macro)))
+
+(list exported-variables exported-macros) ;; exported module

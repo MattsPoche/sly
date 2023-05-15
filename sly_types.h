@@ -60,6 +60,7 @@ typedef struct _sly_state {
 	struct _upvalue *open_upvals;
 	sly_value proto;
 	sly_value interned;
+	sly_value modules;
 	jmp_buf jbuf;
 	char *excpt_msg;
 	int handle_except;
