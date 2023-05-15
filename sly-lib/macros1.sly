@@ -1,6 +1,5 @@
-(load "sly-lib/quasiquote.sly")
-
-;;; TODO: Implement syntax-case and syntax-rules
+(require "sly-lib/list.sly")
+(require "sly-lib/quasiquote.sly")
 
 (define-syntax (and form)
   (define *form (cdr (syntax->list form)))
@@ -147,3 +146,21 @@
   (define *form (syntax->list form))
   (define var (cadr *form))
   #`(begin (set! #,var (- #,var 1))))
+
+(define exported-syntax
+  (list (cons 'and and)
+		(cons 'or or)
+		(cons 'let let)
+		(cons 'let* let*)
+		(cons 'letrec letrec)
+		(cons 'letrec*-helper letrec*-helper) ;; TODO: I shouldn't have to import this
+		(cons 'letrec* letrec*)
+		(cons 'cond cond)
+		(cons 'when when)
+		(cons 'unless unless)
+		(cons 'inc inc)
+		(cons 'dec dec)
+		(cons 'inc! inc!)
+		(cons 'dec! dec!)))
+
+(list '() exported-syntax) ;; exported module

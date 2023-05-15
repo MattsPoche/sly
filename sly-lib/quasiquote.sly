@@ -1,4 +1,4 @@
-(load "sly-lib/list.sly")
+(require "sly-lib/list.sly")
 
 ;;; Basic implementation of quasiquote and syntax-quasiquote
 
@@ -82,3 +82,9 @@
 							 (list #'syntax-quote (raw-syntax form))
 							 form*)))
 	  (datum->syntax form (list #'syntax-quote form*))))
+
+(define exported-syntax
+  (list (cons 'quasiquote quasiquote)
+		(cons 'syntax-quasiquote syntax-quasiquote)))
+
+(list '() exported-syntax) ;; exported module

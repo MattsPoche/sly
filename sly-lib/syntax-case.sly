@@ -1,4 +1,6 @@
-(load "sly-lib/macros1.sly")
+(require "sly-lib/list.sly")
+(require "sly-lib/quasiquote.sly")
+(require "sly-lib/macros1.sly")
 
 ;;; Implementation of syntax-case and related functions
 ;;; Reference:
@@ -240,3 +242,8 @@
 			#,(if (null? rest)
 				  #'(displayln "Error invalid syntax for syntax-case.")
 				  #`(syntax-case #,stx #,literals #,@rest))))))
+
+(define exported-syntax
+  (list (cons 'syntax-case syntax-case)))
+
+(list '() exported-syntax) ;; exported module

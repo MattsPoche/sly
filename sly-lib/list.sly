@@ -1,9 +1,3 @@
-(define-syntax (comp-debug x)
-  (display "COMP-DEBUG :: ")
-  (display (car (cdr (syntax->datum x))))
-  (display "\n")
-  (datum->syntax x #f))
-
 (define (displayln x) (display x)(display "\n"))
 
 (define (caar p)
@@ -61,17 +55,6 @@
 (define (list-copy xs)
   (fold-right cons '() xs))
 
-(define (append! xs . rest)
-  (define (helper xs rest)
-	(if (pair? rest)
-		(if (null? xs)
-			(helper (car rest) (cdr rest))
-			(begin
-			  ((lambda (lp) (set-cdr! lp (car rest))) (last-pair xs))
-			  (helper xs (cdr rest))))
-		xs))
-  (helper xs rest))
-
 (define (length xs)
   (fold-left (lambda (x y) (+ y 1)) 0 xs))
 
@@ -81,13 +64,6 @@
 	  (if (zero? i)
 		  (car xs)
 		  (list-ref (cdr xs) (- i 1)))))
-
-(define (compose . fs)
-  (define (*compose* fs)
-	(if (null? fs)
-		(lambda (x) x)
-		(lambda (x) ((car fs) ((*compose* (cdr fs)) x)))))
-  (*compose* fs))
 
 (define (count val xs)
   (fold-right
@@ -115,17 +91,31 @@
 	  '()
 	  (begin
 		(apply f (*heads* xs))
-		(apply map f (*tails* xs)))))
+		(apply for-each f (*tails* xs)))))
 
-(define (range arg . rest)
-  (define (*range start end step)
-	(if (< start end)
-		(cons start (range (+ start step) end step))
-		'()))
-  (if (= (length rest) 0)
-	  (*range 0 arg 1)
-	  (if (= (length rest) 1)
-		  (*range arg (car rest) 1)
-		  (if (= (length rest) 2)
-			  (*range arg (car rest) (car (cdr rest)))
-			  #f))))
+
+;; module exports
+(define exported-variables
+  (list (cons 'displayln displayln)
+		(cons 'caar caar)
+		(cons 'cddr cddr)
+		(cons 'cdar cdar)
+		(cons 'cadr cadr)
+		(cons 'caddr caddr)
+		(cons 'cdddr cdddr)
+		(cons 'cadddr cadddr)
+		(cons 'zero? zero?)
+		(cons 'fold-left fold-left)
+		(cons 'fold-right fold-right)
+		(cons 'append append)
+		(cons 'reverse reverse)
+		(cons 'last-pair last-pair)
+		(cons 'list-copy list-copy)
+		(cons 'length length)
+		(cons 'list-ref list-ref)
+		(cons 'length length)
+		(cons 'count count)
+		(cons 'map map)
+		(cons 'for-each for-each)))
+
+(list exported-variables '()) ;; exported module

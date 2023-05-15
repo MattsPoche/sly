@@ -243,7 +243,7 @@ apply_context(sly_value form, int ctx)
 {
 	if (syntax_p(form)) {
 		syntax *stx = GET_PTR(form);
-		stx->context = FLAG_ON(stx->context, ctx);
+		stx->context ^= ctx;
 	}
 	if (pair_p(form) || syntax_pair_p(form)) {
 		apply_context(CAR(form), ctx);
@@ -267,7 +267,6 @@ comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 		/* build lambda form */
 		form = syntax_cons(syntax_cons(make_syntax(ss, (token){0}, make_symbol(ss, "lambda", 6)),
 									   cons(ss, params, CDR(form))), SLY_NULL);
-		if (is_syntax) apply_context(form, ctx_macro_body);
 	} else {
 		var = syntax_to_datum(stx);
 		form = CDR(form);
@@ -563,17 +562,17 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 	return reg;
 }
 
-static void
+static int
 apply_alias(sly_value id, sly_value aliases)
 {
 	sly_value sym = syntax_to_datum(id);
 	syntax *stx = GET_PTR(id);
 	sly_value entry = dictionary_entry_ref(aliases, sym);
-	stx->context = FLAG_OFF(stx->context, ctx_macro_body);
-	if (slot_is_free(entry)) return;
+	if (slot_is_free(entry)) return 0;
 	sly_value alias = cdr(entry);
 	stx->alias = sym;
 	stx->datum = alias;
+	return 1;
 }
 
 static void
@@ -583,12 +582,19 @@ gen_aliases(Sly_State *ss, sly_value form, sly_value aliases)
 	if (syntax_pair_p(form)) {
 		while (!null_p(form)) {
 			sly_value id = CAR(form);
-			sly_assert(identifier_p(id), "Error Expected Identifier in binding form");
-			syntax *s = GET_PTR(id);
-			if (s->context & ctx_macro_body) {
-				sly_value alias = gensym(ss);
-				dictionary_set(ss, aliases, syntax_to_datum(id), alias);
-				apply_alias(id, aliases);
+			if (identifier_p(id)) {
+				syntax *s = GET_PTR(id);
+				if (s->context & ctx_macro_body) {
+					sly_value alias = gensym(ss);
+					dictionary_set(ss, aliases, syntax_to_datum(id), alias);
+					apply_alias(id, aliases);
+				}
+			} else {
+				apply_context(id, ctx_macro_body);
+				/* sly_display(id, 1); */
+				/* printf("\n"); */
+				/* sly_assert(identifier_p(id), */
+				/* 		   "Error Expected Identifier in binding form"); */
 			}
 			form = CDR(form);
 		}
@@ -604,31 +610,47 @@ gen_aliases(Sly_State *ss, sly_value form, sly_value aliases)
 }
 
 static void
-sanitize(Sly_State *ss, sly_value form, sly_value aliases)
+sanitize(Sly_State *ss, sly_value form, sly_value env, sly_value aliases)
 { /* To keep macros hygenic, variable bindings introduced
    * in expansions are replaced by gensyms.
    */
 	if (syntax_pair_p(form) && identifier_p(CAR(form))) {
 		syntax *s = GET_PTR(CAR(form));
 		sly_value sym = s->datum;
-		if ((symbol_eq(sym, make_symbol(ss, "define", 6))
-			 || symbol_eq(sym, make_symbol(ss, "lambda", 6)))
-			&& (s->context & ctx_macro_body)) {
+		if (symbol_eq(sym, make_symbol(ss, "lambda", 6))
+			|| symbol_eq(sym, make_symbol(ss, "define", 6))) {
 			form = CDR(form);
-			gen_aliases(ss, CAR(form), aliases);
-			form = CDR(form);
-			sanitize(ss, form, aliases);
+			s = NULL;
+			if (pair_p(CAR(form)) || syntax_pair_p(CAR(form))) {
+				s = GET_PTR(CAR(CAR(form)));
+			} else if (identifier_p(CAR(form))) {
+				s = GET_PTR(CAR(form));
+			}
+			if (s != NULL && (s->context & ctx_macro_body)) {
+				gen_aliases(ss, CAR(form), aliases);
+			}
+			sanitize(ss, CDR(form), env, aliases);
 		} else {
-			sanitize(ss, CAR(form), aliases);
-			sanitize(ss, CDR(form), aliases);
+			sanitize(ss, CAR(form), env, aliases);
+			sanitize(ss, CDR(form), env, aliases);
 		}
 	} else if (syntax_pair_p(form) || pair_p(form)) {
-		sanitize(ss, CAR(form), aliases);
-		sanitize(ss, CDR(form), aliases);
+		sanitize(ss, CAR(form), env, aliases);
+		sanitize(ss, CDR(form), env, aliases);
 	} else if (identifier_p(form)) {
 		syntax *s = GET_PTR(form);
 		if (s->context & ctx_macro_body) {
-			apply_alias(form, aliases);
+			if (!apply_alias(form, aliases)) {
+				union symbol_properties st_prop = {0};
+				st_prop.v = symbol_lookup_props(ss, s->datum, NULL, NULL);
+				if (void_p(st_prop.v)) {
+					sly_value entry = dictionary_entry_ref(env, s->datum);
+					if (!slot_is_free(entry)) {
+						s->alias = s->datum;
+						s->datum = cdr(entry);
+					}
+				}
+			}
 		}
 	}
 }
@@ -812,7 +834,6 @@ forward_scan_block(Sly_State *ss, sly_value form)
 	}
 }
 
-
 static sly_value
 expand(Sly_State *ss, sly_value form)
 {
@@ -830,10 +851,14 @@ expand(Sly_State *ss, sly_value form)
 				/* call macro */
 				sly_value call_list = make_vector(ss, 2, 2);
 				vector_set(call_list, 0, macro);
+				apply_context(form, ctx_macro_body);
 				vector_set(call_list, 1, form);
 				form = call_closure(ss, call_list);
+				apply_context(form, ctx_macro_body);
+				closure *clos = GET_PTR(macro);
+				sly_value env = upvalue_get(vector_ref(clos->upvals, 0));
 				sly_value aliases = make_dictionary(ss);
-				sanitize(ss, form, aliases);
+				sanitize(ss, form, env, aliases);
 				return expand(ss, form);
 			}
 		}
@@ -871,15 +896,14 @@ resolve_requires(Sly_State *ss, sly_value form)
 
 
 static sly_value
-load_file(Sly_State *ss, sly_value form)
+load_file(Sly_State *ss, sly_value file_string)
 {
 	char *src;
 	char path[255] = {0};
 	struct scope *pscope = ss->cc->cscope;
 	sly_value globals = ss->cc->globals;
 	char *ppath = ss->file_path;
-	form = CDR(form);
-	byte_vector *bv = GET_PTR(syntax_to_datum(CAR(form)));
+	byte_vector *bv = GET_PTR(file_string);
 	memcpy(path, bv->elems, bv->len);
 	sly_value ast = parse_file(ss, path, &src);
 	ss->file_path = path;
@@ -900,8 +924,14 @@ load_file(Sly_State *ss, sly_value form)
 		}
 	}
 	sly_compile(ss, ast);
-	setup_frame(ss);
-	sly_value ret = vm_run(ss, 0);
+	sly_value clos = make_closure(ss, ss->proto);
+	{
+		closure *cls = GET_PTR(clos);
+		vector_set(cls->upvals, 0, make_closed_upvalue(ss, ss->cc->globals));
+	}
+	sly_value call_list = make_vector(ss, 1, 1);
+	vector_set(call_list, 0, clos);
+	sly_value ret = call_closure(ss, call_list);
 	ss->file_path = ppath;
 	ss->cc->cscope = pscope;
 	ss->cc->globals = globals;
@@ -910,16 +940,22 @@ load_file(Sly_State *ss, sly_value form)
 
 static void
 require(Sly_State *ss, sly_value form)
-{ /* TODO: requires need be resolved before expansion.
+{ /*
    * Exports should be provided in the following format:
    * (variables macros)
    * Variables and macros should be assoc lists
    */
 
 	/* TODO: resolve module path/name
-	 * update modules dictionary.
 	 */
-	sly_value module_import = load_file(ss, form);
+	sly_value file_string = syntax_to_datum(CAR(CDR(form)));
+	sly_value module_import = dictionary_entry_ref(ss->modules, file_string);
+	if (slot_is_free(module_import)) {
+		module_import = load_file(ss, file_string);
+		dictionary_set(ss, ss->modules, file_string, module_import);
+	} else {
+		module_import = cdr(module_import);
+	}
 	sly_value vars = car(module_import);
 	sly_value macros = car(cdr(module_import));
 	sly_value entry, name, datum;

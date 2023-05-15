@@ -19,21 +19,6 @@ make_stack(Sly_State *ss, size_t nregs)
 	return frame;
 }
 
-stack_frame *
-make_eval_stack(Sly_State *ss, sly_value regs)
-{
-	stack_frame *frame = gc_alloc(ss, sizeof(*frame));
-	frame->h.type = tt_stack_frame;
-	frame->parent = NULL;
-	frame->R = regs;
-	frame->code = make_vector(ss, 0, 4);
-	frame->pc = 0;
-	frame->level = 0;
-	frame->clos = SLY_NULL;
-	frame->ret_slot = 0;
-	return frame;
-}
-
 void
 dis(INSTR ins, sly_value si)
 {
