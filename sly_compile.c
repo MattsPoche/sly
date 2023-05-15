@@ -64,7 +64,7 @@ union symbol_properties {
 	do {																\
 		sym = make_symbol(ss, name, strlen(name));						\
 		dictionary_set(ss, symtable, sym, st_prop.v);					\
-		dictionary_set(ss, cc->globals, sym, make_cclosure(ss, fn, nargs, has_vargs)); \
+		dictionary_set(ss, cc->builtins, sym, make_cclosure(ss, fn, nargs, has_vargs)); \
 	} while (0)
 #define STORE_MACRO_CLOSURE()								\
 	do {													\
@@ -113,7 +113,7 @@ static void init_builtins(Sly_State *ss);
 static void init_symtable(Sly_State *ss, sly_value symtable);
 static size_t intern_constant(Sly_State *ss, sly_value value);
 static void setup_frame(Sly_State *ss);
-static void load_file(Sly_State *ss, sly_value form);
+static sly_value load_file(Sly_State *ss, sly_value form);
 static void forward_scan_block(Sly_State *ss, sly_value form);
 static sly_value expand(Sly_State *ss, sly_value form);
 
@@ -755,20 +755,6 @@ strip_syntax(Sly_State *ss, sly_value form)
 }
 
 static void
-load_deps(Sly_State *ss, sly_value form)
-{
-	while (!null_p(form)) {
-		sly_value expr = CAR(form);
-		if (syntax_pair_p(expr)
-			&& identifier_p(CAR(expr))
-			&& symbol_eq(syntax_to_datum(CAR(expr)), make_symbol(ss, "load", 4))) {
-			load_file(ss, expr);
-		}
-		form = CDR(form);
-	}
-}
-
-static void
 forward_scan_block(Sly_State *ss, sly_value form)
 { /* Call at start of top-level and procedure block
    * after creating new scope to scan for variables.
@@ -834,20 +820,16 @@ expand(Sly_State *ss, sly_value form)
 				|| symbol_eq(s->datum, cstr_to_symbol("syntax-quote"))) {
 				return form;
 			}
+			if (symbol_eq(s->datum, cstr_to_symbol("load"))) {
+				return datum_to_syntax(ss, form, load_file(ss, form));
+			}
 			sly_value macro = lookup_macro(ss, s->datum);
 			if (!void_p(macro)) {
 				/* call macro */
-				closure *clos = GET_PTR(macro);
-				prototype *proto = GET_PTR(clos->proto);
-				stack_frame *frame = make_stack(ss, proto->nregs);
-				frame->U = clos->upvals;
-				frame->K = proto->K;
-				frame->code = proto->code;
-				frame->pc = proto->entry;
-				vector_set(frame->R, 0, form);
-				ss->frame = frame;
-				form = vm_run(ss, 0);
-				ss->frame = NULL;
+				sly_value call_list = make_vector(ss, 2, 2);
+				vector_set(call_list, 0, macro);
+				vector_set(call_list, 1, form);
+				form = call_closure(ss, call_list);
 				sly_value aliases = make_dictionary(ss);
 				sanitize(ss, form, aliases);
 				return expand(ss, form);
@@ -867,19 +849,20 @@ expand(Sly_State *ss, sly_value form)
 	return form;
 }
 
-static void
+static sly_value
 load_file(Sly_State *ss, sly_value form)
 {
 	char *src;
 	char path[255] = {0};
 	struct scope *pscope = ss->cc->cscope;
+	sly_value globals = ss->cc->globals;
 	char *ppath = ss->file_path;
-	sly_assert(ss->cc->cscope->level == 0,
-			   "Error: load form is only allowed in a top-level context");
 	form = CDR(form);
 	byte_vector *bv = GET_PTR(syntax_to_datum(CAR(form)));
 	memcpy(path, bv->elems, bv->len);
 	sly_value ast = parse_file(ss, path, &src);
+	ss->cc->globals = make_dictionary(ss);
+	dictionary_import(ss, ss->cc->globals, ss->cc->builtins);
 	ss->file_path = path;
 	ss->cc->cscope = make_scope(ss);
 	ss->cc->cscope->symtable = pscope->symtable;
@@ -888,9 +871,11 @@ load_file(Sly_State *ss, sly_value form)
 	ss->cc->cscope->level = 0; /* top level */
 	sly_compile(ss, ast);
 	setup_frame(ss);
-	vm_run(ss, 0);
+	sly_value ret = vm_run(ss, 0);
 	ss->file_path = ppath;
 	ss->cc->cscope = pscope;
+	ss->cc->globals = globals;
+	return ret;
 }
 
 
@@ -1046,7 +1031,6 @@ sly_init_state(Sly_State *ss)
 static void
 setup_frame(Sly_State *ss)
 {
-	ss->proto = ss->cc->cscope->proto;
 	prototype *proto = GET_PTR(ss->proto);
 	stack_frame *frame = make_stack(ss, proto->nregs ? proto->nregs : 1);
 	frame->U = make_vector(ss, 12, 12);
@@ -1115,11 +1099,12 @@ sly_compile(Sly_State *ss, sly_value ast)
 			exit(1);
 		});
 	prototype *proto = GET_PTR(ss->cc->cscope->proto);
-	load_deps(ss, ast);
+	//load_deps(ss, ast);
 	ast = expand(ss, ast);
 	forward_scan_block(ss, ast);
 	int r = comp_expr(ss, ast, 0);
 	vector_append(ss, proto->code, iA(OP_RETURN, r, -1));
+	ss->proto = ss->cc->cscope->proto;
 	END_HANDLE_EXCEPTION(ss);
 	return 0;
 }

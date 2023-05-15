@@ -140,7 +140,9 @@ traverse_upvalue(Sly_State *ss, upvalue *uv)
 static void
 traverse_object(Sly_State *ss, gc_object *obj)
 {
-	if (obj == NULL) return;
+	if (obj == NULL || obj->color == GC_BLACK) {
+		return;
+	}
 	mark_object(obj, GC_BLACK);
 	switch ((enum type_tag)obj->type) {
 	case tt_pair:
@@ -199,10 +201,10 @@ static void
 mark_roots(Sly_State *ss)
 {
 	traverse_object(ss, (gc_object *)ss->frame);
-	traverse_object(ss, (gc_object *)ss->eval_frame);
 	traverse_object(ss, (gc_object *)ss->proto);
 	traverse_object(ss, (gc_object *)ss->interned);
 	traverse_object(ss, GET_PTR(ss->cc->globals));
+	traverse_object(ss, GET_PTR(ss->cc->builtins));
 	traverse_object(ss, (gc_object *)ss->cc->cscope);
 	traverse_object(ss, (gc_object *)ss->open_upvals);
 	/*

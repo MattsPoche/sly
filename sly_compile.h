@@ -11,6 +11,7 @@ union uplookup {
 
 struct compile {
 	sly_value globals;  // <dictionary>
+	sly_value builtins;  // <dictionary>
 	struct scope *cscope;
 };
 

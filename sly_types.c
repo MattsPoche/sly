@@ -1264,6 +1264,20 @@ dictionary_remove(sly_value d, sly_value key)
 }
 
 void
+dictionary_import(Sly_State *ss, sly_value dst, sly_value src)
+{
+	sly_assert(dictionary_p(dst), "Type Error expected <dictionary>");
+	sly_assert(dictionary_p(src), "Type Error expected <dictionary>");
+	vector *vsrc = GET_PTR(src);
+	for (size_t i = 0; i < vsrc->cap; ++i) {
+		sly_value entry = vsrc->elems[i];
+		if (!slot_is_free(entry)) {
+			dictionary_set(ss, dst, car(entry), cdr(entry));
+		}
+	}
+}
+
+void
 close_upvalue(sly_value _uv)
 {
 	sly_assert(upvalue_p(_uv), "Type Error expected <upvalue>");

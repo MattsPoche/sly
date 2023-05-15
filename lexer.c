@@ -11,7 +11,6 @@
 #include "sly_alloc.h"
 
 #define LINE_SIZE 1024
-#define RE_SEP "([][(){};[:space:]]|$)"
 
 static char retok[] =
 	"^(')"													// 1  quote

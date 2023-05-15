@@ -1,0 +1,6 @@
+(define (secret-message) (display "hello, world\n"))
+(display "hello, from loadme.sly!!!\n")
+(dictionary-set! (*MODULES*)
+				 'loadme
+				 (make-dictionary (cons 'secret-message secret-message)))
+(dictionary-ref (*MODULES*) 'loadme)
