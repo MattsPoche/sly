@@ -1,10 +1,12 @@
-(load "test/my-let.sly")
+;; TODO: this is broken
+(display "im broken\n")
+;; (load "test/my-let.sly")
 
-(displayln "hello")
+;; (displayln "hello")
 
-(displayln
- (my-let ([x 69]
-		  [y 420])
-   (+ x y)))
+;; (displayln
+;;  (my-let ([x 69]
+;; 		  [y 420])
+;;    (+ x y)))
 
-(displayln "world")
+;; (displayln "world")

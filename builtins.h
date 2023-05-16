@@ -395,7 +395,7 @@ craw_syntax(Sly_State *ss, sly_value args)
 	s2->h.type = tt_syntax;
 	s2->tok = s1->tok;
 	s2->datum = SLY_VOID;
-	s2->lex_info = s2->lex_info;
+	s2->env = s2->env;
 	s2->context = s2->context;
 	return (sly_value)s2;
 }

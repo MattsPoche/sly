@@ -2,7 +2,7 @@
 ;;; https://en.wikipedia.org/wiki/Rule_110
 ;;; if this fails we are no longer turing complete :(
 
-(load "sly-lib/macros1.sly")
+(require "sly-lib/base.sly")
 
 ;;; NOTE: keep for historical reasons
 ;;; TODO: Need to do more research to figure out exactly why this is happening.

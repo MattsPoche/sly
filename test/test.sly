@@ -1,3 +1,5 @@
+(require "sly-lib/base.sly")
+
 (define foo 69)
 (define bar 420)
 (set! foo (+ foo bar))

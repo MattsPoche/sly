@@ -146,8 +146,14 @@ sly_display(sly_value v, int lit)
 		}
 	} else if (syntax_p(v)) {
 		printf("#<syntax ");
-		sly_display(syntax_to_datum(v), lit);
-		printf(">");
+		syntax *s = GET_PTR(v);
+		sly_display(s->datum, lit);
+		printf(" (%u) ", s->context);
+		if (void_p(s->env)) {
+			printf(">");
+		} else {
+			printf(" *>");
+		}
 	} else if (prototype_p(v)) {
 		printf("#<prototype@%p>", GET_PTR(v));
 	} else if (vector_p(v)) {
@@ -161,14 +167,18 @@ sly_display(sly_value v, int lit)
 	} else if (dictionary_p(v)) {
 		vector *vec = GET_PTR(v);
 		printf("#dict(");
-		for (size_t i = 0; i < vec->cap; ++i) {
-			sly_value v = vec->elems[i];
-			if (!slot_is_free(v)) {
-				sly_display(vec->elems[i], 1);
-				printf(" ");
+		if (vec->cap) {
+			for (size_t i = 0; i < vec->cap; ++i) {
+				sly_value v = vec->elems[i];
+				if (!slot_is_free(v)) {
+					sly_display(vec->elems[i], 1);
+					printf(" ");
+				}
 			}
+			printf("\b)");
+		} else {
+			printf(")");
 		}
-		printf("\b)");
 	} else if (closure_p(v)) {
 		printf("#<closure@%p>", GET_PTR(v));
 		closure *clos = GET_PTR(v);
@@ -1044,7 +1054,7 @@ make_syntax(Sly_State *ss, token tok, sly_value datum)
 	stx->tok = tok;
 	stx->datum = datum;
 	stx->context = 0;
-	stx->lex_info = make_vector(ss, 0, 4);
+	stx->env = SLY_VOID;
 	return (sly_value)stx;
 }
 

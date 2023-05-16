@@ -1,4 +1,4 @@
-(load "sly-lib/macros1.sly")
+(require "sly-lib/base.sly")
 
 (define (iter-range start end step)
   (let ((i start))

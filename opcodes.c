@@ -83,6 +83,18 @@ dis(INSTR ins, sly_value si)
 		u8 c = GET_C(instr);
 		printf("(SETUPDICT %d %d %d)%n", a, b, c, &pad);
 	} break;
+	case OP_DICTREF: {
+		u8 a = GET_A(instr);
+		u8 b = GET_B(instr);
+		u8 c = GET_C(instr);
+		printf("(DICTREF %d %d %d)%n", a, b, c, &pad);
+	} break;
+	case OP_DICTSET: {
+		u8 a = GET_A(instr);
+		u8 b = GET_B(instr);
+		u8 c = GET_C(instr);
+		printf("(DICTSET %d %d %d)%n", a, b, c, &pad);
+	} break;
 	case OP_JMP: {
 		u64 a = GET_Ax(instr);
 		printf("(JMP %lu)%n", a, &pad);

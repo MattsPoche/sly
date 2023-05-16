@@ -1,4 +1,4 @@
-(load "sly-lib/syntax-case.sly")
+(require "sly-lib/base.sly")
 
 (displayln
  (syntax->datum

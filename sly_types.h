@@ -211,7 +211,7 @@ enum syntax_context {
 typedef struct _syntax {
 	OBJ_HEADER;
 	token tok;
-	sly_value lex_info;  // <vector> each slot corrisponds to phase level
+	sly_value env;
 	sly_value datum;	 // and contains it's scopes.
 	sly_value alias;
 	u32 context;

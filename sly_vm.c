@@ -231,6 +231,20 @@ vm_run(Sly_State *ss, int run_gc)
 			sly_value dict = get_upval(a);
 			dictionary_set(ss, dict, get_reg(b), get_reg(c));
 		} break;
+		case OP_DICTREF: {
+			u8 a = GET_A(instr);
+			u8 b = GET_B(instr);
+			u8 c = GET_C(instr);
+			sly_value dict = get_reg(b);
+			set_reg(a, dictionary_ref(dict, get_reg(c)));
+		} break;
+		case OP_DICTSET: {
+			u8 a = GET_A(instr);
+			u8 b = GET_B(instr);
+			u8 c = GET_C(instr);
+			sly_value dict = get_reg(a);
+			dictionary_set(ss, dict, get_reg(b), get_reg(c));
+		} break;
 		case OP_JMP: {
 			u64 a = GET_Ax(instr);
 			ss->frame->pc = a;

@@ -115,7 +115,7 @@ static void
 traverse_syntax(Sly_State *ss, syntax *stx)
 {
 	mark_gray_safe(ss, stx->datum);
-	mark_gray(ss, GET_PTR(stx->lex_info));
+	mark_gray(ss, GET_PTR(stx->env));
 }
 
 static void

@@ -14,6 +14,8 @@ enum opcode {
 	OP_SETUPVAL,	// iAB  | U[A] := R[B]
 	OP_GETUPDICT,	// iABC | R[A] := <dictionary> U[B][R[C]]
 	OP_SETUPDICT,	// iABC | <dictionary> U[A][R[B]] := R[C]
+	OP_DICTREF,	    // iABC | R[A] := <dictionary> R[B][R[C]]
+	OP_DICTSET,  	// iABC | <dictionary> R[A][R[B]] := R[C]
 	OP_JMP,			// iAx  | PC := <u64> Ax
 	OP_FJMP,		// iABx | if R[A] == #f then PC := Bx
 	OP_CALL,		// iAB  | R[A] := (R[A] R[A+1] ... R[A+B-1])

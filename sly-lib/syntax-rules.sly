@@ -8,3 +8,8 @@
          (syntax-case form (k ...)
            ((dummy . pattern) #'template)
            ...)))))
+
+(define exported-syntax
+  (list (cons 'syntax-rules syntax-rules)))
+
+(list '() exported-syntax) ;; exported module

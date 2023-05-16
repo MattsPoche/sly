@@ -1,4 +1,4 @@
-(load "sly-lib/base.sly")
+(require "sly-lib/base.sly")
 
 (displayln `foo)
 (displayln `(foo bar))

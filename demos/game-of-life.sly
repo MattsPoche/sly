@@ -1,4 +1,4 @@
-(load "sly-lib/macros1.sly")
+(require "sly-lib/base.sly")
 
 (define rows 20)    ;; constant
 (define columns 50) ;; constant

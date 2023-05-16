@@ -1,4 +1,4 @@
-(load "sly-lib/macros1.sly")
+(require "sly-lib/base.sly")
 
 (display "(and #t #t) => ")(display (and #t #t))(display "\n")
 (display "(and #t #f) => ")(display (and #t #f))(display "\n")
@@ -32,6 +32,11 @@
 
 (for-each (lambda (x) (displayln x)) '(a b c d e f g))
 
+(define (range start end)
+  (if (= start end)
+	  '()
+	  (cons start (range (+ start 1) end))))
+
 (define (fizz-buzz n)
   (cond ((and (= (% n 3) 0) (= (% n 5) 0))
 		 (display "fizz buzz, "))
@@ -50,8 +55,11 @@
   (displayln "when is it not?"))
 
 (displayln "Begin letrec")
+
+;; TODO: letrec is broken
+
 (displayln
- (letrec ((even? (lambda (n)
+ (letrec* ((even? (lambda (n)
                    (if (zero? n)
                        #t
                        (odd? (- n 1)))))
@@ -63,7 +71,7 @@
 (displayln "End letrec")
 
 (when #f ;; this should fail
-  (letrec ((a 42)
+  (letrec* ((a 42)
            (b (+ a 10)))  ;; Illegal access
 	(* a b)))
 

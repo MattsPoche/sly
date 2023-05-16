@@ -239,11 +239,24 @@ init_symtable(Sly_State *ss, sly_value symtable)
 }
 
 static void
-apply_context(sly_value form, int ctx)
+toggle_context(sly_value form, int ctx)
 {
 	if (syntax_p(form)) {
 		syntax *stx = GET_PTR(form);
 		stx->context ^= ctx;
+	}
+	if (pair_p(form) || syntax_pair_p(form)) {
+		toggle_context(CAR(form), ctx);
+		toggle_context(CDR(form), ctx);
+	}
+}
+
+static void
+apply_context(sly_value form, int ctx)
+{
+	if (syntax_p(form)) {
+		syntax *stx = GET_PTR(form);
+		stx->context = FLAG_ON(stx->context, ctx);
 	}
 	if (pair_p(form) || syntax_pair_p(form)) {
 		apply_context(CAR(form), ctx);
@@ -491,12 +504,25 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 		union symbol_properties st_prop;
 		st_prop.v = symbol_lookup_props(ss, datum, &level, &uplist);
 		if (void_p(st_prop.v)) {
-			printf("Undefined symbol '");
-			sly_display(datum, 1);
-			printf("\n");
 			syntax *s = GET_PTR(form);
-			printf("%s:%d:%d\n", ss->file_path, s->tok.ln, s->tok.cn);
-			sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol (479)");
+			if (s->env) {
+				closure *clos = GET_PTR(s->env);
+				sly_value g = upvalue_get(vector_ref(clos->upvals, 0));
+				sly_value entry = dictionary_entry_ref(g, datum);
+				sly_assert(!slot_is_free(entry), "Error undefined symbol");
+				int env = intern_constant(ss, g);
+				int id  = intern_constant(ss, datum);
+				vector_append(ss, proto->code, iABx(OP_LOADK, reg, env, src_info));
+				vector_append(ss, proto->code, iABx(OP_LOADK, reg+1, id, src_info));
+				vector_append(ss, proto->code, iABC(OP_DICTREF, reg, reg, reg+1, src_info));
+				return reg;
+			} else {
+				printf("Undefined symbol '");
+				sly_display(datum, 1);
+				printf("\n");
+				printf("%s:%d:%d\n", ss->file_path, s->tok.ln, s->tok.cn);
+				sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol (479)");
+			}
 		}
 /* TODO: Fix this
 		if (cc->cscope->level == level && st_prop.p.isundefined) {
@@ -562,6 +588,7 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 	return reg;
 }
 
+#if 0
 static int
 apply_alias(sly_value id, sly_value aliases)
 {
@@ -654,6 +681,7 @@ sanitize(Sly_State *ss, sly_value form, sly_value env, sly_value aliases)
 		}
 	}
 }
+#endif
 
 static int
 comp_funcall(Sly_State *ss, sly_value form, int reg)
@@ -834,9 +862,74 @@ forward_scan_block(Sly_State *ss, sly_value form)
 	}
 }
 
+static void
+substitute(Sly_State *ss, sly_value form, sly_value aliases, sly_value env)
+{
+	if (pair_p(form) || syntax_pair_p(form)) {
+		substitute(ss, CAR(form), aliases, env);
+		substitute(ss, CDR(form), aliases, env);
+	} else if (identifier_p(form)) {
+		syntax *s = GET_PTR(form);
+		if (s->env == env) {
+			sly_value entry = dictionary_entry_ref(aliases, s->datum);
+			if (!slot_is_free(entry)) {
+				s->alias = s->datum;
+				s->datum = cdr(entry);
+			}
+		}
+	}
+}
+
+
+static void
+gen_aliases(Sly_State *ss, sly_value vars, sly_value aliases)
+{
+	if (pair_p(vars) || syntax_pair_p(vars)) {
+		while (!null_p(vars)) {
+			if (identifier_p(CAR(vars))) {
+				dictionary_set(ss, aliases, syntax_to_datum(CAR(vars)), gensym(ss));
+			}
+			vars = CDR(vars);
+		}
+	}
+	if (identifier_p(vars)) {
+		dictionary_set(ss, aliases, syntax_to_datum(vars), gensym(ss));
+	}
+}
+
+static void
+sanitize(Sly_State *ss, sly_value form, sly_value env, sly_value aliases)
+{
+	if (pair_p(form) || syntax_pair_p(form)) {
+		if (identifier_p(CAR(form))) {
+			syntax *s = GET_PTR(CAR(form));
+			if ((symbol_eq(s->datum, cstr_to_symbol("define"))
+				 || symbol_eq(s->datum, cstr_to_symbol("lambda")))
+				&& !null_p(CDR(form))) {
+				gen_aliases(ss, CAR(CDR(form)), aliases);
+				sanitize(ss, CDR(CDR(form)), env, aliases);
+			} else {
+				sanitize(ss, CAR(form), env, aliases);
+				sanitize(ss, CDR(form), env, aliases);
+			}
+		} else {
+			sanitize(ss, CAR(form), env, aliases);
+			sanitize(ss, CDR(form), env, aliases);
+		}
+	} else if (identifier_p(form)) {
+		syntax *s = GET_PTR(form);
+		if ((s->context & ctx_macro_body)
+			&& void_p(s->env)) {
+			s->env = env;
+			s->context ^= ctx_macro_body;
+		}
+	}
+}
+
 static sly_value
 expand(Sly_State *ss, sly_value form)
-{
+{ /* mscope := ((macro . aliases) ...)
+   */
 	if (syntax_pair_p(form)) {
 		sly_value head = CAR(form);
 		if (identifier_p(head)) {
@@ -849,17 +942,18 @@ expand(Sly_State *ss, sly_value form)
 			sly_value macro = lookup_macro(ss, s->datum);
 			if (!void_p(macro)) {
 				/* call macro */
+				sly_value out, in = form;
 				sly_value call_list = make_vector(ss, 2, 2);
 				vector_set(call_list, 0, macro);
-				apply_context(form, ctx_macro_body);
-				vector_set(call_list, 1, form);
-				form = call_closure(ss, call_list);
-				apply_context(form, ctx_macro_body);
-				closure *clos = GET_PTR(macro);
-				sly_value env = upvalue_get(vector_ref(clos->upvals, 0));
+				vector_set(call_list, 1, in);
+				out = call_closure(ss, call_list);
+				apply_context(out, ctx_macro_body);
+				toggle_context(in, ctx_macro_body);
 				sly_value aliases = make_dictionary(ss);
-				sanitize(ss, form, env, aliases);
-				return expand(ss, form);
+				sanitize(ss, out, macro, aliases);
+				out = expand(ss, out);
+				substitute(ss, out, aliases, macro);
+				return out;
 			}
 		}
 		syntax *s = GET_PTR(form);

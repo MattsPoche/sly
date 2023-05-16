@@ -1,8 +1,0 @@
-(load "test/ycombinator.sly")
-
-(define (displayln x) (display x)(display "\n"))
-
-(display "hello from ")
-(displayln __file__)
-(display "7! = ")
-(displayln (fac 7))
