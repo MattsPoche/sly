@@ -563,6 +563,21 @@ vector_append(Sly_State *ss, sly_value v, sly_value value)
 	vec->elems[vec->len++] = value;
 }
 
+void
+vector_remove(sly_value v, size_t idx)
+{
+	sly_assert(vector_p(v), "Type Error: Expected vector");
+	vector *vec = GET_PTR(v);
+	sly_assert(idx < vec->len,
+			   "Error index out of range (vector_remove)");
+	if (idx + 1 < vec->len) {
+		for (size_t i = idx + 1; i < vec->len; ++i) {
+			vec->elems[i-1] = vec->elems[i];
+		}
+	}
+	vec->len--;
+}
+
 sly_value
 vector_pop(Sly_State *ss, sly_value v)
 {
@@ -1024,9 +1039,43 @@ sly_eq(sly_value o1, sly_value o2)
 	return 0;
 }
 
+static int
+contains(sly_value xs, sly_value x)
+{
+	if (null_p(xs)) {
+		return 0;
+	}
+	if (sly_equal(car(xs), x)) {
+		return 1;
+	}
+	return contains(cdr(xs), x);
+}
+
+static int
+is_subset(sly_value xs, sly_value ys)
+{
+	if (null_p(xs)) {
+		return 1;
+	}
+	if (null_p(ys)) {
+		return 0;
+	}
+	if (contains(ys, car(xs))) {
+		return is_subset(cdr(xs), ys);
+	}
+	return 0;
+}
+
 int
 sly_equal(sly_value o1, sly_value o2)
 {
+	if (syntax_p(o1) && syntax_p(o2)) {
+		syntax *s1 = GET_PTR(o1);
+		syntax *s2 = GET_PTR(o2);
+		return ((list_len(s1->scope_set) == list_len(s2->scope_set)
+				 && is_subset(s1->scope_set, s2->scope_set))
+				&& sly_equal(s1->datum, s2->datum));
+	}
 	if (symbol_p(o1) && symbol_p(o2)) {
 		return symbol_eq(o1, o2);
 	}
@@ -1054,6 +1103,7 @@ make_syntax(Sly_State *ss, token tok, sly_value datum)
 	stx->tok = tok;
 	stx->datum = datum;
 	stx->context = 0;
+	stx->scope_set = SLY_NULL;
 	stx->env = SLY_VOID;
 	return (sly_value)stx;
 }

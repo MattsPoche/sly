@@ -212,7 +212,8 @@ typedef struct _syntax {
 	OBJ_HEADER;
 	token tok;
 	sly_value env;
-	sly_value datum;	 // and contains it's scopes.
+	sly_value scope_set;
+	sly_value datum;
 	sly_value alias;
 	u32 context;
 } syntax;
@@ -252,6 +253,7 @@ void vector_set(sly_value v, size_t idx, sly_value value);
 size_t vector_len(sly_value v);
 void vector_append(Sly_State *ss, sly_value v, sly_value value);
 sly_value vector_pop(Sly_State *ss, sly_value v);
+void vector_remove(sly_value v, size_t idx);
 sly_value vector_discard_values(Sly_State *ss, sly_value v);
 sly_value make_uninterned_symbol(Sly_State *ss, char *cstr, size_t len);
 sly_value make_symbol(Sly_State *ss, char *cstr, size_t len);

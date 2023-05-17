@@ -114,8 +114,10 @@ traverse_closure(Sly_State *ss, closure *clos)
 static void
 traverse_syntax(Sly_State *ss, syntax *stx)
 {
+	mark_gray_safe(ss, stx->scope_set);
 	mark_gray_safe(ss, stx->datum);
-	mark_gray(ss, GET_PTR(stx->env));
+	mark_gray_safe(ss, stx->env);
+	mark_gray_safe(ss, stx->alias);
 }
 
 static void

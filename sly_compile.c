@@ -120,7 +120,7 @@ static sly_value load_file(Sly_State *ss, sly_value form);
 static void resolve_requires(Sly_State *ss, sly_value form);
 static void require(Sly_State *ss, sly_value form);
 static void forward_scan_block(Sly_State *ss, sly_value form);
-static sly_value expand(Sly_State *ss, sly_value form);
+//static sly_value expand(Sly_State *ss, sly_value form);
 
 static void
 define_global_var(Sly_State *ss, sly_value var, sly_value val)
@@ -167,6 +167,7 @@ symbol_lookup_props(Sly_State *ss, sly_value sym, u32 *level, sly_value *uplist)
 	return SLY_VOID;
 }
 
+#if 0
 static sly_value
 lookup_macro(Sly_State *ss, sly_value sym)
 {
@@ -181,6 +182,7 @@ lookup_macro(Sly_State *ss, sly_value sym)
 	}
 	return SLY_VOID;
 }
+#endif
 
 static size_t
 intern_in_vector(Sly_State *ss, sly_value vec, sly_value value)
@@ -235,32 +237,6 @@ init_symtable(Sly_State *ss, sly_value symtable)
 		sly_value sym = make_symbol(ss, keywords(i), strlen(keywords(i)));
 		dictionary_set(ss, symtable, sym, prop.v);
 		kw_symbols[i] = sym;
-	}
-}
-
-static void
-toggle_context(sly_value form, int ctx)
-{
-	if (syntax_p(form)) {
-		syntax *stx = GET_PTR(form);
-		stx->context ^= ctx;
-	}
-	if (pair_p(form) || syntax_pair_p(form)) {
-		toggle_context(CAR(form), ctx);
-		toggle_context(CDR(form), ctx);
-	}
-}
-
-static void
-apply_context(sly_value form, int ctx)
-{
-	if (syntax_p(form)) {
-		syntax *stx = GET_PTR(form);
-		stx->context = FLAG_ON(stx->context, ctx);
-	}
-	if (pair_p(form) || syntax_pair_p(form)) {
-		apply_context(CAR(form), ctx);
-		apply_context(CDR(form), ctx);
 	}
 }
 
@@ -588,101 +564,6 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 	return reg;
 }
 
-#if 0
-static int
-apply_alias(sly_value id, sly_value aliases)
-{
-	sly_value sym = syntax_to_datum(id);
-	syntax *stx = GET_PTR(id);
-	sly_value entry = dictionary_entry_ref(aliases, sym);
-	if (slot_is_free(entry)) return 0;
-	sly_value alias = cdr(entry);
-	stx->alias = sym;
-	stx->datum = alias;
-	return 1;
-}
-
-static void
-gen_aliases(Sly_State *ss, sly_value form, sly_value aliases)
-{
-	if (null_p(form)) return;
-	if (syntax_pair_p(form)) {
-		while (!null_p(form)) {
-			sly_value id = CAR(form);
-			if (identifier_p(id)) {
-				syntax *s = GET_PTR(id);
-				if (s->context & ctx_macro_body) {
-					sly_value alias = gensym(ss);
-					dictionary_set(ss, aliases, syntax_to_datum(id), alias);
-					apply_alias(id, aliases);
-				}
-			} else {
-				apply_context(id, ctx_macro_body);
-				/* sly_display(id, 1); */
-				/* printf("\n"); */
-				/* sly_assert(identifier_p(id), */
-				/* 		   "Error Expected Identifier in binding form"); */
-			}
-			form = CDR(form);
-		}
-	} else {
-		sly_value id = form;
-		syntax *s = GET_PTR(id);
-		if (s->context & ctx_macro_body) {
-			sly_value alias = gensym(ss);
-			dictionary_set(ss, aliases, syntax_to_datum(id), alias);
-			apply_alias(id, aliases);
-		}
-	}
-}
-
-static void
-sanitize(Sly_State *ss, sly_value form, sly_value env, sly_value aliases)
-{ /* To keep macros hygenic, variable bindings introduced
-   * in expansions are replaced by gensyms.
-   */
-	if (syntax_pair_p(form) && identifier_p(CAR(form))) {
-		syntax *s = GET_PTR(CAR(form));
-		sly_value sym = s->datum;
-		if (symbol_eq(sym, make_symbol(ss, "lambda", 6))
-			|| symbol_eq(sym, make_symbol(ss, "define", 6))) {
-			form = CDR(form);
-			s = NULL;
-			if (pair_p(CAR(form)) || syntax_pair_p(CAR(form))) {
-				s = GET_PTR(CAR(CAR(form)));
-			} else if (identifier_p(CAR(form))) {
-				s = GET_PTR(CAR(form));
-			}
-			if (s != NULL && (s->context & ctx_macro_body)) {
-				gen_aliases(ss, CAR(form), aliases);
-			}
-			sanitize(ss, CDR(form), env, aliases);
-		} else {
-			sanitize(ss, CAR(form), env, aliases);
-			sanitize(ss, CDR(form), env, aliases);
-		}
-	} else if (syntax_pair_p(form) || pair_p(form)) {
-		sanitize(ss, CAR(form), env, aliases);
-		sanitize(ss, CDR(form), env, aliases);
-	} else if (identifier_p(form)) {
-		syntax *s = GET_PTR(form);
-		if (s->context & ctx_macro_body) {
-			if (!apply_alias(form, aliases)) {
-				union symbol_properties st_prop = {0};
-				st_prop.v = symbol_lookup_props(ss, s->datum, NULL, NULL);
-				if (void_p(st_prop.v)) {
-					sly_value entry = dictionary_entry_ref(env, s->datum);
-					if (!slot_is_free(entry)) {
-						s->alias = s->datum;
-						s->datum = cdr(entry);
-					}
-				}
-			}
-		}
-	}
-}
-#endif
-
 static int
 comp_funcall(Sly_State *ss, sly_value form, int reg)
 {
@@ -862,75 +743,106 @@ forward_scan_block(Sly_State *ss, sly_value form)
 	}
 }
 
-static void
-substitute(Sly_State *ss, sly_value form, sly_value aliases, sly_value env)
+#if 0
+static u64
+make_scope_color(void)
 {
-	if (pair_p(form) || syntax_pair_p(form)) {
-		substitute(ss, CAR(form), aliases, env);
-		substitute(ss, CDR(form), aliases, env);
-	} else if (identifier_p(form)) {
-		syntax *s = GET_PTR(form);
-		if (s->env == env) {
-			sly_value entry = dictionary_entry_ref(aliases, s->datum);
-			if (!slot_is_free(entry)) {
-				s->alias = s->datum;
-				s->datum = cdr(entry);
-			}
-		}
-	}
+	static u64 id = 0;
+	u64 i = id++;
+	return i;
 }
 
-
-static void
-gen_aliases(Sly_State *ss, sly_value vars, sly_value aliases)
+static i64
+set_contains(sly_value vec, u64 color)
 {
-	if (pair_p(vars) || syntax_pair_p(vars)) {
-		while (!null_p(vars)) {
-			if (identifier_p(CAR(vars))) {
-				dictionary_set(ss, aliases, syntax_to_datum(CAR(vars)), gensym(ss));
-			}
-			vars = CDR(vars);
+	size_t i, len = vector_len(vec);
+	for (i = 0; i < len; ++i) {
+		if (vector_ref(vec, i) == color) {
+			return (i64)i;
 		}
 	}
-	if (identifier_p(vars)) {
-		dictionary_set(ss, aliases, syntax_to_datum(vars), gensym(ss));
+	return -1;
+}
+
+static void
+set_add_color(Sly_State *ss, sly_value vec, u64 color)
+{
+	if (set_contains(vec, color) == -1) {
+		vector_append(ss, vec, color);
 	}
 }
 
 static void
-sanitize(Sly_State *ss, sly_value form, sly_value env, sly_value aliases)
+set_flip_color(Sly_State *ss, sly_value vec, u64 color)
 {
-	if (pair_p(form) || syntax_pair_p(form)) {
-		if (identifier_p(CAR(form))) {
-			syntax *s = GET_PTR(CAR(form));
-			if ((symbol_eq(s->datum, cstr_to_symbol("define"))
-				 || symbol_eq(s->datum, cstr_to_symbol("lambda")))
-				&& !null_p(CDR(form))) {
-				gen_aliases(ss, CAR(CDR(form)), aliases);
-				sanitize(ss, CDR(CDR(form)), env, aliases);
-			} else {
-				sanitize(ss, CAR(form), env, aliases);
-				sanitize(ss, CDR(form), env, aliases);
-			}
-		} else {
-			sanitize(ss, CAR(form), env, aliases);
-			sanitize(ss, CDR(form), env, aliases);
-		}
-	} else if (identifier_p(form)) {
-		syntax *s = GET_PTR(form);
-		if ((s->context & ctx_macro_body)
-			&& void_p(s->env)) {
-			s->env = env;
-			s->context ^= ctx_macro_body;
-		}
+	i64 idx;
+	if ((idx = set_contains(vec, color)) == -1) {
+		vector_append(ss, vec, color);
+	} else {
+		vector_remove(vec, idx);
+	}
+}
+
+static void
+syntax_add_scope(Sly_State *ss, sly_value stx, u64 color)
+{
+	if (pair_p(stx) || syntax_pair_p(stx)) {
+		syntax_add_scope(ss, CAR(stx), color);
+		syntax_add_scope(ss, CDR(stx), color);
+	} else if (syntax_p(stx)) {
+		syntax *s = GET_PTR(stx);
+		set_add_color(ss, s->scope_set, color);
+	}
+}
+
+static void
+syntax_flip_scope(Sly_State *ss, sly_value stx, u64 color)
+{
+	if (pair_p(stx) || syntax_pair_p(stx)) {
+		syntax_flip_scope(ss, CAR(stx), color);
+		syntax_flip_scope(ss, CDR(stx), color);
+	} else if (syntax_p(stx)) {
+		syntax *s = GET_PTR(stx);
+		set_flip_color(ss, s->scope_set, color);
 	}
 }
 
 static sly_value
+apply_macro(Sly_State *ss, sly_value macro, sly_value form)
+{
+	sly_value transformed;
+	u64 intro_scope = make_scope_color();
+	syntax_add_scope(ss, form, intro_scope);
+	{ /* call macro */
+		sly_value call_list = make_vector(ss, 2, 2);
+		vector_set(call_list, 0, macro);
+		vector_set(call_list, 1, form);
+		transformed = call_closure(ss, call_list);
+	}
+	syntax_flip_scope(ss, transformed, intro_scope);
+	return transformed;
+}
+
+static sly_value
+expand_lambda(Sly_State *ss, sly_value form)
+{
+	UNUSED(ss);
+	UNUSED(form);
+	return SLY_VOID;
+}
+
+static sly_value
+expand_define(Sly_State *ss, sly_value form)
+{
+	UNUSED(ss);
+	UNUSED(form);
+	return SLY_VOID;
+}
+
+static sly_value
 expand(Sly_State *ss, sly_value form)
-{ /* mscope := ((macro . aliases) ...)
-   */
-	if (syntax_pair_p(form)) {
+{
+	if (pair_p(form) || syntax_pair_p(form)) {
 		sly_value head = CAR(form);
 		if (identifier_p(head)) {
 			syntax *s = GET_PTR(head);
@@ -938,37 +850,24 @@ expand(Sly_State *ss, sly_value form)
 			if (symbol_eq(s->datum, cstr_to_symbol("quote"))
 				|| symbol_eq(s->datum, cstr_to_symbol("syntax-quote"))) {
 				return form;
-			}
-			sly_value macro = lookup_macro(ss, s->datum);
-			if (!void_p(macro)) {
-				/* call macro */
-				sly_value out, in = form;
-				sly_value call_list = make_vector(ss, 2, 2);
-				vector_set(call_list, 0, macro);
-				vector_set(call_list, 1, in);
-				out = call_closure(ss, call_list);
-				apply_context(out, ctx_macro_body);
-				toggle_context(in, ctx_macro_body);
-				sly_value aliases = make_dictionary(ss);
-				sanitize(ss, out, macro, aliases);
-				out = expand(ss, out);
-				substitute(ss, out, aliases, macro);
-				return out;
+			} else if (symbol_eq(s->datum, cstr_to_symbol("lambda"))) {
+				return expand_lambda(ss, form);
+			} else if (symbol_eq(s->datum, cstr_to_symbol("define"))) {
+				return expand_define(ss, form);
+			} else {
+				sly_value macro = lookup_macro(ss, s->datum);
+				if (!void_p(macro)) {
+					expand(apply_macro(ss, macro, form));
+				}
 			}
 		}
-		syntax *s = GET_PTR(form);
-		s->datum = cons(ss,
-						expand(ss, car(s->datum)),
-						expand(ss, cdr(s->datum)));
-		return form;
-	}
-	if (pair_p(form)) {
 		return cons(ss,
-					expand(ss, car(form)),
-					expand(ss, cdr(form)));
+					expand(ss, CAR(form)),
+					expand(ss, CDR(form)))
 	}
 	return form;
 }
+#endif
 
 static void
 resolve_requires(Sly_State *ss, sly_value form)
@@ -1282,7 +1181,7 @@ sly_compile(Sly_State *ss, sly_value ast)
 		});
 	prototype *proto = GET_PTR(ss->cc->cscope->proto);
 	resolve_requires(ss, ast);
-	ast = expand(ss, ast);
+	//ast = expand(ss, ast);
 	forward_scan_block(ss, ast);
 	int r = comp_expr(ss, ast, 0);
 	vector_append(ss, proto->code, iA(OP_RETURN, r, -1));

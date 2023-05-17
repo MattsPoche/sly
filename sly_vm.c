@@ -92,8 +92,13 @@ funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall)
 			}
 			vector_set(nframe->R, proto->nargs, vargs);
 		} else {
-			sly_assert(nargs == proto->nargs,
-					   "Error wrong number of arguments (188)");
+			if (nargs != proto->nargs) {
+				sly_display(ss->frame->clos, 1);
+				printf("\n");
+				sly_display(val, 1);
+				printf("\n");
+				sly_assert(0, "Error wrong number of arguments (188)");
+			}
 		}
 		for (size_t i = 0; i < proto->nargs; ++i) {
 			vector_set(nframe->R, i, get_reg(a + 1 + i));

@@ -37,6 +37,21 @@
 		 (f x (fold-right f z xs)))
 	   (car xs) (cdr xs))))
 
+(define (contains xs x)
+  (if (null? xs)
+	  #f
+	  (if (equal? (car xs) x)
+		  #t
+		  (contains (cdr xs) x))))
+
+(define (remove xs x)
+  (if (null? xs)
+	  xs
+	  (if (equal? (car xs) x)
+		  (cdr xs)
+		  (cons (car xs)
+				(remove (cdr xs) x)))))
+
 (define (append xs . rest)
   (define (helper xs rest)
 	  (if (pair? rest)
@@ -70,6 +85,22 @@
    (lambda (x c) (if (equal? x val) (+ c 1) c))
    0 xs))
 
+(define (argmax f xs)
+  (define max 0)
+  (define x 0)
+  (define item '())
+  (define (loop f xs)
+	(if (null? xs)
+		item
+		(begin (set! x (f (car xs)))
+			   (if (> x max)
+				   (begin
+					 (set! max x)
+					 (set! item (car xs)))
+				   (void))
+			   (loop f (cdr xs)))))
+  (loop f xs))
+
 (define (*heads* xs)
   (if (null? xs)
 	  '()
@@ -93,6 +124,41 @@
 		(apply f (*heads* xs))
 		(apply for-each f (*tails* xs)))))
 
+(define (set-add xs x)
+  (if (contains xs x)
+	  xs
+	  (cons x xs)))
+
+(define (set-union xs ys)
+  (if (null? ys)
+	  xs
+	  (if (null? xs)
+		  ys
+		  (set-union (set-add xs (car ys)) (cdr ys)))))
+
+(define (subset? xs ys)
+  (if (null? xs)
+	  #t
+	  (if (null? ys)
+		  #f
+		  (if (contains ys (car xs))
+			  (subset? (cdr xs) ys)
+			  #f))))
+
+(define (assoc-set xs key value)
+  (if (null? xs)
+	  (cons (cons key value) xs)
+	  (if (equal? (caar xs) key)
+		  (cons (cons key value) (cdr xs))
+		  (cons (car xs) (assoc-set (cdr xs) key value)))))
+
+(define (assoc-lookup xs key)
+  (if (null? xs)
+	  #f
+	  (if (equal? (caar xs) key)
+		  (cdar xs)
+		  (assoc-lookup (cdr xs) key))))
+
 
 ;; module exports
 (define exported-variables
@@ -107,6 +173,8 @@
 		(cons 'zero? zero?)
 		(cons 'fold-left fold-left)
 		(cons 'fold-right fold-right)
+		(cons 'contains contains)
+		(cons 'remove remove)
 		(cons 'append append)
 		(cons 'reverse reverse)
 		(cons 'last-pair last-pair)
@@ -115,7 +183,13 @@
 		(cons 'list-ref list-ref)
 		(cons 'length length)
 		(cons 'count count)
+		(cons 'argmax argmax)
 		(cons 'map map)
-		(cons 'for-each for-each)))
+		(cons 'for-each for-each)
+		(cons 'set-add set-add)
+		(cons 'set-union set-union)
+		(cons 'subset? subset?)
+		(cons 'assoc-set assoc-set)
+		(cons 'assoc-lookup assoc-lookup)))
 
 (list exported-variables '()) ;; exported module

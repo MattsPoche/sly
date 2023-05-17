@@ -1,0 +1,166 @@
+(require "sly-lib/list.sly")
+
+(define core-forms
+  (list 'define
+		'lambda
+		'quote
+		'syntax-quote
+		'set!
+		'begin
+		'if
+		'define-syntax
+		'call-with-continuation
+		'call/cc
+		'require))
+
+(define builtins
+  (list '+
+		'-
+		'*
+		'/
+		'%
+		'=
+		'<
+		'>
+		'<=
+		'>=
+		'/=
+		'not
+		'null?
+		'pair?
+		'list?
+		'boolean?
+		'number?
+		'integer?
+		'real?
+		'char?
+		'symbol?
+		'vector?
+		'byte-vector?
+		'string?
+		'dictionary?
+		'procedure?
+		'syntax?
+		'syntax-pair?
+		'identifier?
+		'identifier=?
+		'equal?
+		'eq?
+		'cons
+		'car
+		'cdr
+		'set-car!
+		'set-cdr!
+		'display
+		'gensym
+		'void
+		'string->symbol
+		'symbol->string
+		'syntax->datum
+		'syntax->list
+		'syntax
+		'syntax-scopes
+		'datum->syntax
+		'raw-syntax
+		'make-vector
+		'vector
+		'vector-ref
+		'vector-set!
+		'vector-length
+		'make-byte-vector
+		'byte-vector-ref
+		'byte-vector-set!
+		'byte-vector-length
+		'vector-length
+		'make-dictionary
+		'dictionary-ref
+		'dictionary-set!
+		'dictionary-has-key?
+		'list
+		'apply
+		'console-clear-screen
+		'raise-macro-exception))
+
+(define scope gensym)
+
+(define core-scope (scope))
+
+(define all-bindings '())
+
+(define (add-binding! id binding)
+  (set! all-bindings (assoc-set all-bindings id binding)))
+
+(for-each (lambda (sym)
+			(add-binding! (syntax sym (list core-scope)) sym))
+		  (set-union core-forms builtins))
+
+(define (adjust-scope s sc op)
+  (if (syntax? s)
+	  (syntax (syntax->datum s)
+			  (op (syntax-scopes s) sc))
+	  (if (list? s)
+		  (map (lambda (e)
+				 (displayln e)
+				 (adjust-scope e sc op)) s)
+		  s)))
+
+(define (set-flip s e)
+  (if (contains s e)
+	  (remove s e)
+	  (set-add s e)))
+
+(define (add-scope s sc)
+  (adjust-scope s sc set-add))
+
+(define (flip-scope s sc)
+  (adjust-scope s sc set-flip))
+
+(define (resolve id)
+  (define candidate-ids (find-all-matching-bindings id))
+  (define max-id (void))
+  (if (null? candidate-ids)
+	  #f
+	  (begin
+		(set! max-id (argmax (lambda (id) (length (syntax-scopes id)))
+							 candidate-ids))
+		(check-unambiguous max-id candidate-ids)
+		(assoc-lookup all-bindings max-id))))
+
+(define (find-all-matching-bindings id)
+  (fold-left (lambda (b xs)
+			   (define c-id (car b))
+			   (if (if (eq? (syntax->datum c-id) (syntax->datum id))
+					   (subset? (syntax-scopes c-id) (syntax-scopes id)) #f)
+				   (cons c-id xs)
+				   xs)) '() all-bindings))
+
+(define (check-unambiguous max-id candidate-ids)
+  ;; TODO: implement this
+  (void))
+
+(define (introduce s)
+  (add-scope s core-scope))
+
+(define variable (gensym))
+
+(define (empty-env) (make-dictionary))
+
+(define (expand s env)
+  (if (identifier? s)
+	  (expand-identifier s env)
+	  (if (if (pair? s) (identifier? (car s)) #f)
+		  (expand-id-application-form s env)
+		  (if (list? s)
+			  (expand-app s env)
+			  ;; error bad syntax
+			  s))))
+
+(define (expand-identifier s env)
+  (define binding (resolve s))
+  (if (not binding)
+	  (displayln "free variable")
+	  (if (contains builtins binding)
+		  s
+		  (if (contains core-forms binding)
+			  (displayln "bad syntax")
+;; TODO continue this

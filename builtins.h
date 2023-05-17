@@ -296,6 +296,15 @@ cequal_p(Sly_State *ss, sly_value args)
 }
 
 static sly_value
+ceq_p(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	sly_value v1 = vector_ref(args, 0);
+	sly_value v2 = vector_ref(args, 1);
+	return ctobool(v1 == v2);
+}
+
+static sly_value
 cnum_noteq(Sly_State *ss, sly_value args)
 {
 	vector_set(args, 0, cnum_eq(ss, args));
@@ -398,6 +407,27 @@ craw_syntax(Sly_State *ss, sly_value args)
 	s2->env = s2->env;
 	s2->context = s2->context;
 	return (sly_value)s2;
+}
+
+static sly_value
+csyntax(Sly_State *ss, sly_value args)
+{
+	sly_value datum = vector_ref(args, 0);
+	sly_value scope_set = vector_ref(args, 1);
+	sly_value stx = make_syntax(ss, (token){0}, datum);
+	syntax *s = GET_PTR(stx);
+	s->scope_set = scope_set;
+	return stx;
+}
+
+static sly_value
+csyntax_scopes(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	sly_value stx = vector_ref(args, 0);
+	sly_assert(syntax_p(stx), "Type Error expected syntax");
+	syntax *s = GET_PTR(stx);
+	return s->scope_set;
 }
 
 static sly_value
@@ -657,6 +687,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("identifier?", cidentifier_p, 1, 0);
 	ADD_BUILTIN("identifier=?", cidentifier_eq, 2, 0);
 	ADD_BUILTIN("equal?", cequal_p, 2, 0);
+	ADD_BUILTIN("eq?", ceq_p, 2, 0);
 	ADD_BUILTIN("cons", ccons, 2, 0);
 	ADD_BUILTIN("car", ccar, 1, 0);
 	ADD_BUILTIN("cdr", ccdr, 1, 0);
@@ -671,6 +702,8 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("syntax->list", csyntax_to_list, 1, 0);
 	ADD_BUILTIN("datum->syntax", cdatum_to_syntax, 2, 0);
 	ADD_BUILTIN("raw-syntax", craw_syntax, 1, 0);
+	ADD_BUILTIN("syntax", csyntax, 2, 0);
+	ADD_BUILTIN("syntax-scopes", csyntax_scopes, 1, 0);
 	ADD_BUILTIN("make-vector", cmake_vector, 1, 0);
 	ADD_BUILTIN("vector", cvector, 0, 1);
 	ADD_BUILTIN("vector-ref", cvector_ref, 2, 0);
