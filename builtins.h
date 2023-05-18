@@ -541,7 +541,16 @@ cdictionary_ref(Sly_State *ss, sly_value args)
 	UNUSED(ss);
 	sly_value dict = vector_ref(args, 0);
 	sly_value key = vector_ref(args, 1);
-	return dictionary_ref(dict, key);
+	sly_value vargs = vector_ref(args, 2);
+	sly_value dv = SLY_NULL;
+	if (!null_p(vargs)) {
+		dv = car(vargs);
+	}
+	sly_value entry = dictionary_entry_ref(dict, key);
+	if (slot_is_free(entry)) {
+		return dv;
+	}
+	return cdr(entry);
 }
 
 static sly_value
@@ -565,13 +574,6 @@ cdictionary_has_key(Sly_State *ss, sly_value args)
 	} else {
 		return SLY_TRUE;
 	}
-}
-
-static sly_value
-cget_modules(Sly_State *ss, sly_value args)
-{
-	UNUSED(args);
-	return dictionary_ref(ss->cc->globals, cstr_to_symbol("MODULES"));
 }
 
 static sly_value
@@ -715,10 +717,9 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("byte-vector-length", cbyte_vector_length, 1, 0);
 	ADD_BUILTIN("vector-length", cvector_length, 1, 0);
 	ADD_BUILTIN("make-dictionary", cmake_dictionary, 0, 1);
-	ADD_BUILTIN("dictionary-ref", cdictionary_ref, 2, 0);
+	ADD_BUILTIN("dictionary-ref", cdictionary_ref, 2, 1);
 	ADD_BUILTIN("dictionary-set!", cdictionary_set, 3, 0);
 	ADD_BUILTIN("dictionary-has-key?", cdictionary_has_key, 2, 0);
-	ADD_BUILTIN("*MODULES*", cget_modules, 0, 0);
 	ADD_BUILTIN("list", clist, 0, 1);
 	ADD_BUILTIN("apply", capply, 2, 1);
 	ADD_BUILTIN("console-clear-screen", cclear_screen, 0, 0);

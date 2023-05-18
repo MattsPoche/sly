@@ -34,12 +34,10 @@
 			(set! term* (list #'cons term* form))))
 	term*)
 
-  (define form* (cadr (syntax->list form)))
+  (define form* (cadr form))
   (if (pair? form*)
-	  (begin
-		(set! form* (fold-right transform '() form*))
-		(datum->syntax form form*))
-	  (datum->syntax form (list #'quote form*))))
+	  (fold-right transform '() form*)
+	  (list #'quote form*)))
 
 (define-syntax (syntax-quasiquote form)
   (define (qq term)

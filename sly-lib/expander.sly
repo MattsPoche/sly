@@ -1,4 +1,5 @@
 (require "sly-lib/list.sly")
+(require "sly-lib/quasiquote.sly")
 
 (define core-forms
   (list 'define
@@ -81,6 +82,11 @@
 		'console-clear-screen
 		'raise-macro-exception))
 
+(define macros
+  (list
+   (cons 'quasiquote quasiquote)
+   (cons 'syntax-quasiquote syntax-quasiquote)))
+
 (define scope gensym)
 
 (define core-scope (scope))
@@ -100,7 +106,6 @@
 			  (op (syntax-scopes s) sc))
 	  (if (list? s)
 		  (map (lambda (e)
-				 (displayln e)
 				 (adjust-scope e sc op)) s)
 		  s)))
 
@@ -145,6 +150,13 @@
 
 (define (empty-env) (make-dictionary))
 
+(define (env-extend env key value)
+  (dictionary-set! env key value)
+  env)
+
+(define (env-lookup env key)
+  (dictionary-ref env key #f))
+
 (define (expand s env)
   (if (identifier? s)
 	  (expand-identifier s env)
@@ -152,15 +164,141 @@
 		  (expand-id-application-form s env)
 		  (if (list? s)
 			  (expand-app s env)
-			  ;; error bad syntax
-			  s))))
+			  (if (null? s) s
+				  (displayln "error bad syntax (1)"))))))
 
 (define (expand-identifier s env)
   (define binding (resolve s))
+  (define v (void))
   (if (not binding)
 	  (displayln "free variable")
-	  (if (contains builtins binding)
-		  s
+	  (if (contains builtins binding) s
 		  (if (contains core-forms binding)
-			  (displayln "bad syntax")
-;; TODO continue this
+			  (displayln "error bad syntax (2)")
+			  (begin
+				(set! v (env-lookup env binding))
+				(if (eq? v variable) s
+					(if (not v)
+						(displayln "out of context")
+						(displayln "error bad syntax (3)"))))))))
+
+(define (expand-id-application-form s env)
+  (define binding (resolve (car s)))
+  (define v (void))
+  (if (equal? binding 'lambda)
+	  (expand-lambda s env)
+	  (if (equal? binding 'define)
+		  (expand-define s env)
+		  (if (equal? binding 'quote) s
+			  (if (equal? binding 'syntax-quote) s
+				  (begin
+					(set! v (env-lookup env binding))
+					(if (procedure? v)
+						(expand (apply-transformer v s) env)
+						(expand-app s env))))))))
+
+(define (apply-transformer t s)
+  (define intro-scope (scope))
+  (define intro-s (add-scope s intro-scope))
+  (define transformed-s  (introduce (t intro-s)))
+  (flip-scope transformed-s intro-scope))
+
+(define (expand-app s env)
+  (map (lambda (sub-s) (expand sub-s env))
+	   s))
+
+(define (add-arg-scope args sc)
+  (if (null? args) args
+	  (if (pair? args)
+		  (cons (add-scope (car args) sc)
+				(add-arg-scope (cdr args) sc))
+		  (add-scope args sc))))
+
+(define (add-arg-bindings args env)
+  (define binding (void))
+  (if (null? args) args
+	  (if (pair? args)
+		  (begin
+			(add-arg-bindings (car args) env)
+			(add-arg-bindings (cdr args) env))
+		  (begin
+			(set! binding (gensym))
+			(add-binding! args binding)
+			(env-extend env binding variable)))))
+
+(define (expand-lambda s env)
+  (define lambda-id (car s))
+  (define arg-ids (cadr s))
+  (define body (cddr s))
+  (define sc (scope))
+  (define ids (add-arg-scope arg-ids sc))
+  (add-arg-bindings ids env)
+  (define exp-body (expand (add-scope body sc)
+						   env))
+  (append (list lambda-id ids) exp-body))
+
+(define (expand-define s env)
+  (define define-id (car s))
+  (define lhs (cadr s))
+  (define rest (cddr s))
+  (define rhs (void))
+  (define binding (gensym))
+  (define scopes (syntax-scopes define-id))
+  (if (pair? lhs) ;; procedure define
+	  (begin
+		(set! rhs (expand (append (list (syntax 'lambda scopes) (cdr lhs)) rest) env))
+		(set! lhs (car lhs)))
+	  (if (identifier? lhs)
+		  (set! rhs (expand (car rest) env))
+		  (displayln "error bad syntax (4)")))
+  (add-binding! lhs binding)
+  (env-extend env binding variable)
+  (list define-id lhs rhs))
+
+(define (compile s)
+  (define r (void))
+  (if (null? s) s
+	  (if (identifier? s) (resolve s)
+		  (if (identifier? (car s))
+			  (begin
+				(set! r (resolve (car s)))
+				(if (equal? r 'lambda)
+					(compile-lambda s)
+					(if (equal? r 'quote) s
+						(if (equal? r 'syntax-quote) s
+							(map compile s)))))
+			  (map compile s)))))
+
+(define (resolve-args args)
+  (if (null? args) args
+	  (if (pair? args)
+		  (cons (resolve-args (car args))
+				(resolve-args (cdr args)))
+		  (resolve args))))
+
+(define (compile-lambda s)
+  (define lambda-id (car s))
+  (define ids (cadr s))
+  (define body (cddr s))
+  (append (list  lambda-id (resolve-args ids)) (compile body)))
+
+(define (begin-expand form)
+  (define env (empty-env))
+  (for-each (lambda (p)
+			  (add-binding! (syntax (car p) (list core-scope))
+							(car p))
+			  (env-extend env (car p) (cdr p)))
+			macros)
+  (define *form
+	(expand
+	 (introduce
+	  (syntax->list
+	   form))
+	 env))
+  (displayln (syntax->datum *form))
+  (datum->syntax form (compile *form)))
+
+(displayln (syntax->datum
+			(begin-expand #'(define (foo x y)
+							  (define result `(+ x y z))
+							  result))))
