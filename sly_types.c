@@ -1337,6 +1337,54 @@ dictionary_import(Sly_State *ss, sly_value dst, sly_value src)
 	}
 }
 
+sly_value
+dictionary_get_entries(Sly_State *ss, sly_value d)
+{
+	sly_assert(dictionary_p(d), "Type Error expected <dictionary>");
+	vector *dict = GET_PTR(d);
+	sly_value list = SLY_NULL;
+	sly_value entry;
+	for (size_t i = 0; i < dict->cap; ++i) {
+		entry = dict->elems[i];
+		if (!slot_is_free(entry)) {
+			list = cons(ss, entry, list);
+		}
+	}
+	return list;
+}
+
+sly_value
+dictionary_get_keys(Sly_State *ss, sly_value d)
+{
+	sly_assert(dictionary_p(d), "Type Error expected <dictionary>");
+	vector *dict = GET_PTR(d);
+	sly_value list = SLY_NULL;
+	sly_value entry;
+	for (size_t i = 0; i < dict->cap; ++i) {
+		entry = dict->elems[i];
+		if (!slot_is_free(entry)) {
+			list = cons(ss, car(entry), list);
+		}
+	}
+	return list;
+}
+
+sly_value
+dictionary_get_values(Sly_State *ss, sly_value d)
+{
+	sly_assert(dictionary_p(d), "Type Error expected <dictionary>");
+	vector *dict = GET_PTR(d);
+	sly_value list = SLY_NULL;
+	sly_value entry;
+	for (size_t i = 0; i < dict->cap; ++i) {
+		entry = dict->elems[i];
+		if (!slot_is_free(entry)) {
+			list = cons(ss, cdr(entry), list);
+		}
+	}
+	return list;
+}
+
 void
 close_upvalue(sly_value _uv)
 {

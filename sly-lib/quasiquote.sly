@@ -71,15 +71,12 @@
 			(set! term* (list #'cons term* form))))
 	term*)
 
-  (define form* (cadr (syntax->list form)))
+  (define form* (cadr form))
   (if (pair? form*)
-	  (begin
-		(set! form* (fold-right transform '() form*))
-		(datum->syntax form
-					   (list #'datum->syntax
-							 (list #'syntax-quote (raw-syntax form))
-							 form*)))
-	  (datum->syntax form (list #'syntax-quote form*))))
+	  (list #'datum->syntax
+			(list #'syntax-quote (car form))
+			(fold-right transform '() form*))
+	  (list #'syntax-quote form*)))
 
 (define exported-syntax
   (list (cons 'quasiquote quasiquote)

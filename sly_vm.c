@@ -129,7 +129,7 @@ funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall)
 		vector_set(ss->frame->R, cc->ret_slot, arg);
 	} else {
 		dis_all(ss->frame, 1);
-		printf("a = %d\n", a);
+		printf("pc :: %zu\n", ss->frame->pc);
 		sly_display(val, 1);
 		printf("\n");
 		sly_assert(0, "Type Error expected procedure");

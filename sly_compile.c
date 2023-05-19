@@ -887,6 +887,24 @@ resolve_requires(Sly_State *ss, sly_value form)
 	}
 }
 
+static sly_value
+expand(Sly_State *ss, sly_value globals, sly_value form)
+{
+	sly_value entry = dictionary_entry_ref(globals,
+										   cstr_to_symbol("expand"));
+	if (!slot_is_free(entry)) {
+		sly_value exp = cdr(entry);
+		sly_value vars = dictionary_get_keys(ss, ss->cc->globals);
+		sly_value macros = dictionary_get_entries(ss, ss->cc->cscope->macros);
+		sly_value call_list = make_vector(ss, 4, 4);
+		vector_set(call_list, 0, exp);
+		vector_set(call_list, 1, form);
+		vector_set(call_list, 2, vars);
+		vector_set(call_list, 3, macros);
+		form = call_closure(ss, call_list);
+	}
+	return form;
+}
 
 static sly_value
 load_file(Sly_State *ss, sly_value file_string)
@@ -916,6 +934,8 @@ load_file(Sly_State *ss, sly_value file_string)
 			builtins = cdr(builtins);
 		}
 	}
+	resolve_requires(ss, ast);
+	ast = expand(ss, globals, ast);
 	sly_compile(ss, ast);
 	sly_value clos = make_closure(ss, ss->proto);
 	{
@@ -943,6 +963,9 @@ require(Sly_State *ss, sly_value form)
 	 */
 	sly_value file_string = syntax_to_datum(CAR(CDR(form)));
 	sly_value module_import = dictionary_entry_ref(ss->modules, file_string);
+	printf("importing file ");
+	sly_display(file_string, 0);
+	printf(" ...\n");
 	if (slot_is_free(module_import)) {
 		module_import = load_file(ss, file_string);
 		dictionary_set(ss, ss->modules, file_string, module_import);
@@ -993,6 +1016,8 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 	}
 	if (!syntax_p(stx)) {
 		sly_display(stx, 1);
+		printf("\n");
+		sly_display(form, 1);
 		printf("\n");
 		sly_raise_exception(ss, EXC_COMPILE, "expected syntax object");
 	}
@@ -1146,19 +1171,14 @@ void
 sly_do_file(char *file_path, int debug_info)
 {
 	Sly_State ss = {0};
-	sly_value globals;
 	sly_init_state(&ss);
 	ss.file_path = file_path;
-	sly_compile(&ss, parse_file(&ss, file_path, &ss.source_code));
+	sly_value ast = parse_file(&ss, file_path, &ss.source_code);
+	resolve_requires(&ss, ast);
+	ast = expand(&ss, ss.cc->globals, ast);
+	sly_compile(&ss, ast);
 	setup_frame(&ss);
 	gc_collect(&ss);
-	globals = ss.cc->globals;
-	dictionary_set(&ss, globals,
-				   make_symbol(&ss, "__file__", 8),
-				   make_string(&ss, file_path, strlen(file_path)));
-	dictionary_set(&ss, globals,
-				   make_symbol(&ss, "__name__", 8),
-				   make_string(&ss, file_path, strlen(file_path)));
 	if (debug_info) dis_all(ss.frame, 1);
 	vm_run(&ss, 1);
 	sly_free_state(&ss);
@@ -1180,8 +1200,6 @@ sly_compile(Sly_State *ss, sly_value ast)
 			exit(1);
 		});
 	prototype *proto = GET_PTR(ss->cc->cscope->proto);
-	resolve_requires(ss, ast);
-	//ast = expand(ss, ast);
 	forward_scan_block(ss, ast);
 	int r = comp_expr(ss, ast, 0);
 	vector_append(ss, proto->code, iA(OP_RETURN, r, -1));

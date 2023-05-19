@@ -1,6 +1,7 @@
 (require "sly-lib/list.sly")
-(require "sly-lib/macros1.sly")
+(require "sly-lib/expander.sly")
 (require "sly-lib/quasiquote.sly")
+(require "sly-lib/macros1.sly")
 (require "sly-lib/syntax-case.sly")
 (require "sly-lib/syntax-rules.sly")
 
@@ -25,7 +26,13 @@
 		(cons 'length length)
 		(cons 'count count)
 		(cons 'map map)
-		(cons 'for-each for-each)))
+		(cons 'for-each for-each)
+		(cons 'set-add set-add)
+		(cons 'set-union set-union)
+		(cons 'subset? subset?)
+		(cons 'assoc-set assoc-set)
+		(cons 'assoc-lookup assoc-lookup)
+		(cons 'expand expand)))
 
 (define exported-syntax
   (list (cons 'and and)

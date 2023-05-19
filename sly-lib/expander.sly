@@ -1,5 +1,4 @@
 (require "sly-lib/list.sly")
-(require "sly-lib/quasiquote.sly")
 
 (define core-forms
   (list 'define
@@ -14,82 +13,11 @@
 		'call/cc
 		'require))
 
-(define builtins
-  (list '+
-		'-
-		'*
-		'/
-		'%
-		'=
-		'<
-		'>
-		'<=
-		'>=
-		'/=
-		'not
-		'null?
-		'pair?
-		'list?
-		'boolean?
-		'number?
-		'integer?
-		'real?
-		'char?
-		'symbol?
-		'vector?
-		'byte-vector?
-		'string?
-		'dictionary?
-		'procedure?
-		'syntax?
-		'syntax-pair?
-		'identifier?
-		'identifier=?
-		'equal?
-		'eq?
-		'cons
-		'car
-		'cdr
-		'set-car!
-		'set-cdr!
-		'display
-		'gensym
-		'void
-		'string->symbol
-		'symbol->string
-		'syntax->datum
-		'syntax->list
-		'syntax
-		'syntax-scopes
-		'datum->syntax
-		'raw-syntax
-		'make-vector
-		'vector
-		'vector-ref
-		'vector-set!
-		'vector-length
-		'make-byte-vector
-		'byte-vector-ref
-		'byte-vector-set!
-		'byte-vector-length
-		'vector-length
-		'make-dictionary
-		'dictionary-ref
-		'dictionary-set!
-		'dictionary-has-key?
-		'list
-		'apply
-		'console-clear-screen
-		'raise-macro-exception))
-
-(define macros
-  (list
-   (cons 'quasiquote quasiquote)
-   (cons 'syntax-quasiquote syntax-quasiquote)))
-
 (define scope gensym)
 
 (define core-scope (scope))
+
+(define imported '())
 
 (define all-bindings '())
 
@@ -98,7 +26,7 @@
 
 (for-each (lambda (sym)
 			(add-binding! (syntax sym (list core-scope)) sym))
-		  (set-union core-forms builtins))
+		  core-forms)
 
 (define (adjust-scope s sc op)
   (if (syntax? s)
@@ -124,7 +52,9 @@
   (define candidate-ids (find-all-matching-bindings id))
   (define max-id (void))
   (if (null? candidate-ids)
-	  #f
+	  (error "Error unresolved identefier:"
+			 id
+			 (syntax-source-info id))
 	  (begin
 		(set! max-id (argmax (lambda (id) (length (syntax-scopes id)))
 							 candidate-ids))
@@ -140,8 +70,12 @@
 				   xs)) '() all-bindings))
 
 (define (check-unambiguous max-id candidate-ids)
-  ;; TODO: implement this
-  (void))
+  (for-each (lambda (c-id)
+			  (if (subset? (syntax-scopes c-id)
+						   (syntax-scopes max-id))
+				  #t
+				  (error "ambiguous:" max-id)))
+			candidate-ids))
 
 (define (introduce s)
   (add-scope s core-scope))
@@ -164,43 +98,48 @@
 		  (expand-id-application-form s env)
 		  (if (list? s)
 			  (expand-app s env)
-			  (if (null? s) s
-				  (displayln "error bad syntax (1)"))))))
+			  ;; self evaluating?
+			  ;; (error "error (1) bad syntax:" (syntax->datum s))
+			  s))))
 
 (define (expand-identifier s env)
   (define binding (resolve s))
   (define v (void))
   (if (not binding)
-	  (displayln "free variable")
-	  (if (contains builtins binding) s
+	  (error "free variable:" (syntax->datum s))
+	  (if (contains imported binding) s
 		  (if (contains core-forms binding)
-			  (displayln "error bad syntax (2)")
+			  (error "error (2) bad syntax:" (syntax->datum s))
 			  (begin
 				(set! v (env-lookup env binding))
 				(if (eq? v variable) s
 					(if (not v)
-						(displayln "out of context")
-						(displayln "error bad syntax (3)"))))))))
+						(error "out of context" (syntax->datum s))
+						(error "error (3) bad syntax" (syntax->datum s)))))))))
 
 (define (expand-id-application-form s env)
   (define binding (resolve (car s)))
   (define v (void))
   (if (equal? binding 'lambda)
 	  (expand-lambda s env)
-	  (if (equal? binding 'define)
+	  (if (if (equal? binding 'define) #t
+			  (equal? binding 'define-syntax))
 		  (expand-define s env)
 		  (if (equal? binding 'quote) s
 			  (if (equal? binding 'syntax-quote) s
-				  (begin
-					(set! v (env-lookup env binding))
-					(if (procedure? v)
-						(expand (apply-transformer v s) env)
-						(expand-app s env))))))))
+				  (if (equal? binding 'require) s
+					  (if (contains core-forms binding)
+						  (expand-core-form s env)
+						  (begin
+							(set! v (env-lookup env binding))
+							(if (procedure? v)
+								(expand (apply-transformer v s) env)
+								(expand-app s env))))))))))
 
 (define (apply-transformer t s)
   (define intro-scope (scope))
   (define intro-s (add-scope s intro-scope))
-  (define transformed-s  (introduce (t intro-s)))
+  (define transformed-s (t intro-s))
   (flip-scope transformed-s intro-scope))
 
 (define (expand-app s env)
@@ -237,6 +176,11 @@
 						   env))
   (append (list lambda-id ids) exp-body))
 
+(define (expand-core-form s env)
+  (define id (car s))
+  (define exp-body (expand (cdr s) env))
+  (cons id exp-body))
+
 (define (expand-define s env)
   (define define-id (car s))
   (define lhs (cadr s))
@@ -246,19 +190,22 @@
   (define scopes (syntax-scopes define-id))
   (if (pair? lhs) ;; procedure define
 	  (begin
+		(add-binding! (car lhs) binding)
+		(env-extend env binding variable)
 		(set! rhs (expand (append (list (syntax 'lambda scopes) (cdr lhs)) rest) env))
 		(set! lhs (car lhs)))
 	  (if (identifier? lhs)
-		  (set! rhs (expand (car rest) env))
-		  (displayln "error bad syntax (4)")))
-  (add-binding! lhs binding)
-  (env-extend env binding variable)
+		  (begin
+			(add-binding! lhs binding)
+			(env-extend env binding variable)
+			(set! rhs (expand (car rest) env)))
+		  (error "error bad syntax:" (syntax->datum s))))
   (list define-id lhs rhs))
 
 (define (compile s)
   (define r (void))
-  (if (null? s) s
-	  (if (identifier? s) (resolve s)
+  (if (identifier? s) (resolve s)
+	  (if (pair? s)
 		  (if (identifier? (car s))
 			  (begin
 				(set! r (resolve (car s)))
@@ -267,7 +214,8 @@
 					(if (equal? r 'quote) s
 						(if (equal? r 'syntax-quote) s
 							(map compile s)))))
-			  (map compile s)))))
+			  (map compile s))
+		  s)))
 
 (define (resolve-args args)
   (if (null? args) args
@@ -282,23 +230,29 @@
   (define body (cddr s))
   (append (list  lambda-id (resolve-args ids)) (compile body)))
 
-(define (begin-expand form)
-  (define env (empty-env))
+(define (register-variables ls env)
+  (for-each (lambda (v)
+			  (set! imported (cons v imported))
+			  (add-binding! (syntax v (list core-scope)) v)
+			  (env-extend env v variable))
+			ls))
+
+(define (register-macros alist env)
   (for-each (lambda (p)
 			  (add-binding! (syntax (car p) (list core-scope))
 							(car p))
 			  (env-extend env (car p) (cdr p)))
-			macros)
+			alist))
+
+(define (begin-expansion form vars macros)
+  (define env (empty-env))
+  (register-variables vars env)
+  (register-macros macros env)
   (define *form
-	(expand
-	 (introduce
-	  (syntax->list
-	   form))
-	 env))
-  (displayln (syntax->datum *form))
+	(expand (introduce (syntax->list form)) env))
   (datum->syntax form (compile *form)))
 
-(displayln (syntax->datum
-			(begin-expand #'(define (foo x y)
-							  (define result `(+ x y z))
-							  result))))
+(define exported-variables
+  (list (cons 'expand begin-expansion)))
+
+(list exported-variables '())

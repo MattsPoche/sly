@@ -379,7 +379,8 @@ csyntax_to_datum(Sly_State *ss, sly_value args)
 static sly_value
 csyntax_to_list(Sly_State *ss, sly_value args)
 {
-	return syntax_to_list(ss, vector_ref(args, 0));
+	sly_value s = vector_ref(args, 0);
+	return syntax_to_list(ss, s);
 }
 
 static sly_value
@@ -648,6 +649,44 @@ craise_macro_exception(Sly_State *ss, sly_value args)
 	return SLY_VOID;
 }
 
+static sly_value
+cerror(Sly_State *ss, sly_value args)
+{
+	sly_value list = vector_ref(args, 0);
+	while (!null_p(list)) {
+		sly_display(car(list), 0);
+		printf(" ");
+		list = cdr(list);
+	}
+	printf("\n");
+	sly_raise_exception(ss, EXC_GENERIC, "Error signalled");
+	return SLY_VOID;
+}
+
+static sly_value
+ceval(Sly_State *ss, sly_value args)
+{
+	sly_value code = vector_ref(args, 0);
+	struct scope *pscope = ss->cc->cscope;
+	ss->cc->cscope = make_scope(ss);
+	ss->cc->cscope->level = 0;
+	init_symtable(ss, ss->cc->cscope->symtable);
+
+
+	return SLY_VOID;
+}
+
+static sly_value
+csyntax_source_info(Sly_State *ss, sly_value args)
+{
+	sly_value stx = vector_ref(args, 0);
+	sly_assert(syntax_p(stx), "Type Error expected syntax");
+	syntax *s = GET_PTR(stx);
+	char buff[124] = {0};
+	size_t len = snprintf(buff, sizeof(buff), "%d:%d", s->tok.ln, s->tok.cn);
+	return make_string(ss, buff, len);
+}
+
 static void
 init_builtins(Sly_State *ss)
 {
@@ -724,6 +763,9 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("apply", capply, 2, 1);
 	ADD_BUILTIN("console-clear-screen", cclear_screen, 0, 0);
 	ADD_BUILTIN("raise-macro-exception", craise_macro_exception, 1, 0);
+	ADD_BUILTIN("error", cerror, 0, 1);
+	ADD_BUILTIN("eval", ceval, 0, 1);
+	ADD_BUILTIN("syntax-source-info", csyntax_source_info, 1, 0);
 }
 
 #endif /* SLY_BUILTINS_H_ */

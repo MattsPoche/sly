@@ -2,7 +2,7 @@
 (require "sly-lib/quasiquote.sly")
 
 (define-syntax (and form)
-  (define *form (cdr (syntax->list form)))
+  (define *form (cdr form))
   (define x (car *form))
   (define xs (cdr *form))
   (if (null? xs)
@@ -10,7 +10,7 @@
 	  #`(if #,x (and #,@xs) #f)))
 
 (define-syntax (or form)
-  (define *form (cdr (syntax->list form)))
+  (define *form (cdr form))
   (define x (car *form))
   (define xs (cdr *form))
   (if (null? xs)
@@ -18,7 +18,7 @@
 	  #`(if #,x #t (or #,@xs))))
 
 (define-syntax (let form)
-  (define *form (cdr (syntax->list form)))
+  (define *form (cdr form))
   (define name     '())
   (define bindings '())
   (define bodies   '())
@@ -37,7 +37,7 @@
 			 (#,name #,@(map cadr bindings)))))))
 
 (define-syntax (let* form)
-  (define *form (cdr (syntax->list form)))
+  (define *form (cdr form))
   (define bindings (car *form))
   (define bodies (cdr *form))
   (if (< (length bindings) 2)
@@ -62,7 +62,7 @@
 	  (cons-cons (car ls) (split (cdr ls)))))
 
 (define-syntax (letrec form)
-  (define *form (cdr (syntax->list form)))
+  (define *form (cdr  form))
   (define bindings (split (car *form)))
   (define vars (car bindings))
   (define exps (cadr bindings))
@@ -75,7 +75,7 @@
 	  #,@bodies))
 
 (define-syntax (letrec*-helper form)
-  (define *form (cdr (syntax->list form)))
+  (define *form (cdr form))
   (define bindings (car *form))
   (define bodies (cdr *form))
   (if (null? bindings)
@@ -85,7 +85,7 @@
 		  (letrec*-helper #,(cdr bindings) #,@bodies))))
 
 (define-syntax (letrec* form)
-  (define *form (cdr (syntax->list form)))
+  (define *form (cdr form))
   (define bindings (car *form))
   (define bodies (cdr *form))
   #`((lambda ()
@@ -101,7 +101,7 @@
 ;;; (test expr expr* ...)
 ;;; (test => expr)
 ;;; (else expr expr* ...)
-  (define clauses (cdr (syntax->list form)))
+  (define clauses (cdr form))
   (define head (car clauses))
   (define rest (cdr clauses))
   (if (null? rest)
@@ -120,32 +120,34 @@
 ;;; TODO: Implement `do' form.
 
 (define-syntax (when form)
-  (define *form (syntax->list form))
+  (define *form form)
   (define condition (car (cdr *form)))
   (define bodies (cdr (cdr *form)))
   #`(if #,condition (begin #,@bodies) #,(void)))
 
 (define-syntax (unless form)
-  (define *form (syntax->list form))
+  (define *form  form)
   (define condition (car (cdr *form)))
   (define bodies (cdr (cdr *form)))
   #`(if #,condition #,(void) (begin #,@bodies)))
 
 (define-syntax (inc form)
-  #`(+ #,(cadr (syntax->list form)) 1))
+  #`(+ #,(cadr form) 1))
 
 (define-syntax (dec form)
-  #`(- #,(cadr (syntax->list form)) 1))
+  #`(- #,(cadr  form) 1))
 
 (define-syntax (inc! form)
-  (define *form (syntax->list form))
+  (define *form form)
   (define var (cadr *form))
   #`(begin (set! #,var (+ #,var 1))))
 
 (define-syntax (dec! form)
-  (define *form (syntax->list form))
+  (define *form form)
   (define var (cadr *form))
   #`(begin (set! #,var (- #,var 1))))
+
+(displayln "finished macros1")
 
 (define exported-syntax
   (list (cons 'and and)
