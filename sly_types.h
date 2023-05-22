@@ -59,8 +59,8 @@ typedef struct _sly_state {
 	struct _stack_frame *frame;
 	struct _upvalue *open_upvals;
 	sly_value proto;
+	sly_value entry_point;   /* closure */
 	sly_value interned;
-	sly_value modules;
 	jmp_buf jbuf;
 	char *excpt_msg;
 	int handle_except;
@@ -261,6 +261,7 @@ sly_value gensym(Sly_State *ss);
 sly_value get_interned_symbol(sly_value alist, char *name, size_t len);
 void intern_symbol(Sly_State *ss, sly_value sym_v);
 sly_value make_string(Sly_State *ss, char *cstr, size_t len);
+char *string_to_cstr(sly_value s);
 size_t string_len(sly_value str);
 sly_value string_eq(sly_value s1, sly_value s2);
 sly_value make_prototype(Sly_State *ss, sly_value uplist, sly_value constants,

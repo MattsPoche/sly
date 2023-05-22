@@ -69,18 +69,6 @@ union symbol_properties {
 		dictionary_set(ss, cc->globals, car(entry), cdr(entry));		\
 		cc->builtins = cons(ss, entry, cc->builtins);					\
 	} while (0)
-#define STORE_MACRO_CLOSURE()								\
-	do {													\
-		st_prop.p.issyntax = 1;								\
-		dictionary_set(ss, symtable, var, st_prop.v);		\
-		size_t len = vector_len(proto->K);					\
-		sly_value p = vector_ref(proto->K, len-1);			\
-		sly_value _clos = make_closure(ss, p);				\
-		closure *clos = GET_PTR(_clos);						\
-		vector_set(clos->upvals, 0,							\
-				   make_closed_upvalue(ss, globals));		\
-		dictionary_set(ss, cc->cscope->macros, var, _clos);	\
-	} while (0)
 #define EMPTY_SYNTAX() make_syntax(ss, (token){0}, SLY_NULL)
 
 #define CAR(val) (syntax_p(val) ? car(syntax_to_datum(val)) : car(val))
@@ -115,23 +103,7 @@ static int comp_atom(Sly_State *ss, sly_value form, int reg);
 static void init_builtins(Sly_State *ss);
 static void init_symtable(Sly_State *ss, sly_value symtable);
 static size_t intern_constant(Sly_State *ss, sly_value value);
-static void setup_frame(Sly_State *ss);
-static sly_value load_file(Sly_State *ss, sly_value form);
-static void resolve_requires(Sly_State *ss, sly_value form);
-static void require(Sly_State *ss, sly_value form);
 static void forward_scan_block(Sly_State *ss, sly_value form);
-//static sly_value expand(Sly_State *ss, sly_value form);
-
-static void
-define_global_var(Sly_State *ss, sly_value var, sly_value val)
-{
-	sly_value symtable = ss->cc->cscope->symtable;
-	sly_value globals = ss->cc->globals;
-	union symbol_properties st_prop = {0};
-	st_prop.p.type = sym_global;
-	dictionary_set(ss, symtable, var, st_prop.v);
-	dictionary_set(ss, globals, var, val);
-}
 
 static int
 is_keyword(sly_value sym)
@@ -166,23 +138,6 @@ symbol_lookup_props(Sly_State *ss, sly_value sym, u32 *level, sly_value *uplist)
 	}
 	return SLY_VOID;
 }
-
-#if 0
-static sly_value
-lookup_macro(Sly_State *ss, sly_value sym)
-{
-	struct scope *scope = ss->cc->cscope;
-	sly_value entry;
-	while (scope) {
-		entry = dictionary_entry_ref(scope->macros, sym);
-		if (!slot_is_free(entry)) {
-			return cdr(entry);
-		}
-		scope = scope->parent;
-	}
-	return SLY_VOID;
-}
-#endif
 
 static size_t
 intern_in_vector(Sly_State *ss, sly_value vec, sly_value value)
@@ -241,7 +196,7 @@ init_symtable(Sly_State *ss, sly_value symtable)
 }
 
 static int
-comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
+comp_define(Sly_State *ss, sly_value form, int reg)
 {
 	struct compile *cc = ss->cc;
 	sly_value globals  = cc->globals;
@@ -283,9 +238,6 @@ comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 		if (pair_p(datum) || symbol_p(datum)) {
 			dictionary_set(ss, globals, var, SLY_VOID);
 			comp_expr(ss, CAR(form), reg);
-			if (is_syntax) {
-				STORE_MACRO_CLOSURE();
-			}
 			if ((size_t)reg + 1 >= proto->nregs) proto->nregs = reg + 2;
 			int t = intern_syntax(ss, stx);
 			vector_append(ss, proto->code, iABx(OP_LOADK, reg + 1, st_prop.p.reg, t));
@@ -299,9 +251,6 @@ comp_define(Sly_State *ss, sly_value form, int reg, int is_syntax)
 		return reg;
 	} else {
 		comp_expr(ss, CAR(form), st_prop.p.reg);
-		if (is_syntax) {
-			STORE_MACRO_CLOSURE();
-		}
 		/* end of definition */
 		if (!null_p(CDR(form))) {
 			sly_raise_exception(ss, EXC_COMPILE, "Compile Error malformed define");
@@ -743,265 +692,6 @@ forward_scan_block(Sly_State *ss, sly_value form)
 	}
 }
 
-#if 0
-static u64
-make_scope_color(void)
-{
-	static u64 id = 0;
-	u64 i = id++;
-	return i;
-}
-
-static i64
-set_contains(sly_value vec, u64 color)
-{
-	size_t i, len = vector_len(vec);
-	for (i = 0; i < len; ++i) {
-		if (vector_ref(vec, i) == color) {
-			return (i64)i;
-		}
-	}
-	return -1;
-}
-
-static void
-set_add_color(Sly_State *ss, sly_value vec, u64 color)
-{
-	if (set_contains(vec, color) == -1) {
-		vector_append(ss, vec, color);
-	}
-}
-
-static void
-set_flip_color(Sly_State *ss, sly_value vec, u64 color)
-{
-	i64 idx;
-	if ((idx = set_contains(vec, color)) == -1) {
-		vector_append(ss, vec, color);
-	} else {
-		vector_remove(vec, idx);
-	}
-}
-
-static void
-syntax_add_scope(Sly_State *ss, sly_value stx, u64 color)
-{
-	if (pair_p(stx) || syntax_pair_p(stx)) {
-		syntax_add_scope(ss, CAR(stx), color);
-		syntax_add_scope(ss, CDR(stx), color);
-	} else if (syntax_p(stx)) {
-		syntax *s = GET_PTR(stx);
-		set_add_color(ss, s->scope_set, color);
-	}
-}
-
-static void
-syntax_flip_scope(Sly_State *ss, sly_value stx, u64 color)
-{
-	if (pair_p(stx) || syntax_pair_p(stx)) {
-		syntax_flip_scope(ss, CAR(stx), color);
-		syntax_flip_scope(ss, CDR(stx), color);
-	} else if (syntax_p(stx)) {
-		syntax *s = GET_PTR(stx);
-		set_flip_color(ss, s->scope_set, color);
-	}
-}
-
-static sly_value
-apply_macro(Sly_State *ss, sly_value macro, sly_value form)
-{
-	sly_value transformed;
-	u64 intro_scope = make_scope_color();
-	syntax_add_scope(ss, form, intro_scope);
-	{ /* call macro */
-		sly_value call_list = make_vector(ss, 2, 2);
-		vector_set(call_list, 0, macro);
-		vector_set(call_list, 1, form);
-		transformed = call_closure(ss, call_list);
-	}
-	syntax_flip_scope(ss, transformed, intro_scope);
-	return transformed;
-}
-
-static sly_value
-expand_lambda(Sly_State *ss, sly_value form)
-{
-	UNUSED(ss);
-	UNUSED(form);
-	return SLY_VOID;
-}
-
-static sly_value
-expand_define(Sly_State *ss, sly_value form)
-{
-	UNUSED(ss);
-	UNUSED(form);
-	return SLY_VOID;
-}
-
-static sly_value
-expand(Sly_State *ss, sly_value form)
-{
-	if (pair_p(form) || syntax_pair_p(form)) {
-		sly_value head = CAR(form);
-		if (identifier_p(head)) {
-			syntax *s = GET_PTR(head);
-			/* do not try to expand quoted forms */
-			if (symbol_eq(s->datum, cstr_to_symbol("quote"))
-				|| symbol_eq(s->datum, cstr_to_symbol("syntax-quote"))) {
-				return form;
-			} else if (symbol_eq(s->datum, cstr_to_symbol("lambda"))) {
-				return expand_lambda(ss, form);
-			} else if (symbol_eq(s->datum, cstr_to_symbol("define"))) {
-				return expand_define(ss, form);
-			} else {
-				sly_value macro = lookup_macro(ss, s->datum);
-				if (!void_p(macro)) {
-					expand(apply_macro(ss, macro, form));
-				}
-			}
-		}
-		return cons(ss,
-					expand(ss, CAR(form)),
-					expand(ss, CDR(form)))
-	}
-	return form;
-}
-#endif
-
-static void
-resolve_requires(Sly_State *ss, sly_value form)
-{
-	sly_value expr;
-	while (!null_p(form)) {
-		expr = CAR(form);
-		if (pair_p(expr) || syntax_pair_p(expr)) {
-			if (identifier_p(CAR(expr))) {
-				if (symbol_eq(syntax_to_datum(CAR(expr)),
-							  cstr_to_symbol("require"))) {
-					require(ss, expr);
-				}
-			}
-		}
-		form = CDR(form);
-	}
-}
-
-static sly_value
-expand(Sly_State *ss, sly_value globals, sly_value form)
-{
-	sly_value entry = dictionary_entry_ref(globals,
-										   cstr_to_symbol("expand"));
-	if (!slot_is_free(entry)) {
-		sly_value exp = cdr(entry);
-		sly_value vars = dictionary_get_keys(ss, ss->cc->globals);
-		sly_value macros = dictionary_get_entries(ss, ss->cc->cscope->macros);
-		sly_value call_list = make_vector(ss, 4, 4);
-		vector_set(call_list, 0, exp);
-		vector_set(call_list, 1, form);
-		vector_set(call_list, 2, vars);
-		vector_set(call_list, 3, macros);
-		form = call_closure(ss, call_list);
-	}
-	return form;
-}
-
-static sly_value
-load_file(Sly_State *ss, sly_value file_string)
-{
-	char *src;
-	char path[255] = {0};
-	struct scope *pscope = ss->cc->cscope;
-	sly_value globals = ss->cc->globals;
-	char *ppath = ss->file_path;
-	byte_vector *bv = GET_PTR(file_string);
-	memcpy(path, bv->elems, bv->len);
-	sly_value ast = parse_file(ss, path, &src);
-	ss->file_path = path;
-	ss->cc->cscope = make_scope(ss);
-	ss->cc->cscope->level = 0;
-	ss->cc->globals = make_dictionary(ss);
-	{ /* init globals and symtable from builtins */
-		sly_value symtable = ss->cc->cscope->symtable;
-		init_symtable(ss, symtable);
-		sly_value builtins = ss->cc->builtins;
-		union symbol_properties st_prop = {0};
-		st_prop.p.type = sym_global;
-		while (!null_p(builtins)) {
-			sly_value entry = car(builtins);
-			dictionary_set(ss, ss->cc->globals, car(entry), cdr(entry));
-			dictionary_set(ss, symtable, car(entry), st_prop.v);
-			builtins = cdr(builtins);
-		}
-	}
-	resolve_requires(ss, ast);
-	ast = expand(ss, globals, ast);
-	sly_compile(ss, ast);
-	sly_value clos = make_closure(ss, ss->proto);
-	{
-		closure *cls = GET_PTR(clos);
-		vector_set(cls->upvals, 0, make_closed_upvalue(ss, ss->cc->globals));
-	}
-	sly_value call_list = make_vector(ss, 1, 1);
-	vector_set(call_list, 0, clos);
-	sly_value ret = call_closure(ss, call_list);
-	ss->file_path = ppath;
-	ss->cc->cscope = pscope;
-	ss->cc->globals = globals;
-	return ret;
-}
-
-static void
-require(Sly_State *ss, sly_value form)
-{ /*
-   * Exports should be provided in the following format:
-   * (variables macros)
-   * Variables and macros should be assoc lists
-   */
-
-	/* TODO: resolve module path/name
-	 */
-	sly_value file_string = syntax_to_datum(CAR(CDR(form)));
-	sly_value module_import = dictionary_entry_ref(ss->modules, file_string);
-	printf("importing file ");
-	sly_display(file_string, 0);
-	printf(" ...\n");
-	if (slot_is_free(module_import)) {
-		module_import = load_file(ss, file_string);
-		dictionary_set(ss, ss->modules, file_string, module_import);
-	} else {
-		module_import = cdr(module_import);
-	}
-	sly_value vars = car(module_import);
-	sly_value macros = car(cdr(module_import));
-	sly_value entry, name, datum;
-	union symbol_properties st_prop;
-	while (!null_p(vars)) {
-		st_prop.v = 0;
-		entry = car(vars);
-		name = car(entry);
-		datum = cdr(entry);
-		st_prop.p.type = sym_global;
-		st_prop.p.reg = intern_constant(ss, name);
-		dictionary_set(ss, ss->cc->globals, name, datum);
-		dictionary_set(ss, ss->cc->cscope->symtable, name, st_prop.v);
-		vars = cdr(vars);
-	}
-	while (!null_p(macros)) {
-		st_prop.v = 0;
-		entry = car(macros);
-		name = car(entry);
-		datum = cdr(entry);
-		st_prop.p.type = sym_global;
-		st_prop.p.issyntax = 1;
-		st_prop.p.reg = intern_constant(ss, name);
-		dictionary_set(ss, ss->cc->globals, name, datum);
-		dictionary_set(ss, ss->cc->cscope->symtable, name, st_prop.v);
-		dictionary_set(ss, ss->cc->cscope->macros, name, datum);
-		macros = cdr(macros);
-	}
-}
-
 int
 comp_expr(Sly_State *ss, sly_value form, int reg)
 {
@@ -1027,7 +717,7 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 		switch ((enum kw)kw) {
 		case kw_define: {
 			form = CDR(form);
-			reg = comp_define(ss, form, reg, 0);
+			reg = comp_define(ss, form, reg);
 		} break;
 		case kw_lambda: {
 			reg = comp_lambda(ss, form, reg);
@@ -1086,7 +776,7 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 		} break;
 		case kw_define_syntax: {
 			form = CDR(form);
-			reg = comp_define(ss, form, reg, 1);
+			reg = comp_define(ss, form, reg);
 		} break;
 		case kw_call_with_continuation: /* fallthrough intended */
 		case kw_call_cc: {
@@ -1124,33 +814,11 @@ sly_init_state(Sly_State *ss)
 	ss->interned = make_dictionary(ss);
 	ss->cc = MALLOC(sizeof(*ss->cc));
 	ss->cc->globals = make_dictionary(ss);
-	ss->cc->cscope = make_scope(ss);
 	ss->interned = make_dictionary(ss);
-	ss->modules =  make_dictionary(ss);
+	ss->cc->cscope = make_scope(ss);
 	init_symtable(ss, ss->cc->cscope->symtable);
 	ss->cc->cscope->level = 0;
 	init_builtins(ss);
-	define_global_var(ss, make_symbol(ss, "__file__", 8), SLY_FALSE);
-	define_global_var(ss, make_symbol(ss, "__name__", 8), SLY_FALSE);
-}
-
-static void
-setup_frame(Sly_State *ss)
-{
-	prototype *proto = GET_PTR(ss->proto);
-	stack_frame *frame = make_stack(ss, proto->nregs ? proto->nregs : 1);
-	frame->U = make_vector(ss, 12, 12);
-	for (size_t i = 0; i < 12; ++i) {
-		vector_set(frame->U, i, SLY_VOID);
-	}
-	vector_set(frame->U, 0, make_open_upvalue(ss, &ss->cc->globals));
-	frame->K = proto->K;
-	frame->clos = SLY_NULL;
-	frame->code = proto->code;
-	frame->pc = proto->entry;
-	frame->level = 0;
-	frame->clos = make_closure(ss, ss->proto);
-	ss->frame = frame;
 }
 
 void
@@ -1173,14 +841,17 @@ sly_do_file(char *file_path, int debug_info)
 	Sly_State ss = {0};
 	sly_init_state(&ss);
 	ss.file_path = file_path;
-	sly_value ast = parse_file(&ss, file_path, &ss.source_code);
-	resolve_requires(&ss, ast);
-	ast = expand(&ss, ss.cc->globals, ast);
-	sly_compile(&ss, ast);
-	setup_frame(&ss);
+	sly_value ast = parse_file(&ss, "sly-lib/expander.sly", &ss.source_code);
+	ss.entry_point = sly_compile(&ss, ast);
+	dictionary_set(&ss, ss.cc->globals, make_symbol(&ss, "__VARGS__", 9),
+				   cons(&ss, make_string(&ss, file_path, strlen(file_path)),
+						SLY_NULL));
+	ss.proto = ss.cc->cscope->proto;
 	gc_collect(&ss);
+	sly_value call_list = make_vector(&ss, 1, 1);
+	vector_set(call_list, 0, ss.entry_point);
+	eval_closure(&ss, ss.entry_point, SLY_NULL, 1);
 	if (debug_info) dis_all(ss.frame, 1);
-	vm_run(&ss, 1);
 	sly_free_state(&ss);
 	if (debug_info) {
 		printf("** Allocations: %d **\n", allocations);
@@ -1190,7 +861,7 @@ sly_do_file(char *file_path, int debug_info)
 	}
 }
 
-int
+sly_value
 sly_compile(Sly_State *ss, sly_value ast)
 {
 	HANDLE_EXCEPTION(ss, {
@@ -1203,7 +874,10 @@ sly_compile(Sly_State *ss, sly_value ast)
 	forward_scan_block(ss, ast);
 	int r = comp_expr(ss, ast, 0);
 	vector_append(ss, proto->code, iA(OP_RETURN, r, -1));
-	ss->proto = ss->cc->cscope->proto;
 	END_HANDLE_EXCEPTION(ss);
-	return 0;
+	sly_value cval = make_closure(ss, ss->cc->cscope->proto);
+	closure *clos = GET_PTR(cval);
+	vector_set(clos->upvals, 0,
+			   make_closed_upvalue(ss, ss->cc->globals));
+	return cval;
 }

@@ -73,8 +73,13 @@ funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall)
 		for (size_t i = 0; i < nargs; ++i) {
 			vector_set(args, i, get_reg(a + 1 + i));
 		}
-		//printf("Location: %s:%d\n", ss->file_path, line);
 		sly_value r = clos->fn(ss, args);
+/*
+		dis_all(ss->frame, 1);
+		printf("pc :: %zu\n", ss->frame->pc);
+		sly_display(val, 1);
+		printf("\n");
+*/
 		set_reg(a, r);
 	} else if (closure_p(val)) {
 		closure *clos = GET_PTR(val);
@@ -93,10 +98,11 @@ funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall)
 			vector_set(nframe->R, proto->nargs, vargs);
 		} else {
 			if (nargs != proto->nargs) {
+				dis_all(ss->frame, 1);
 				sly_display(ss->frame->clos, 1);
 				printf("\n");
 				sly_display(val, 1);
-				printf("\n");
+				printf("\npc: %zu\n", ss->frame->pc);
 				sly_assert(0, "Error wrong number of arguments (188)");
 			}
 		}

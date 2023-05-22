@@ -1,4 +1,165 @@
-(require "sly-lib/list.sly")
+(define (displayln x) (display x)(display "\n"))
+
+(define (caar p)
+  (car (car p)))
+
+(define (cdar p)
+  (cdr (car p)))
+
+(define (cadr p)
+  (car (cdr p)))
+
+(define (cddr p)
+  (cdr (cdr p)))
+
+(define (caddr p)
+  (car (cddr p)))
+
+(define (cdddr p)
+  (cdr (cddr p)))
+
+(define (cadddr p)
+  (car (cdddr p)))
+
+(define (zero? n) (= n 0))
+
+(define (fold-left f z xs)
+  (if (null? xs)
+	  z
+	  ((lambda (x xs)
+		 (fold-left f (f x z) xs))
+	   (car xs) (cdr xs))))
+
+(define (fold-right f z xs)
+  (if (null? xs)
+	  z
+	  ((lambda (x xs)
+		 (f x (fold-right f z xs)))
+	   (car xs) (cdr xs))))
+
+(define (contains xs x)
+  (if (null? xs)
+	  #f
+	  (if (equal? (car xs) x)
+		  #t
+		  (contains (cdr xs) x))))
+
+(define (remove xs x)
+  (if (null? xs)
+	  xs
+	  (if (equal? (car xs) x)
+		  (cdr xs)
+		  (cons (car xs)
+				(remove (cdr xs) x)))))
+
+(define (append xs . rest)
+  (define (helper xs rest)
+	  (if (pair? rest)
+		  (helper (fold-right cons (car rest) xs) (cdr rest))
+		  xs))
+  (helper xs rest))
+
+(define (reverse ls)
+  (fold-left cons '() ls))
+
+(define (last-pair xs)
+  (if (pair? (cdr xs))
+	  (last-pair (cdr xs))
+	  xs))
+
+(define (list-copy xs)
+  (fold-right cons '() xs))
+
+(define (length xs)
+  (fold-left (lambda (x y) (+ y 1)) 0 xs))
+
+(define (list-ref xs i)
+  (if (null? xs)
+	  '**END-OF-LIST**
+	  (if (zero? i)
+		  (car xs)
+		  (list-ref (cdr xs) (- i 1)))))
+
+(define (count val xs)
+  (fold-right
+   (lambda (x c) (if (equal? x val) (+ c 1) c))
+   0 xs))
+
+(define (argmax f xs)
+  (define max 0)
+  (define x 0)
+  (define item '())
+  (define (loop f xs)
+	(if (null? xs)
+		item
+		(begin (set! x (f (car xs)))
+			   (if (> x max)
+				   (begin
+					 (set! max x)
+					 (set! item (car xs)))
+				   (void))
+			   (loop f (cdr xs)))))
+  (loop f xs))
+
+(define (*heads* xs)
+  (if (null? xs)
+	  '()
+	  (cons (caar xs) (*heads* (cdr xs)))))
+
+(define (*tails* xs)
+  (if (null? xs)
+	  '()
+	  (cons (cdar xs) (*tails* (cdr xs)))))
+
+(define (map f . xs)
+  (if (null? (car xs))
+	  '()
+	  (cons (apply f (*heads* xs))
+			(apply map f (*tails* xs)))))
+
+(define (for-each f . xs)
+  (if (null? (car xs))
+	  '()
+	  (begin
+		(apply f (*heads* xs))
+		(apply for-each f (*tails* xs)))))
+
+(define (set-add xs x)
+  (if (contains xs x)
+	  xs
+	  (cons x xs)))
+
+(define (set-union xs ys)
+  (if (null? ys)
+	  xs
+	  (if (null? xs)
+		  ys
+		  (set-union (set-add xs (car ys)) (cdr ys)))))
+
+(define (subset? xs ys)
+  (if (null? xs)
+	  #t
+	  (if (null? ys)
+		  #f
+		  (if (contains ys (car xs))
+			  (subset? (cdr xs) ys)
+			  #f))))
+
+(define (assoc-set xs key value)
+  (if (null? xs)
+	  (cons (cons key value) xs)
+	  (if (equal? (caar xs) key)
+		  (cons (cons key value) (cdr xs))
+		  (cons (car xs) (assoc-set (cdr xs) key value)))))
+
+(define (assoc-lookup xs key)
+  (if (null? xs)
+	  #f
+	  (if (equal? (caar xs) key)
+		  (cdar xs)
+		  (assoc-lookup (cdr xs) key))))
+
+;; =============================================================
 
 (define core-forms
   (list 'define
@@ -17,7 +178,7 @@
 
 (define core-scope (scope))
 
-(define imported '())
+(define modules (make-dictionary))
 
 (define all-bindings '())
 
@@ -52,7 +213,7 @@
   (define candidate-ids (find-all-matching-bindings id))
   (define max-id (void))
   (if (null? candidate-ids)
-	  (error "Error unresolved identefier:"
+	  (error "Error unresolved identifier:"
 			 id
 			 (syntax-source-info id))
 	  (begin
@@ -82,7 +243,8 @@
 
 (define variable (gensym))
 
-(define (empty-env) (make-dictionary))
+(define (empty-env)
+  (make-dictionary))
 
 (define (env-extend env key value)
   (dictionary-set! env key value)
@@ -107,39 +269,40 @@
   (define v (void))
   (if (not binding)
 	  (error "free variable:" (syntax->datum s))
-	  (if (contains imported binding) s
-		  (if (contains core-forms binding)
-			  (error "error (2) bad syntax:" (syntax->datum s))
-			  (begin
-				(set! v (env-lookup env binding))
-				(if (eq? v variable) s
-					(if (not v)
-						(error "out of context" (syntax->datum s))
-						(error "error (3) bad syntax" (syntax->datum s)))))))))
+	  (if (contains core-forms binding)
+		  (error "error (2) bad syntax:" (syntax->datum s))
+		  (begin
+			(set! v (env-lookup env binding))
+			(if (eq? v variable) s
+				(if (not v)
+					(error "out of context" (syntax->datum s))
+					(error "error (3) bad syntax" (syntax->datum s))))))))
 
 (define (expand-id-application-form s env)
   (define binding (resolve (car s)))
   (define v (void))
   (if (equal? binding 'lambda)
 	  (expand-lambda s env)
-	  (if (if (equal? binding 'define) #t
-			  (equal? binding 'define-syntax))
+	  (if (equal? binding 'define)
 		  (expand-define s env)
+		  (if (equal? binding 'define-syntax)
+			  (expand-define-syntax s env)
 		  (if (equal? binding 'quote) s
 			  (if (equal? binding 'syntax-quote) s
-				  (if (equal? binding 'require) s
+				  (if (equal? binding 'require)
+					  (expand-require s env)
 					  (if (contains core-forms binding)
 						  (expand-core-form s env)
 						  (begin
 							(set! v (env-lookup env binding))
 							(if (procedure? v)
 								(expand (apply-transformer v s) env)
-								(expand-app s env))))))))))
+								(expand-app s env)))))))))))
 
 (define (apply-transformer t s)
   (define intro-scope (scope))
   (define intro-s (add-scope s intro-scope))
-  (define transformed-s (t intro-s))
+  (define transformed-s (syntax->list (t intro-s)))
   (flip-scope transformed-s intro-scope))
 
 (define (expand-app s env)
@@ -176,6 +339,25 @@
 						   env))
   (append (list lambda-id ids) exp-body))
 
+;; TODO: fix this
+(define (expand-require s env)
+  (define require-id (car s))
+  (define file-name (syntax->datum (cadr s)))
+  (define m-scope (scope))
+  (display "file-name: ")
+  (displayln file-name)
+  (if (dictionary-ref modules file-name #f) s
+	  (begin
+		(dictionary-set! modules file-name m-scope)
+		(eval (datum->syntax form (compile
+								   (expand
+									(add-scope
+									 (introduce
+									  (syntax->list (read-file file-name)))
+									 m-scope) env))))
+		s)))
+
+
 (define (expand-core-form s env)
   (define id (car s))
   (define exp-body (expand (cdr s) env))
@@ -200,6 +382,28 @@
 			(env-extend env binding variable)
 			(set! rhs (expand (car rest) env)))
 		  (error "error bad syntax:" (syntax->datum s))))
+  (list define-id lhs rhs))
+
+(define (expand-define-syntax s env)
+  (define define-id (car s))
+  (define lhs (cadr s))
+  (define rest (cddr s))
+  (define rhs (void))
+  (define binding (gensym))
+  (define scopes (syntax-scopes define-id))
+  (if (pair? lhs) ;; procedure define
+	  (begin
+		(add-binding! (car lhs) binding)
+		(env-extend env binding variable)
+		(set! rhs (expand (append (list (syntax 'lambda scopes) (cdr lhs)) rest) env))
+		(set! lhs (car lhs)))
+	  (if (identifier? lhs)
+		  (begin
+			(add-binding! lhs binding)
+			(env-extend env binding variable)
+			(set! rhs (expand (car rest) env)))
+		  (error "error bad syntax:" (syntax->datum s))))
+  (env-extend env binding (eval (datum->syntax define-id (compile rhs))))
   (list define-id lhs rhs))
 
 (define (compile s)
@@ -232,7 +436,6 @@
 
 (define (register-variables ls env)
   (for-each (lambda (v)
-			  (set! imported (cons v imported))
 			  (add-binding! (syntax v (list core-scope)) v)
 			  (env-extend env v variable))
 			ls))
@@ -252,7 +455,15 @@
 	(expand (introduce (syntax->list form)) env))
   (datum->syntax form (compile *form)))
 
-(define exported-variables
-  (list (cons 'expand begin-expansion)))
-
-(list exported-variables '())
+(define form (read-file (car (get-vargs))))
+(eval (datum->syntax form
+					 (compile
+					  (expand
+					   (introduce (syntax->list form))
+					   ((lambda (env)
+						  (for-each (lambda (e)
+									  (add-binding! (syntax (car e) (list core-scope))
+													(car e))
+									  (env-extend env (car e) variable))
+									(builtins))
+						  env) (empty-env))))))

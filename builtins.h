@@ -664,19 +664,6 @@ cerror(Sly_State *ss, sly_value args)
 }
 
 static sly_value
-ceval(Sly_State *ss, sly_value args)
-{
-	sly_value code = vector_ref(args, 0);
-	struct scope *pscope = ss->cc->cscope;
-	ss->cc->cscope = make_scope(ss);
-	ss->cc->cscope->level = 0;
-	init_symtable(ss, ss->cc->cscope->symtable);
-
-
-	return SLY_VOID;
-}
-
-static sly_value
 csyntax_source_info(Sly_State *ss, sly_value args)
 {
 	sly_value stx = vector_ref(args, 0);
@@ -685,6 +672,62 @@ csyntax_source_info(Sly_State *ss, sly_value args)
 	char buff[124] = {0};
 	size_t len = snprintf(buff, sizeof(buff), "%d:%d", s->tok.ln, s->tok.cn);
 	return make_string(ss, buff, len);
+}
+
+static sly_value
+ceval(Sly_State *ss, sly_value args)
+{
+	struct compile *cc = ss->cc;
+	struct scope *scope = ss->cc->cscope;
+	stack_frame *frame = ss->frame;
+	ss->cc = MALLOC(sizeof(*ss->cc));
+	ss->cc->globals = make_dictionary(ss);
+	ss->cc->cscope = make_scope(ss);
+	init_symtable(ss, ss->cc->cscope->symtable);
+	ss->cc->cscope->level = 0;
+	init_builtins(ss);
+	sly_value clos = sly_compile(ss, vector_ref(args, 0));
+	sly_value call_list = make_vector(ss, 1, 1);
+	vector_set(call_list, 0, clos);
+	sly_value rval = call_closure(ss, call_list);
+	ss->cc = cc;
+	ss->cc->cscope = scope;
+	ss->frame = frame;
+	return rval;
+}
+
+static sly_value
+cread(Sly_State *ss, sly_value args)
+{
+	char *cstr = string_to_cstr(vector_ref(args, 0));
+	sly_value ast = parse(ss, cstr);
+	free(cstr);
+	return ast;
+}
+
+static sly_value
+cread_file(Sly_State *ss, sly_value args)
+{
+	char *cstr = string_to_cstr(vector_ref(args, 0));
+	char *contents;
+	sly_value ast = parse_file(ss, cstr, &contents);
+	printf("%s\n", cstr);
+	sly_free(cstr);
+	return ast;
+}
+
+static sly_value
+cbuiltins(Sly_State *ss, sly_value args)
+{
+	UNUSED(args);
+	return ss->cc->builtins;
+}
+
+static sly_value
+cvargs(Sly_State *ss, sly_value args)
+{
+	UNUSED(args);
+	return dictionary_ref(ss->cc->globals, cstr_to_symbol("__VARGS__"));
 }
 
 static void
@@ -764,7 +807,11 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("console-clear-screen", cclear_screen, 0, 0);
 	ADD_BUILTIN("raise-macro-exception", craise_macro_exception, 1, 0);
 	ADD_BUILTIN("error", cerror, 0, 1);
-	ADD_BUILTIN("eval", ceval, 0, 1);
+	ADD_BUILTIN("eval", ceval, 1, 0);
+	ADD_BUILTIN("read", cread, 1, 0);
+	ADD_BUILTIN("read-file", cread_file, 1, 0);
+	ADD_BUILTIN("builtins", cbuiltins, 0, 0);
+	ADD_BUILTIN("get-vargs", cvargs, 0, 0);
 	ADD_BUILTIN("syntax-source-info", csyntax_source_info, 1, 0);
 }
 

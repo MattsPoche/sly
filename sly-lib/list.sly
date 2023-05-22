@@ -159,7 +159,6 @@
 		  (cdar xs)
 		  (assoc-lookup (cdr xs) key))))
 
-
 ;; module exports
 (define exported-variables
   (list (cons 'displayln displayln)

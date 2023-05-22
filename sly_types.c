@@ -148,12 +148,7 @@ sly_display(sly_value v, int lit)
 		printf("#<syntax ");
 		syntax *s = GET_PTR(v);
 		sly_display(s->datum, lit);
-		printf(" (%u) ", s->context);
-		if (void_p(s->env)) {
-			printf(">");
-		} else {
-			printf(" *>");
-		}
+		printf(">");
 	} else if (prototype_p(v)) {
 		printf("#<prototype@%p>", GET_PTR(v));
 	} else if (vector_p(v)) {
@@ -658,6 +653,17 @@ make_string(Sly_State *ss, char *cstr, size_t len)
 	vec->h.type = tt_string;
 	memcpy(vec->elems, cstr, len);
 	return val;
+}
+
+char *
+string_to_cstr(sly_value s)
+{
+	sly_assert(string_p(s), "Type error expected <string>");
+	byte_vector *v = GET_PTR(s);
+	char *cstr = MALLOC(v->len + 1);
+	memcpy(cstr, v->elems, v->len);
+	cstr[v->len] = '\0';
+	return cstr;
 }
 
 size_t

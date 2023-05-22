@@ -1,7 +1,12 @@
-(if (= 69 420)
-	(begin
-	  (display 69)
-	  (display "\n"))
-	(begin
-	  (display 420)
-	  (display "\n")))
+;; (if (= 69 420)
+;; 	(begin
+;; 	  (display 69)
+;; 	  (display "\n"))
+;; 	(begin
+;; 	  (display 420)
+;; 	  (display "\n")))
+
+(define-syntax (foo form)
+  #'(display "hello, world\n"))
+
+(foo)

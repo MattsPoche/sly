@@ -202,14 +202,14 @@ propagate_mark(Sly_State *ss)
 static void
 mark_roots(Sly_State *ss)
 {
-	traverse_object(ss, (gc_object *)ss->frame);
-	traverse_object(ss, (gc_object *)ss->proto);
-	traverse_object(ss, (gc_object *)ss->interned);
-	traverse_object(ss, (gc_object *)ss->modules);
-	traverse_object(ss, GET_PTR(ss->cc->globals));
-	traverse_object(ss, GET_PTR(ss->cc->builtins));
-	traverse_object(ss, (gc_object *)ss->cc->cscope);
-	traverse_object(ss, (gc_object *)ss->open_upvals);
+	mark_gray(ss, (gc_object *)ss->frame);
+	mark_gray(ss, GET_PTR(ss->proto));
+	mark_gray(ss, GET_PTR(ss->interned));
+	mark_gray(ss, GET_PTR(ss->entry_point));
+	mark_gray(ss, GET_PTR(ss->cc->globals));
+	mark_gray(ss, GET_PTR(ss->cc->builtins));
+	mark_gray(ss, (gc_object *)ss->cc->cscope);
+	mark_gray(ss, (gc_object *)ss->open_upvals);
 	/*
 	if (ss->frame != NULL) mark_object((gc_object *)ss->frame, GC_GRAY);
 	if (ss->eval_frame != NULL) mark_object((gc_object *)ss->eval_frame, GC_GRAY);
