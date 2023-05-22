@@ -426,6 +426,7 @@ csyntax_scopes(Sly_State *ss, sly_value args)
 {
 	UNUSED(ss);
 	sly_value stx = vector_ref(args, 0);
+	//if (!syntax_p(stx)) return SLY_NULL;
 	sly_assert(syntax_p(stx), "Type Error expected syntax");
 	syntax *s = GET_PTR(stx);
 	return s->scope_set;

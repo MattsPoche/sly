@@ -3,18 +3,14 @@
 ;;; modules.
 ;;; Create an api to standardize this process.
 
-(define (secret-message) (display "hello, world\n"))
+(export 'secret-message)
+(export 'macro)
+
+(define (secret-message) (display "hello, secret\n"))
 
 (define-syntax (macro form)
   (display "hello, from compile-time!!!\n")
-  (datum->syntax form (list 'display "this is a macro\n")))
+  #'(display "this is a macro\n"))
 
 (display "hello, from loadme.sly!!!\n")
-
-(define exported-variables (list (cons 'secret-message
-									   secret-message)))
-
-(define exported-macros (list (cons 'macro
-									macro)))
-
-(list exported-variables exported-macros) ;; exported module
+(macro)

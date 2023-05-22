@@ -172,7 +172,8 @@
 		'define-syntax
 		'call-with-continuation
 		'call/cc
-		'require))
+		'require
+		'export))
 
 (define scope gensym)
 
@@ -217,8 +218,11 @@
 			 id
 			 (syntax-source-info id))
 	  (begin
-		(set! max-id (argmax (lambda (id) (length (syntax-scopes id)))
+		(displayln candidate-ids)
+		(set! max-id (argmax (lambda (id)
+							   (length (syntax-scopes id)))
 							 candidate-ids))
+		(displayln max-id)
 		(check-unambiguous max-id candidate-ids)
 		(assoc-lookup all-bindings max-id))))
 
@@ -276,7 +280,8 @@
 			(if (eq? v variable) s
 				(if (not v)
 					(error "out of context" (syntax->datum s))
-					(error "error (3) bad syntax" (syntax->datum s))))))))
+					(if (procedure? v) s
+						(error "error (3) bad syntax" (syntax->datum s)))))))))
 
 (define (expand-id-application-form s env)
   (define binding (resolve (car s)))
@@ -287,23 +292,23 @@
 		  (expand-define s env)
 		  (if (equal? binding 'define-syntax)
 			  (expand-define-syntax s env)
-		  (if (equal? binding 'quote) s
-			  (if (equal? binding 'syntax-quote) s
-				  (if (equal? binding 'require)
-					  (expand-require s env)
-					  (if (contains core-forms binding)
-						  (expand-core-form s env)
-						  (begin
-							(set! v (env-lookup env binding))
-							(if (procedure? v)
-								(expand (apply-transformer v s) env)
-								(expand-app s env)))))))))))
+			  (if (equal? binding 'quote) s
+				  (if (equal? binding 'syntax-quote) s
+					  (if (equal? binding 'export) s
+						  (if (equal? binding 'require)
+							  (expand-require s env)
+							  (if (contains core-forms binding)
+								  (expand-core-form s env)
+								  (begin
+									(set! v (env-lookup env binding))
+									(if (procedure? v)
+										(expand (apply-transformer v s) env)
+										(expand-app s env))))))))))))
 
 (define (apply-transformer t s)
   (define intro-scope (scope))
   (define intro-s (add-scope s intro-scope))
-  (define transformed-s (syntax->list (t intro-s)))
-  (flip-scope transformed-s intro-scope))
+  (flip-scope (syntax->list (t intro-s)) intro-scope))
 
 (define (expand-app s env)
   (map (lambda (sub-s) (expand sub-s env))
@@ -334,29 +339,43 @@
   (define body (cddr s))
   (define sc (scope))
   (define ids (add-arg-scope arg-ids sc))
+  (displayln ids)
   (add-arg-bindings ids env)
   (define exp-body (expand (add-scope body sc)
 						   env))
   (append (list lambda-id ids) exp-body))
 
-;; TODO: fix this
 (define (expand-require s env)
   (define require-id (car s))
   (define file-name (syntax->datum (cadr s)))
   (define m-scope (scope))
-  (display "file-name: ")
-  (displayln file-name)
-  (if (dictionary-ref modules file-name #f) s
+  (define scopes (syntax-scopes require-id))
+  (define imports (dictionary-ref modules file-name #f))
+  (if imports imports
 	  (begin
-		(dictionary-set! modules file-name m-scope)
-		(eval (datum->syntax form (compile
-								   (expand
-									(add-scope
-									 (introduce
-									  (syntax->list (read-file file-name)))
-									 m-scope) env))))
-		s)))
-
+		(set! s (expand
+				 (add-scope (introduce (syntax->list (read-file file-name)))
+							m-scope) env))
+		(set! imports
+			  (fold-left
+			   (lambda (exp xs)
+				 (if (pair? exp)
+					 (if (identifier? (car exp))
+						 (if (equal? (syntax->datum (car exp))
+									 'export)
+							 (cons (cadr (cadr exp)) xs)
+							 xs)
+						 xs)
+					 xs))
+			   '()
+			   s))
+		(dictionary-set! modules file-name imports)))
+  (for-each (lambda (v)
+			  (define stx (resolve v))
+			  (add-binding! (syntax (syntax->datum v) scopes)
+							stx))
+			imports)
+  s)
 
 (define (expand-core-form s env)
   (define id (car s))
@@ -456,10 +475,11 @@
   (datum->syntax form (compile *form)))
 
 (define form (read-file (car (get-vargs))))
+(define file-scope (scope))
 (eval (datum->syntax form
 					 (compile
 					  (expand
-					   (introduce (syntax->list form))
+					   (add-scope (introduce (syntax->list form)) file-scope)
 					   ((lambda (env)
 						  (for-each (lambda (e)
 									  (add-binding! (syntax (car e) (list core-scope))
