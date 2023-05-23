@@ -194,9 +194,9 @@
   (if (syntax? s)
 	  (syntax (syntax->datum s)
 			  (op (syntax-scopes s) sc))
-	  (if (list? s)
-		  (map (lambda (e)
-				 (adjust-scope e sc op)) s)
+	  (if (pair? s)
+		  (cons (adjust-scope (car s) sc op)
+				(adjust-scope (cdr s) sc op))
 		  s)))
 
 (define (set-flip s e)
@@ -218,11 +218,9 @@
 			 id
 			 (syntax-source-info id))
 	  (begin
-		(displayln candidate-ids)
 		(set! max-id (argmax (lambda (id)
 							   (length (syntax-scopes id)))
 							 candidate-ids))
-		(displayln max-id)
 		(check-unambiguous max-id candidate-ids)
 		(assoc-lookup all-bindings max-id))))
 
@@ -339,7 +337,6 @@
   (define body (cddr s))
   (define sc (scope))
   (define ids (add-arg-scope arg-ids sc))
-  (displayln ids)
   (add-arg-bindings ids env)
   (define exp-body (expand (add-scope body sc)
 						   env))
