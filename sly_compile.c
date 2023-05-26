@@ -369,7 +369,7 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 	union symbol_properties st_prop;
 	st_prop.v = symbol_lookup_props(ss, datum, &level, &uplist);
 	if (void_p(st_prop.v)) {
-		printf("Undefined symbol '");
+		printf("Undefined symbol (set!) '");
 		sly_display(datum, 1);
 		printf("\n");
 		sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol (418)");
@@ -431,25 +431,26 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 		union symbol_properties st_prop;
 		st_prop.v = symbol_lookup_props(ss, datum, &level, &uplist);
 		if (void_p(st_prop.v)) {
-			syntax *s = GET_PTR(form);
-			if (s->env) {
-				closure *clos = GET_PTR(s->env);
-				sly_value g = upvalue_get(vector_ref(clos->upvals, 0));
-				sly_value entry = dictionary_entry_ref(g, datum);
-				sly_assert(!slot_is_free(entry), "Error undefined symbol");
-				int env = intern_constant(ss, g);
-				int id  = intern_constant(ss, datum);
-				vector_append(ss, proto->code, iABx(OP_LOADK, reg, env, src_info));
-				vector_append(ss, proto->code, iABx(OP_LOADK, reg+1, id, src_info));
-				vector_append(ss, proto->code, iABC(OP_DICTREF, reg, reg, reg+1, src_info));
-				return reg;
-			} else {
-				printf("Undefined symbol '");
-				sly_display(datum, 1);
-				printf("\n");
-				printf("%s:%d:%d\n", ss->file_path, s->tok.ln, s->tok.cn);
-				sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol (479)");
-			}
+			st_prop.p.type = sym_global;
+			/* syntax *s = GET_PTR(form); */
+			/* if (s->env) { */
+			/* 	closure *clos = GET_PTR(s->env); */
+			/* 	sly_value g = upvalue_get(vector_ref(clos->upvals, 0)); */
+			/* 	sly_value entry = dictionary_entry_ref(g, datum); */
+			/* 	sly_assert(!slot_is_free(entry), "Error undefined symbol"); */
+			/* 	int env = intern_constant(ss, g); */
+			/* 	int id  = intern_constant(ss, datum); */
+			/* 	vector_append(ss, proto->code, iABx(OP_LOADK, reg, env, src_info)); */
+			/* 	vector_append(ss, proto->code, iABx(OP_LOADK, reg+1, id, src_info)); */
+			/* 	vector_append(ss, proto->code, iABC(OP_DICTREF, reg, reg, reg+1, src_info)); */
+			/* 	return reg; */
+			/* } else { */
+			/* 	printf("Undefined symbol (atom) '"); */
+			/* 	sly_display(datum, 1); */
+			/* 	printf("\n"); */
+			/* 	printf("%s:%d:%d\n", ss->file_path, s->tok.ln, s->tok.cn); */
+			/* 	sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol (479)"); */
+			/* } */
 		}
 /* TODO: Fix this
 		if (cc->cscope->level == level && st_prop.p.isundefined) {
@@ -473,6 +474,8 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 			sly_assert(0, "Syntax Datum??");
 		} break;
 		case sym_keyword: {
+			sly_display(datum, 1);
+			printf("\n");
 			sly_raise_exception(ss, EXC_COMPILE, "Unexpected keyword");
 		} break;
 		case sym_upval: {
@@ -814,12 +817,10 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 void
 sly_init_state(Sly_State *ss)
 {
-	*ss = (Sly_State){0};
-	ss->interned = make_dictionary(ss);
 	ss->cc = MALLOC(sizeof(*ss->cc));
 	ss->cc->globals = make_dictionary(ss);
-	ss->interned = make_dictionary(ss);
 	ss->cc->cscope = make_scope(ss);
+	ss->cc->cscope->symtable = make_dictionary(ss);
 	init_symtable(ss, ss->cc->cscope->symtable);
 	ss->cc->cscope->level = 0;
 	init_builtins(ss);
@@ -843,6 +844,8 @@ void
 sly_do_file(char *file_path, int debug_info)
 {
 	Sly_State ss = {0};
+	gc_init(&ss);
+	ss.interned = make_dictionary(&ss);
 	sly_init_state(&ss);
 	ss.file_path = file_path;
 	sly_value ast = parse_file(&ss, "sly-lib/expander.sly", &ss.source_code);
@@ -852,8 +855,6 @@ sly_do_file(char *file_path, int debug_info)
 						SLY_NULL));
 	ss.proto = ss.cc->cscope->proto;
 	gc_collect(&ss);
-	sly_value call_list = make_vector(&ss, 1, 1);
-	vector_set(call_list, 0, ss.entry_point);
 	eval_closure(&ss, ss.entry_point, SLY_NULL, 1);
 	if (debug_info) dis_all(ss.frame, 1);
 	sly_free_state(&ss);
@@ -861,7 +862,7 @@ sly_do_file(char *file_path, int debug_info)
 		printf("** Allocations: %d **\n", allocations);
 		printf("** Net allocations: %d **\n", net_allocations);
 		printf("** Total bytes allocated: %zu **\n", bytes_allocated);
-		printf("** GC Total Collections: %d **\n", ss.gc.collections);
+		printf("** GC Total Collections: %d **\n", ss.gc->collections);
 	}
 }
 

@@ -2,6 +2,9 @@
 
 ;;; Basic implementation of quasiquote and syntax-quasiquote
 
+(export 'quasiquote)
+(export 'syntax-quasiquote)
+
 (define-syntax (quasiquote form)
   (define (qq term)
 	(define q '())
@@ -77,9 +80,3 @@
 			(list #'syntax-quote (car form))
 			(fold-right transform '() form*))
 	  (list #'syntax-quote form*)))
-
-(define exported-syntax
-  (list (cons 'quasiquote quasiquote)
-		(cons 'syntax-quasiquote syntax-quasiquote)))
-
-(list '() exported-syntax) ;; exported module

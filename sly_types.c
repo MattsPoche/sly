@@ -422,7 +422,7 @@ make_byte_vector(Sly_State *ss, size_t len, size_t cap)
 	vec->h.type = tt_byte_vector;
 	vec->cap = cap;
 	vec->len = len;
-	ss->gc.bytes += cap;
+	ss->gc->bytes += cap;
 	return (sly_value)vec;
 }
 
@@ -466,7 +466,7 @@ make_vector(Sly_State *ss, size_t len, size_t cap)
 	vec->h.type = tt_vector;
 	vec->cap = cap;
 	vec->len = len;
-	ss->gc.bytes += bytes;
+	ss->gc->bytes += bytes;
 	return (sly_value)vec;
 }
 
@@ -539,7 +539,7 @@ vector_grow(Sly_State *ss, sly_value v)
 	 * Object must be a <vector> or <dictionary>
 	 */
 	vector *vec = GET_PTR(v);
-	ss->gc.bytes += vec->cap;
+	ss->gc->bytes += vec->cap;
 	vec->cap *= 2;
 	vec->elems = realloc(vec->elems, vec->cap * sizeof(sly_value));
 	memset(&vec->elems[vec->len], 0, (vec->cap - vec->len) * sizeof(sly_value));
@@ -606,7 +606,7 @@ make_uninterned_symbol(Sly_State *ss, char *cstr, size_t len)
 	sym->len = len;
 	memcpy(sym->name, cstr, len);
 	sym->hash = hash_symbol(cstr, len);
-	ss->gc.bytes += len;
+	ss->gc->bytes += len;
 	return (sly_value)sym;
 }
 

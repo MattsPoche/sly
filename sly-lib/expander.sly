@@ -348,6 +348,7 @@
   (define m-scope (scope))
   (define scopes (syntax-scopes require-id))
   (define imports (dictionary-ref modules file-name #f))
+  (displayln imports)
   (if imports imports
 	  (begin
 		(set! s (expand
@@ -433,8 +434,10 @@
 					(compile-lambda s)
 					(if (equal? r 'quote) s
 						(if (equal? r 'syntax-quote) s
-							(map compile s)))))
-			  (map compile s))
+							(cons (compile (car s))
+								  (compile (cdr s)))))))
+			  (cons (compile (car s))
+					(compile (cdr s))))
 		  s)))
 
 (define (resolve-args args)

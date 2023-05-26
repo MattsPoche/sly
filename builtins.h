@@ -678,22 +678,12 @@ csyntax_source_info(Sly_State *ss, sly_value args)
 static sly_value
 ceval(Sly_State *ss, sly_value args)
 {
-	struct compile *cc = ss->cc;
-	struct scope *scope = ss->cc->cscope;
-	stack_frame *frame = ss->frame;
-	ss->cc = MALLOC(sizeof(*ss->cc));
-	ss->cc->globals = make_dictionary(ss);
-	ss->cc->cscope = make_scope(ss);
-	init_symtable(ss, ss->cc->cscope->symtable);
-	ss->cc->cscope->level = 0;
-	init_builtins(ss);
-	sly_value clos = sly_compile(ss, vector_ref(args, 0));
-	sly_value call_list = make_vector(ss, 1, 1);
-	vector_set(call_list, 0, clos);
-	sly_value rval = call_closure(ss, call_list);
-	ss->cc = cc;
-	ss->cc->cscope = scope;
-	ss->frame = frame;
+	UNUSED(ss);
+	sly_value ast = vector_ref(args, 0);
+	prototype *proto = GET_PTR(ss->cc->cscope->proto);
+	proto->code = make_vector(ss, 0, 16);
+	sly_value clos = sly_compile(ss, ast);
+	sly_value rval = eval_closure(ss, clos, SLY_NULL, 0);
 	return rval;
 }
 

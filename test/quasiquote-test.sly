@@ -1,4 +1,5 @@
-(require "sly-lib/base.sly")
+(require "sly-lib/list.sly")
+(require "sly-lib/quasiquote.sly")
 
 (displayln `foo)
 (displayln `(foo bar))

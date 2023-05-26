@@ -15,15 +15,17 @@
 
 
 void
-gc_init(GC *gc)
+gc_init(struct _sly_state *ss)
 {
+	GC *gc = malloc(sizeof(*gc));
 	memset(gc, 0, sizeof(*gc));
+	ss->gc = gc;
 }
 
 void *
 gc_alloc(struct _sly_state *ss, size_t size)
 {
-	GC *gc = &ss->gc;
+	GC *gc = ss->gc;
 	gc_object *obj = NULL;
 	obj = MALLOC(size);
 	obj->color = GC_WHITE;
@@ -40,8 +42,8 @@ mark_gray(Sly_State *ss, gc_object *obj)
 	if (obj == NULL) return;
 	if (obj->color != GC_WHITE) return;
 	obj->color = GC_GRAY;
-	obj->ngray = ss->gc.grays;
-	ss->gc.grays = obj;
+	obj->ngray = ss->gc->grays;
+	ss->gc->grays = obj;
 }
 
 static inline void
@@ -190,7 +192,7 @@ traverse_object(Sly_State *ss, gc_object *obj)
 static void
 propagate_mark(Sly_State *ss)
 {
-	GC *gc = &ss->gc;
+	GC *gc = ss->gc;
 	if (gc->grays) {
 		gc_object *obj = gc->grays;
 		gc->grays = obj->ngray;
@@ -261,26 +263,26 @@ free_object(Sly_State *ss, gc_object *obj)
 	case tt_symbol: {
 		symbol *sym = (symbol *)obj;
 		size = sizeof(*sym);
-		ss->gc.bytes -= sym->len;
+		ss->gc->bytes -= sym->len;
 		FREE(sym->name);
 	} break;
 	case tt_string:
 	case tt_byte_vector: {
 		byte_vector *bvec = (byte_vector *)obj;
 		size = sizeof(*bvec);
-		ss->gc.bytes -= bvec->cap;
+		ss->gc->bytes -= bvec->cap;
 		FREE(bvec->elems);
 	} break;
 	case tt_dictionary:
 	case tt_vector: {
 		vector *vec = (vector *)obj;
 		size = sizeof(*vec);
-		ss->gc.bytes -= vec->cap * sizeof(sly_value);
+		ss->gc->bytes -= vec->cap * sizeof(sly_value);
 		FREE(vec->elems);
 	} break;
 	}
 	memset(obj, -1, size);
-	ss->gc.bytes -= size;
+	ss->gc->bytes -= size;
 	FREE(obj);
 }
 
@@ -295,15 +297,15 @@ remove_after(Sly_State *ss, gc_object *obj)
 static void
 remove_beginning(Sly_State *ss)
 {
-	gc_object *dead = ss->gc.objects;
-	ss->gc.objects = ss->gc.objects->next;
+	gc_object *dead = ss->gc->objects;
+	ss->gc->objects = ss->gc->objects->next;
 	free_object(ss, dead);
 }
 
 static void
 mark_all_white(Sly_State *ss)
 {
-	gc_object *obj = ss->gc.objects;
+	gc_object *obj = ss->gc->objects;
 	while (obj) {
 		mark_object(obj, GC_WHITE);
 		obj = obj->next;
@@ -313,11 +315,11 @@ mark_all_white(Sly_State *ss)
 static void
 sweep(Sly_State *ss)
 {
-	while (ss->gc.objects
-		   && ss->gc.objects->color == GC_WHITE) {
+	while (ss->gc->objects
+		   && ss->gc->objects->color == GC_WHITE) {
 		remove_beginning(ss);
 	}
-	gc_object *obj = ss->gc.objects;
+	gc_object *obj = ss->gc->objects;
 	if (obj) {
 		mark_object(obj, GC_WHITE);
 	}
@@ -332,7 +334,7 @@ sweep(Sly_State *ss)
 void
 gc_collect(Sly_State *ss)
 {
-	GC *gc = &ss->gc;
+	GC *gc = ss->gc;
 	gc->collections++;
 	mark_roots(ss);
 	while (gc->grays) {
@@ -346,11 +348,11 @@ gc_collect(Sly_State *ss)
 void
 gc_free_all(Sly_State *ss)
 {
-	gc_object *tmp, *obj = ss->gc.objects;
+	gc_object *tmp, *obj = ss->gc->objects;
 	while (obj) {
 		tmp = obj;
 		obj = obj->next;
 		free_object(ss, tmp);
 	}
-	ss->gc.objects = NULL;
+	ss->gc->objects = NULL;
 }

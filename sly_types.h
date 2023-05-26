@@ -52,7 +52,7 @@ enum exc_code { /* exception code */
 };
 
 typedef struct _sly_state {
-	GC gc;
+	GC *gc;
 	char *file_path;
 	char *source_code;
 	struct compile *cc;
