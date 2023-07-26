@@ -3,8 +3,8 @@ WARNINGS=-Wmissing-prototypes -Werror -Wextra -pedantic -Wall -Wswitch-enum
 CFLAGS=-ggdb -std=c11
 CFLAGS += $(WARNINGS)
 RELEASE=-O3 -Werror -Wextra -pedantic -Wall -Wswitch-enum -std=c11
-DEFS=-DUSE_SLY_ALLOC
-LFLAGS=
+DEFS=-DUSE_SLY_ALLOC -D_POSIX_SOURCE
+LFLAGS=-rdynamic
 TARGET=sly
 CSOURCE=$(shell find -name "*.c")
 OBJECTS=$(CSOURCE:%.c=%.o)
@@ -26,7 +26,7 @@ $(OBJECTS):
 	$(CC) -c $(CFLAGS) $(DEFS) -o $@ $(@:%.o=%.c)
 
 $(TARGET): $(OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) $(LFLAGS) -o $@ $^
 
 release:
 	$(CC) $(RELEASE) $(DEFS) -o $(TARGET) $(CSOURCE)

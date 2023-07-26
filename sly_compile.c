@@ -98,6 +98,7 @@ keywords(int idx)
 	return NULL;
 }
 
+static sly_value last_compiled_prototype = SLY_NULL;
 static sly_value kw_symbols[KW_COUNT];
 
 int comp_expr(Sly_State *ss, sly_value form, int reg);
@@ -139,6 +140,22 @@ symbol_lookup_props(Sly_State *ss, sly_value sym, u32 *level, sly_value *uplist)
 		scope = scope->parent;
 	}
 	return SLY_VOID;
+}
+
+static sly_value
+get_macro_prototype(Sly_State *ss, sly_value id)
+{
+	sly_assert(symbol_p(id), "Error macro id must be a symbol");
+	struct scope *scope = ss->cc->cscope;
+	sly_value entry;
+	while (scope) {
+		entry = dictionary_entry_ref(scope->macros, id);
+		if (!slot_is_free(entry)) {
+			return cdr(entry);
+		}
+		scope = scope->parent;
+	}
+	return SLY_NULL;
 }
 
 static size_t
@@ -220,6 +237,8 @@ comp_define(Sly_State *ss, sly_value form, int reg)
 	union symbol_properties st_prop = {0};
 	st_prop.v = symbol_lookup_props(ss, var, NULL, NULL);
 	if (void_p(st_prop.v)) {
+		sly_display(var, 1);
+		printf("\n");
 		sly_raise_exception(ss, EXC_COMPILE,
 							"Error definition form ouside definition context");
 	}
@@ -252,6 +271,8 @@ comp_define(Sly_State *ss, sly_value form, int reg)
 		}
 		return reg;
 	} else {
+		sly_display(var, 1);
+		printf("\n");
 		comp_expr(ss, CAR(form), st_prop.p.reg);
 		/* end of definition */
 		if (!null_p(CDR(form))) {
@@ -518,6 +539,24 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 	return reg;
 }
 
+static sly_value
+macro_call(Sly_State *ss, sly_value macro, sly_value form)
+{
+	sly_value args = make_vector(ss, 1, 1);
+	vector_set(args, 0, form);
+	if (prototype_p(macro)) {
+		macro = make_closure(ss, macro);
+	}
+	sly_assert(closure_p(macro), "Type Error macro must be a procedure");
+	int arity = sly_arity(macro);
+	sly_assert(arity == 0 || arity == 1,
+			   "Value Error macros may have at most one argument");
+	closure *clos = GET_PTR(macro);
+	vector_set(clos->upvals, 0,
+			   make_closed_upvalue(ss, ss->cc->globals));
+	return eval_closure(ss, macro, args, 0);
+}
+
 static int
 comp_funcall(Sly_State *ss, sly_value form, int reg)
 {
@@ -527,6 +566,13 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 	syntax *stx = GET_PTR(form);
 	sly_value head = CAR(form);
 	form = CDR(form);
+	sly_value macro = get_macro_prototype(ss, syntax_to_datum(head));
+	if (!null_p(macro)) {
+		/* macro_call */
+		form = macro_call(ss, macro, form);
+		reg = comp_expr(ss, form, reg);
+		return reg;
+	}
 	int start = reg;
 	int reg2 = comp_expr(ss, head, reg);
 	if (reg2 != -1 && reg2 != reg) {
@@ -562,8 +608,8 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 	scope->parent = cc->cscope;
 	scope->level = cc->cscope->level + 1;
 	cc->cscope = scope;
-	sly_value stx = form;
 	form = CDR(form);
+	sly_value stx = form;
 	int preg = reg;
 	prototype *proto = GET_PTR(scope->proto);
 	sly_value symtable = scope->symtable;
@@ -578,8 +624,6 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 		sly_value stx = CAR(args);
 		sym = syntax_to_datum(stx);
 		if (!symbol_p(sym)) {
-			sly_display(sym, 1);
-			printf("\n");
 			sly_raise_exception(ss, EXC_COMPILE, "Compile error function parameter must be a symbol");
 		}
 		st_prop.p.reg = proto->nregs++;
@@ -597,8 +641,6 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 			proto->nvars++;
 			dictionary_set(ss, symtable, sym, st_prop.v);
 		} else {
-			sly_display(sym, 1);
-			printf("\n");
 			sly_raise_exception(ss, EXC_COMPILE, "Compile error function parameter must be a symbol");
 		}
 	}
@@ -622,6 +664,7 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 	prototype *cproto = GET_PTR(cc->cscope->proto);
 	size_t i = vector_len(cproto->K);
 	vector_append(ss, cproto->K, scope->proto);
+	last_compiled_prototype = scope->proto;
 	if ((size_t)reg >= cproto->nregs) cproto->nregs = reg + 1;
 	int src_info = intern_syntax(ss, stx);
 	vector_append(ss, cproto->code, iABx(OP_CLOSURE, reg, i, src_info));
@@ -781,7 +824,19 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 		} break;
 		case kw_define_syntax: {
 			form = CDR(form);
+			sly_value name = CAR(form);
+			if (pair_p(name) || syntax_pair_p(name)) {
+				name = CAR(name);
+			}
+			if (identifier_p(name)) {
+				name = syntax_to_datum(name);
+			}
+			sly_assert(symbol_p(name), "Type Error Expected symbol");
 			reg = comp_define(ss, form, reg);
+			dictionary_set(ss,
+						   cc->cscope->macros,
+						   name,
+						   last_compiled_prototype);
 		} break;
 		case kw_call_with_continuation: /* fallthrough intended */
 		case kw_call_cc: {
@@ -848,11 +903,8 @@ sly_do_file(char *file_path, int debug_info)
 	ss.interned = make_dictionary(&ss);
 	sly_init_state(&ss);
 	ss.file_path = file_path;
-	sly_value ast = parse_file(&ss, "sly-lib/expander.sly", &ss.source_code);
+	sly_value ast = parse_file(&ss, file_path, &ss.source_code);
 	ss.entry_point = sly_compile(&ss, ast);
-	dictionary_set(&ss, ss.cc->globals, make_symbol(&ss, "__VARGS__", 9),
-				   cons(&ss, make_string(&ss, file_path, strlen(file_path)),
-						SLY_NULL));
 	ss.proto = ss.cc->cscope->proto;
 	gc_collect(&ss);
 	eval_closure(&ss, ss.entry_point, SLY_NULL, 1);

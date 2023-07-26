@@ -1,0 +1,28 @@
+(define (does-this-work?)
+  (display "Success!\n"))
+
+(define-syntax (displayln form)
+  (display "hello from displayln\n")
+  (define value (car form))
+  ;; (does-this-work?)
+  (syntax (list #'begin
+				(syntax (list #'display value) '())
+				(syntax (list #'display #'"\n") '())) '()))
+
+(define-syntax (s-foo form)
+  (displayln "hello from s-foo")
+  (displayln form)
+  (syntax (list #'displayln #'"poopy-butt-hole") '()))
+
+(define (foo x y)
+  (bar)
+  (displayln (* x y))
+  (displayln "hello from foo"))
+
+(define (bar)
+  (displayln "hello from bar"))
+
+(display "hello, world!!!\n")
+(foo 69 420)
+(s-foo 69 420)
+(displayln "eat my butt")

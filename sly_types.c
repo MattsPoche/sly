@@ -1,4 +1,5 @@
 #include <time.h>
+#include <execinfo.h>
 #include "sly_types.h"
 #include "sly_alloc.h"
 #include "opcodes.h"
@@ -44,10 +45,20 @@ hash_symbol(char *name, size_t len)
 }
 
 void
-sly_assert(int p, char *msg)
+_sly_assert(int p, char *msg, int line_number, char *file_name)
 {
+	void *bt_info[255];
+	int length = 0;
 	if (!p) {
-		fprintf(stderr, "%s\n", msg);
+		fprintf(stderr,
+				"%s:%d: Assertion failed:\n"
+				"%s\n"
+				"Backtrace:\n",
+				file_name,
+				line_number,
+				msg);
+		length = backtrace(bt_info, 255);
+		backtrace_symbols_fd(bt_info, length, fileno(stderr));
 		exit(1);
 	}
 }
@@ -209,6 +220,9 @@ sly_hash(sly_value v)
 		byte_vector *bv = GET_PTR(v);
 		return hash_str(bv->elems, bv->len);
 	}
+	printf("Value Error: ");
+	sly_display(v, 1);
+	printf("\n");
 	sly_assert(0, "Hash unemplemented for type");
 	return 0;
 }
@@ -311,6 +325,10 @@ cons(Sly_State *ss, sly_value car, sly_value cdr)
 sly_value
 car(sly_value obj)
 {
+	if (!pair_p(obj)) {
+		sly_display(obj, 1);
+		printf("\n");
+	}
 	sly_assert(pair_p(obj), "Type Error (car): Expected Pair");
 	pair *p = GET_PTR(obj);
 	return p->car;
@@ -506,6 +524,10 @@ vector_ref(sly_value v, size_t idx)
 {
 	sly_assert(vector_p(v), "Type Error: Expected vector");
 	vector *vec = GET_PTR(v);
+	if (idx >= vec->len) {
+		sly_display(v, 1);
+		printf("\nidx :: %zu\nlen :: %zu\n", idx, vec->len);
+	}
 	sly_assert(idx < vec->len, "Error: Index out of bounds");
 	return vec->elems[idx];
 }
@@ -739,6 +761,39 @@ make_continuation(Sly_State *ss, struct _stack_frame *frame, size_t pc, size_t r
 	cc->pc = pc;
 	cc->ret_slot = ret_slot;
 	return (sly_value)cc;
+}
+
+int
+sly_arity(sly_value proc)
+{
+	/* Retuns an int representing the arity of the procedure.
+	 * The absolute value of arity is the number of non-optional args.
+	 * If the value is negative, the procedure has a variatic tail arg.
+	 */
+	int arity = 0;
+	if (cclosure_p(proc)) {
+		cclosure *clos = GET_PTR(proc);
+		arity = clos->nargs;
+		if (clos->has_varg) {
+			arity = -(arity + 1);
+		}
+	} else if (prototype_p(proc)) {
+		prototype *proto = GET_PTR(proc);
+		arity = proto->nargs;
+		if (proto->has_varg) {
+			arity = -(arity + 1);
+		}
+	} else if (closure_p(proc)) {
+		closure *clos = GET_PTR(proc);
+		prototype *proto = GET_PTR(clos->proto);
+		arity = proto->nargs;
+		if (proto->has_varg) {
+			arity = -(arity + 1);
+		}
+	} else {
+		sly_assert(0, "Type Error value must be a procedure type");
+	}
+	return arity;
 }
 
 static sly_value
@@ -1117,6 +1172,10 @@ make_syntax(Sly_State *ss, token tok, sly_value datum)
 sly_value
 syntax_to_datum(sly_value syn)
 {
+	if (!syntax_p(syn)) {
+		sly_display(syn, 1);
+		printf("\n");
+	}
 	sly_assert(syntax_p(syn), "Type Error expected <syntax>");
 	syntax *s = GET_PTR(syn);
 	return s->datum;

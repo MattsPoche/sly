@@ -218,7 +218,7 @@ typedef struct _syntax {
 	u32 context;
 } syntax;
 
-void sly_assert(int p, char *msg);
+void _sly_assert(int p, char *msg, int line_number, char *file_name);
 void sly_raise_exception(Sly_State *ss, int excpt, char *msg);
 void sly_display(sly_value v, int lit);
 u64 sly_hash(sly_value v);
@@ -273,6 +273,7 @@ sly_value make_continuation(Sly_State *ss,
 							struct _stack_frame *frame,
 							size_t pc,
 							size_t ret_slot);
+int sly_arity(sly_value proc);
 sly_value sly_add(Sly_State *ss, sly_value x, sly_value y);
 sly_value sly_sub(Sly_State *ss, sly_value x, sly_value y);
 sly_value sly_mul(Sly_State *ss, sly_value x, sly_value y);
@@ -307,6 +308,7 @@ int upvalue_isclosed(sly_value uv);
 sly_value upvalue_get(sly_value uv);
 void upvalue_set(sly_value uv, sly_value value);
 
+#define sly_assert(p, msg) _sly_assert(p, msg, __LINE__, __FILE__)
 #define cstr_to_symbol(cstr) (make_symbol(ss, (cstr), strlen(cstr)))
 
 /* type predicates */
