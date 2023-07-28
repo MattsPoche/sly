@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <errno.h>
+#include <stdarg.h>
 #include "sly_types.h"
 #include "lexer.h"
 #include "parser.h"
@@ -234,6 +235,31 @@ get_file_size(FILE *file)
 	size_t size = ftell(file);
 	fseek(file, 0, SEEK_SET);
 	return size;
+}
+
+char *
+cat_files(int num_files, ...)
+{
+	va_list ap;
+	char *file_name;
+	char *buffer;
+	size_t total_size;
+	va_start(ap, num_files);
+	FILE *mem = open_memstream(&buffer, &total_size);
+	while (num_files--) {
+		file_name = va_arg(ap, char *);
+		FILE *f = fopen(file_name, "r");
+		int c;
+		fprintf(mem, ";;; %s\n\n", file_name);
+		while ((c = fgetc(f)) != EOF) {
+			fputc(c, mem);
+		}
+		fputc('\n', mem);
+		fclose(f);
+	}
+	fclose(mem);
+	va_end(ap);
+	return buffer;
 }
 
 sly_value

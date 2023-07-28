@@ -1,9 +1,4 @@
-(require "sly-lib/list.sly")
-
 ;;; Basic implementation of quasiquote and syntax-quasiquote
-
-(export 'quasiquote)
-(export 'syntax-quasiquote)
 
 (define-syntax (quasiquote form)
   (define (qq term)

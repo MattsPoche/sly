@@ -142,22 +142,6 @@ symbol_lookup_props(Sly_State *ss, sly_value sym, u32 *level, sly_value *uplist)
 	return SLY_VOID;
 }
 
-static sly_value
-get_macro_prototype(Sly_State *ss, sly_value id)
-{
-	sly_assert(symbol_p(id), "Error macro id must be a symbol");
-	struct scope *scope = ss->cc->cscope;
-	sly_value entry;
-	while (scope) {
-		entry = dictionary_entry_ref(scope->macros, id);
-		if (!slot_is_free(entry)) {
-			return cdr(entry);
-		}
-		scope = scope->parent;
-	}
-	return SLY_NULL;
-}
-
 static size_t
 intern_in_vector(Sly_State *ss, sly_value vec, sly_value value)
 {
@@ -193,7 +177,6 @@ make_scope(Sly_State *ss)
 	struct scope *scope = gc_alloc(ss, sizeof(*scope));
 	scope->h.type = tt_scope;
 	scope->parent = NULL;
-	scope->macros = make_dictionary(ss);
 	scope->symtable = make_dictionary(ss);
 	scope->proto = make_prototype(ss,
 								  make_vector(ss, 0, 8),
@@ -537,24 +520,6 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 	return reg;
 }
 
-static sly_value
-macro_call(Sly_State *ss, sly_value macro, sly_value form)
-{
-	sly_value args = make_vector(ss, 1, 1);
-	vector_set(args, 0, form);
-	if (prototype_p(macro)) {
-		macro = make_closure(ss, macro);
-	}
-	sly_assert(closure_p(macro), "Type Error macro must be a procedure");
-	int arity = sly_arity(macro);
-	sly_assert(arity == 0 || arity == 1,
-			   "Value Error macros may have at most one argument");
-	closure *clos = GET_PTR(macro);
-	vector_set(clos->upvals, 0,
-			   make_closed_upvalue(ss, ss->cc->globals));
-	return eval_closure(ss, macro, args, 0);
-}
-
 static int
 comp_funcall(Sly_State *ss, sly_value form, int reg)
 {
@@ -564,13 +529,6 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 	syntax *stx = GET_PTR(form);
 	sly_value head = CAR(form);
 	form = CDR(form);
-	sly_value macro = get_macro_prototype(ss, syntax_to_datum(head));
-	if (!null_p(macro)) {
-		/* macro_call */
-		form = macro_call(ss, macro, form);
-		reg = comp_expr(ss, form, reg);
-		return reg;
-	}
 	int start = reg;
 	int reg2 = comp_expr(ss, head, reg);
 	if (reg2 != -1 && reg2 != reg) {
@@ -822,19 +780,7 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 		} break;
 		case kw_define_syntax: {
 			form = CDR(form);
-			sly_value name = CAR(form);
-			if (pair_p(name) || syntax_pair_p(name)) {
-				name = CAR(name);
-			}
-			if (identifier_p(name)) {
-				name = syntax_to_datum(name);
-			}
-			sly_assert(symbol_p(name), "Type Error Expected symbol");
 			reg = comp_define(ss, form, reg);
-			dictionary_set(ss,
-						   cc->cscope->macros,
-						   name,
-						   last_compiled_prototype);
 		} break;
 		case kw_call_with_continuation: /* fallthrough intended */
 		case kw_call_cc: {
@@ -901,7 +847,11 @@ sly_do_file(char *file_path, int debug_info)
 	ss.interned = make_dictionary(&ss);
 	sly_init_state(&ss);
 	ss.file_path = file_path;
-	sly_value ast = parse_file(&ss, file_path, &ss.source_code);
+	char *source_code = cat_files(3,
+								  "sly-lib/list.sly",
+								  "sly-lib/quasiquote.sly",
+								  file_path);
+	sly_value ast = parse(&ss, source_code);
 	ast = sly_expand(&ss, ast);
 	FREE(ss.cc);
 	sly_init_state(&ss);

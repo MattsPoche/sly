@@ -3,7 +3,7 @@ WARNINGS=-Wmissing-prototypes -Werror -Wextra -pedantic -Wall -Wswitch-enum
 CFLAGS=-ggdb -std=c11
 CFLAGS += $(WARNINGS)
 RELEASE=-O3 -Werror -Wextra -pedantic -Wall -Wswitch-enum -std=c11
-DEFS=-DUSE_SLY_ALLOC -D_POSIX_SOURCE
+DEFS=-D USE_SLY_ALLOC -D _POSIX_C_SOURCE=200809L
 LFLAGS=-rdynamic
 TARGET=sly
 CSOURCE=$(shell find -name "*.c")

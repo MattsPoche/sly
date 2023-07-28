@@ -71,7 +71,6 @@ traverse_scope(Sly_State *ss, struct scope *scope)
 	mark_gray(ss, (gc_object *)scope->parent);
 	mark_gray(ss, GET_PTR(scope->proto));
 	mark_gray(ss, GET_PTR(scope->symtable));
-	mark_gray(ss, GET_PTR(scope->macros));
 }
 
 static void

@@ -1,33 +1,3 @@
-(export 'displayln)
-(export 'caar)
-(export 'cddr)
-(export 'cdar)
-(export 'cadr)
-(export 'caddr)
-(export 'cdddr)
-(export 'cadddr)
-(export 'zero?)
-(export 'fold-left)
-(export 'fold-right)
-(export 'contains)
-(export 'remove)
-(export 'append)
-(export 'reverse)
-(export 'last-pair)
-(export 'list-copy)
-(export 'length)
-(export 'list-ref)
-(export 'length)
-(export 'count)
-(export 'argmax)
-(export 'map)
-(export 'for-each)
-(export 'set-add)
-(export 'set-union)
-(export 'subset?)
-(export 'assoc-set)
-(export 'assoc-lookup)
-
 (define (displayln x) (display x)(display "\n"))
 
 (define (caar p)
@@ -153,38 +123,3 @@
 	  (begin
 		(apply f (*heads* xs))
 		(apply for-each f (*tails* xs)))))
-
-(define (set-add xs x)
-  (if (contains xs x)
-	  xs
-	  (cons x xs)))
-
-(define (set-union xs ys)
-  (if (null? ys)
-	  xs
-	  (if (null? xs)
-		  ys
-		  (set-union (set-add xs (car ys)) (cdr ys)))))
-
-(define (subset? xs ys)
-  (if (null? xs)
-	  #t
-	  (if (null? ys)
-		  #f
-		  (if (contains ys (car xs))
-			  (subset? (cdr xs) ys)
-			  #f))))
-
-(define (assoc-set xs key value)
-  (if (null? xs)
-	  (cons (cons key value) xs)
-	  (if (equal? (caar xs) key)
-		  (cons (cons key value) (cdr xs))
-		  (cons (car xs) (assoc-set (cdr xs) key value)))))
-
-(define (assoc-lookup xs key)
-  (if (null? xs)
-	  #f
-	  (if (equal? (caar xs) key)
-		  (cdar xs)
-		  (assoc-lookup (cdr xs) key))))

@@ -198,7 +198,6 @@ struct scope {
 	struct scope *parent; // NULL if top-level
 	sly_value proto;      // <prototype>
 	sly_value symtable;   // <dictionary>
-	sly_value macros;
 	u32 level;
 };
 

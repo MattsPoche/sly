@@ -1,27 +1,17 @@
-(define (does-this-work?)
-  (display "Success!\n"))
+(define-syntax (my-unless form)
+  (define fst (car form))
+  (set! form (cdr form))
+  (define condition (car form))
+  (define body (cdr form))
+  ;; (datum->syntax fst (list #'if (list #'not condition)
+  ;; 						   (cons #'begin body)
+  ;; 						   (void)))
+  #`(if (not #,condition)
+		(begin #,body)
+		(void)))
 
-(define-syntax (displayln form)
-  (display "hello from displayln\n")
-  (define value (car (cdr form)))
-  ;; (does-this-work?)
-  (syntax (list #'begin
-				(syntax (list #'display value) '())
-				(syntax (list #'display #'"\n") '())) '()))
 
-(define-syntax (s-foo form)
-  (displayln "hello from s-foo")
-  (syntax (list #'displayln #'"poopy-butt-hole") '()))
-
-(define (bar)
-  (displayln "hello from bar"))
-
-(define (foo x y)
-  (bar)
-  (displayln (* x y))
-  (displayln "hello from foo"))
-
-(display "hello, world!!!\n")
-(foo 69 420)
-(s-foo 32 88)
-(displayln "eat my butt")
+((lambda ()
+   (define (not x) x)
+   (my-unless #t
+			  (display "this should not be printed!\n"))))

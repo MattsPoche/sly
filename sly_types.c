@@ -1230,7 +1230,11 @@ is_subset(sly_value set1, sly_value set2)
 	if (!dictionary_p(set1) || !dictionary_p(set2)) {
 		return 0;
 	}
+	vector *v1 = GET_PTR(set1);
 	vector *vec = GET_PTR(set2);
+	if (v1->len != vec->len) {
+		return 0;
+	}
 	sly_value entry;
 	for (size_t i = 0; i < vec->cap; ++i) {
 		entry = vec->elems[i];

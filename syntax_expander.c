@@ -7,6 +7,8 @@
 #include "sly_vm.h"
 #include "sly_alloc.h"
 
+/* TODO: Implement module system */
+
 #define scope() gensym(ss)
 #define add_binding(id, binding)							\
 		dictionary_set(ss, all_bindings, id, binding);
@@ -201,7 +203,7 @@ check_unambiguous(Sly_State *ss, sly_value max_id, sly_value candidate_ids)
 	sly_value c_id;
 	while (!null_p(candidate_ids)) {
 		c_id = car(candidate_ids);
-		sly_assert(is_subset(ss, syntax_scopes(c_id), syntax_scopes(max_id)),
+		sly_assert(is_subset(ss, syntax_scopes(max_id), syntax_scopes(c_id)),
 				   "Error ambiguous binding");
 		candidate_ids = cdr(candidate_ids);
 	}
@@ -212,6 +214,10 @@ static sly_value
 resolve(Sly_State *ss, sly_value id)
 {
 	sly_value candidate_ids = find_all_matching_bindings(ss, id);
+	if (null_p(candidate_ids)) {
+		sly_display(id, 1);
+		printf("\n");
+	}
 	sly_assert(!null_p(candidate_ids), "Error unresolved identifier");
 	sly_value max_id = get_max_id(candidate_ids);
 	check_unambiguous(ss, max_id, candidate_ids);
@@ -540,6 +546,9 @@ sly_expand(Sly_State *ss, sly_value ast)
 	ast = introduce(ss, syntax_to_list(ss, ast));
 	hoist_top_level_defines(ss, ast, env);
 	ast = compile(ss, expand(ss, ast, env));
+	printf("ast:\n");
+	sly_display(ast, 1);
+	printf("\n");
 	ast = datum_to_syntax(ss, before, ast);
 	return ast;
 }
