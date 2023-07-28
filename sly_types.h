@@ -218,7 +218,7 @@ typedef struct _syntax {
 	u32 context;
 } syntax;
 
-void _sly_assert(int p, char *msg, int line_number, char *file_name);
+void _sly_assert(int p, char *msg, int line_number, const char *func_name, char *file_name);
 void sly_raise_exception(Sly_State *ss, int excpt, char *msg);
 void sly_display(sly_value v, int lit);
 u64 sly_hash(sly_value v);
@@ -235,10 +235,12 @@ sly_value cdr(sly_value obj);
 void set_car(sly_value obj, sly_value value);
 void set_cdr(sly_value obj, sly_value value);
 sly_value tail(sly_value obj);
+int list_p(sly_value list);
 sly_value copy_list(Sly_State *ss, sly_value list);
 int list_eq(sly_value o1, sly_value o2);
 void append(sly_value p, sly_value v);
 size_t list_len(sly_value list);
+int list_contains(sly_value list, sly_value value);
 sly_value list_to_vector(Sly_State *ss, sly_value list);
 sly_value vector_to_list(Sly_State *ss, sly_value vec);
 sly_value make_byte_vector(Sly_State *ss, size_t len, size_t cap);
@@ -255,6 +257,7 @@ void vector_append(Sly_State *ss, sly_value v, sly_value value);
 sly_value vector_pop(Sly_State *ss, sly_value v);
 void vector_remove(sly_value v, size_t idx);
 sly_value vector_discard_values(Sly_State *ss, sly_value v);
+int vector_contains(Sly_State *ss, sly_value vec, sly_value value);
 sly_value make_uninterned_symbol(Sly_State *ss, char *cstr, size_t len);
 sly_value make_symbol(Sly_State *ss, char *cstr, size_t len);
 sly_value gensym(Sly_State *ss);
@@ -289,6 +292,7 @@ sly_value make_syntax(Sly_State *ss, token tok, sly_value datum);
 sly_value syntax_to_datum(sly_value syn);
 sly_value datum_to_syntax(Sly_State *ss, sly_value id, sly_value datum);
 sly_value syntax_to_list(Sly_State *ss, sly_value form);
+sly_value syntax_scopes(sly_value value);
 token syntax_get_token(Sly_State *ss, sly_value stx);
 sly_value make_dictionary(Sly_State *ss);
 int slot_is_free(sly_value slot);
@@ -308,7 +312,7 @@ int upvalue_isclosed(sly_value uv);
 sly_value upvalue_get(sly_value uv);
 void upvalue_set(sly_value uv, sly_value value);
 
-#define sly_assert(p, msg) _sly_assert(p, msg, __LINE__, __FILE__)
+#define sly_assert(p, msg) _sly_assert(p, msg, __LINE__, __func__, __FILE__)
 #define cstr_to_symbol(cstr) (make_symbol(ss, (cstr), strlen(cstr)))
 
 /* type predicates */

@@ -45,17 +45,18 @@ hash_symbol(char *name, size_t len)
 }
 
 void
-_sly_assert(int p, char *msg, int line_number, char *file_name)
+_sly_assert(int p, char *msg, int line_number, const char *func_name, char *file_name)
 {
 	void *bt_info[255];
 	int length = 0;
 	if (!p) {
 		fprintf(stderr,
-				"%s:%d: Assertion failed:\n"
+				"%s:%d: Assertion failed in function %s:\n"
 				"%s\n"
 				"Backtrace:\n",
 				file_name,
 				line_number,
+				func_name,
 				msg);
 		length = backtrace(bt_info, 255);
 		backtrace_symbols_fd(bt_info, length, fileno(stderr));
@@ -208,6 +209,54 @@ sly_display(sly_value v, int lit)
 	}
 }
 
+static u64
+hash_hash(u64 h, u64 x)
+{
+	u8 *bytes = (u8 *)(&x);
+	for (size_t i = 0; i < sizeof(x); ++i) {
+		h = DH(h, bytes[i]);
+	}
+	return h;
+}
+
+static u64
+hash_vector(sly_value v)
+{
+	vector *vec = GET_PTR(v);
+	u64 h = 5381;
+	for (size_t i = 0; i < vec->len; ++i) {
+		h = hash_hash(h, sly_hash(vec->elems[i]));
+	}
+	return h;
+}
+
+static u64
+hash_dict(sly_value v)
+{
+	vector *vec = GET_PTR(v);
+	u64 h = 5381;
+	for (size_t i = 0; i < vec->cap; ++i) {
+		if (!slot_is_free(vec->elems[i])) {
+			h = hash_hash(h, sly_hash(vec->elems[i]));
+		}
+	}
+	return h;
+}
+
+static u64
+hash_syntax(sly_value v)
+{
+	syntax *s = GET_PTR(v);
+	u64 h = sly_hash(s->datum);
+	return hash_hash(h, sly_hash(s->scope_set));
+}
+
+static u64
+hash_pair(sly_value v)
+{
+	return hash_hash(car(v), cdr(v));
+}
+
 u64
 sly_hash(sly_value v)
 {
@@ -219,6 +268,14 @@ sly_hash(sly_value v)
 	} else if (string_p(v)) {
 		byte_vector *bv = GET_PTR(v);
 		return hash_str(bv->elems, bv->len);
+	} else if (vector_p(v)) {
+		return hash_vector(v);
+	} else if (dictionary_p(v)) {
+		return hash_dict(v);
+	} else if (syntax_p(v)) {
+		return hash_syntax(v);
+	} else if (pair_p(v)) {
+		return hash_pair(v);
 	}
 	printf("Value Error: ");
 	sly_display(v, 1);
@@ -325,10 +382,6 @@ cons(Sly_State *ss, sly_value car, sly_value cdr)
 sly_value
 car(sly_value obj)
 {
-	if (!pair_p(obj)) {
-		sly_display(obj, 1);
-		printf("\n");
-	}
 	sly_assert(pair_p(obj), "Type Error (car): Expected Pair");
 	pair *p = GET_PTR(obj);
 	return p->car;
@@ -375,6 +428,19 @@ append(sly_value p, sly_value v)
 	set_cdr(p, v);
 }
 
+int
+list_p(sly_value list)
+{
+	if (null_p(list)) {
+		return 1;
+	}
+	if (pair_p(list)) {
+		return list_p(cdr(list));
+	}
+	return 0;
+
+}
+
 sly_value
 copy_list(Sly_State *ss, sly_value list)
 {
@@ -403,6 +469,18 @@ list_len(sly_value list)
 	size_t len = 0;
 	for (; pair_p(list); list = cdr(list)) len++;
 	return len;
+}
+
+int
+list_contains(sly_value list, sly_value value)
+{
+	while (!null_p(list)) {
+		if (sly_equal(car(list), value)) {
+			return 1;
+		}
+		list = cdr(list);
+	}
+	return 0;
 }
 
 sly_value
@@ -524,10 +602,6 @@ vector_ref(sly_value v, size_t idx)
 {
 	sly_assert(vector_p(v), "Type Error: Expected vector");
 	vector *vec = GET_PTR(v);
-	if (idx >= vec->len) {
-		sly_display(v, 1);
-		printf("\nidx :: %zu\nlen :: %zu\n", idx, vec->len);
-	}
 	sly_assert(idx < vec->len, "Error: Index out of bounds");
 	return vec->elems[idx];
 }
@@ -615,6 +689,19 @@ vector_discard_values(Sly_State *ss, sly_value v)
 	vec->len = 0;
 	memset(vec->elems, 0, vec->cap * sizeof(sly_value));
 	return SLY_VOID;
+}
+
+int
+vector_contains(Sly_State *ss, sly_value vec, sly_value value)
+{
+	UNUSED(ss);
+	size_t len = vector_len(vec);
+	for (size_t i = 0; i < len; ++i) {
+		if (sly_equal(vector_ref(vec, i), value)) {
+			return 1;
+		}
+	}
+	return 0;
 }
 
 sly_value
@@ -1100,6 +1187,8 @@ sly_eq(sly_value o1, sly_value o2)
 	return 0;
 }
 
+#if 0
+
 static int
 contains(sly_value xs, sly_value x)
 {
@@ -1126,6 +1215,35 @@ is_subset(sly_value xs, sly_value ys)
 	}
 	return 0;
 }
+
+#else
+
+static int
+set_contains(sly_value set, sly_value value)
+{ // check if set contains a value
+	return !slot_is_free(dictionary_entry_ref(set, value));
+}
+
+static int
+is_subset(sly_value set1, sly_value set2)
+{ // check if set2 is a subset of set1
+	if (!dictionary_p(set1) || !dictionary_p(set2)) {
+		return 0;
+	}
+	vector *vec = GET_PTR(set2);
+	sly_value entry;
+	for (size_t i = 0; i < vec->cap; ++i) {
+		entry = vec->elems[i];
+		if (!slot_is_free(entry)
+			&& !set_contains(set1, car(entry))) {
+			/* if set2 has a value not found in slot1 */
+			return 0;
+		}
+	}
+	return 1;
+}
+
+#endif
 
 int
 sly_equal(sly_value o1, sly_value o2)
@@ -1172,10 +1290,6 @@ make_syntax(Sly_State *ss, token tok, sly_value datum)
 sly_value
 syntax_to_datum(sly_value syn)
 {
-	if (!syntax_p(syn)) {
-		sly_display(syn, 1);
-		printf("\n");
-	}
 	sly_assert(syntax_p(syn), "Type Error expected <syntax>");
 	syntax *s = GET_PTR(syn);
 	return s->datum;
@@ -1245,6 +1359,15 @@ syntax_to_list(Sly_State *ss, sly_value form)
 	sly_assert(syntax_pair_p(form),
 			   "Type error expected syntax pair");
 	return syntax_to_list_rec(ss, form);
+}
+
+sly_value
+syntax_scopes(sly_value value)
+{
+	sly_assert(syntax_p(value),
+			   "Type error expected <syntax>");
+	syntax *s = GET_PTR(value);
+	return s->scope_set;
 }
 
 token
@@ -1372,7 +1495,7 @@ dictionary_ref(sly_value d, sly_value key)
 {
 	sly_value entry = dictionary_entry_ref(d, key);
 	sly_assert(!slot_is_free(entry), "Dictionary Key Error key not found");
-	return cdr(dictionary_entry_ref(d, key));
+	return cdr(entry);
 }
 
 void

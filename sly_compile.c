@@ -1,9 +1,9 @@
-#include <assert.h>
 #include "sly_types.h"
 #include "parser.h"
 #define OPCODES_INCLUDE_INLINE 1
 #include "opcodes.h"
 #include "sly_compile.h"
+#include "syntax_expander.h"
 #include "eval.h"
 #include "sly_vm.h"
 #include "sly_alloc.h"
@@ -271,8 +271,6 @@ comp_define(Sly_State *ss, sly_value form, int reg)
 		}
 		return reg;
 	} else {
-		sly_display(var, 1);
-		printf("\n");
 		comp_expr(ss, CAR(form), st_prop.p.reg);
 		/* end of definition */
 		if (!null_p(CDR(form))) {
@@ -600,7 +598,7 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 	return start;
 }
 
-int
+static int
 comp_lambda(Sly_State *ss, sly_value form, int reg)
 {
 	struct compile *cc = ss->cc;
@@ -904,6 +902,9 @@ sly_do_file(char *file_path, int debug_info)
 	sly_init_state(&ss);
 	ss.file_path = file_path;
 	sly_value ast = parse_file(&ss, file_path, &ss.source_code);
+	ast = sly_expand(&ss, ast);
+	FREE(ss.cc);
+	sly_init_state(&ss);
 	ss.entry_point = sly_compile(&ss, ast);
 	ss.proto = ss.cc->cscope->proto;
 	gc_collect(&ss);
@@ -916,6 +917,13 @@ sly_do_file(char *file_path, int debug_info)
 		printf("** Total bytes allocated: %zu **\n", bytes_allocated);
 		printf("** GC Total Collections: %d **\n", ss.gc->collections);
 	}
+}
+
+sly_value
+sly_compile_lambda(Sly_State *ss, sly_value ast)
+{
+	sly_compile(ss, ast);
+	return last_compiled_prototype;
 }
 
 sly_value
