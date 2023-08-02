@@ -68,10 +68,11 @@
 			(set! term* (list #'cons term* (cdr form)))
 			(set! term* (list #'cons term* form))))
 	term*)
-
   (define form* (cadr form))
   (if (pair? form*)
-	  (list #'datum->syntax
-			(list #'syntax-quote (car form))
-			(fold-right transform '() form*))
-	  (list #'syntax-quote form*)))
+	  (syntax (list #'datum->syntax
+					(list #'syntax-quote (car form))
+					(fold-right transform '() form*)) (syntax-scopes (car form)))
+	  (syntax (list #'syntax-quote form*) (syntax-scopes form))))
+
+(display "FINISHED FILE: sly-lib/quasiquote.sly\n")

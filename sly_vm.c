@@ -98,7 +98,6 @@ funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall)
 			vector_set(nframe->R, proto->nargs, vargs);
 		} else {
 			if (nargs != proto->nargs) {
-				dis_all(ss->frame, 1);
 				sly_display(ss->frame->clos, 1);
 				printf("\n");
 				sly_display(val, 1);
@@ -134,7 +133,6 @@ funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall)
 		ss->frame->pc = cc->pc;
 		vector_set(ss->frame->R, cc->ret_slot, arg);
 	} else {
-		dis_all(ss->frame, 1);
 		printf("pc :: %zu\n", ss->frame->pc);
 		sly_display(val, 1);
 		printf("\n");
@@ -173,7 +171,6 @@ vm_run(Sly_State *ss, int run_gc)
 	if (vector_len(ss->frame->code) == 0) {
 		return ret_val;
 	}
-	//int line = 0;
     for (;;) {
 		instr.v = next_instr();
 		/* if (instr.i.ln != -1) { */

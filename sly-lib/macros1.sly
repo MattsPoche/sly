@@ -1,12 +1,9 @@
-(require "sly-lib/list.sly")
-(require "sly-lib/quasiquote.sly")
-
 (define-syntax (and form)
   (define *form (cdr form))
   (define x (car *form))
   (define xs (cdr *form))
   (if (null? xs)
-	  (datum->syntax form x)
+	  (datum->syntax (car form) x)
 	  #`(if #,x (and #,@xs) #f)))
 
 (define-syntax (or form)
@@ -14,7 +11,7 @@
   (define x (car *form))
   (define xs (cdr *form))
   (if (null? xs)
-	  (datum->syntax form x)
+	  (datum->syntax (car form) x)
 	  #`(if #,x #t (or #,@xs))))
 
 (define-syntax (let form)
@@ -22,6 +19,7 @@
   (define name     '())
   (define bindings '())
   (define bodies   '())
+  (define out '())
   (if (pair? (car *form))
 	  (begin
 		(set! bindings (car *form))
@@ -32,8 +30,8 @@
 		(set! bindings (cadr *form))
 		(set! bodies (cddr *form))
 		#`((lambda ()
-			 (define (#,name #,@(map car bindings))
-			   #,@bodies)
+			 (define #,name
+			   (lambda #,(map car bindings) #,@bodies))
 			 (#,name #,@(map cadr bindings)))))))
 
 (define-syntax (let* form)
@@ -120,15 +118,13 @@
 ;;; TODO: Implement `do' form.
 
 (define-syntax (when form)
-  (define *form form)
-  (define condition (car (cdr *form)))
-  (define bodies (cdr (cdr *form)))
+  (define condition (car (cdr form)))
+  (define bodies (cdr (cdr form)))
   #`(if #,condition (begin #,@bodies) #,(void)))
 
 (define-syntax (unless form)
-  (define *form  form)
-  (define condition (car (cdr *form)))
-  (define bodies (cdr (cdr *form)))
+  (define condition (car (cdr form)))
+  (define bodies (cdr (cdr form)))
   #`(if #,condition #,(void) (begin #,@bodies)))
 
 (define-syntax (inc form)
@@ -138,31 +134,11 @@
   #`(- #,(cadr  form) 1))
 
 (define-syntax (inc! form)
-  (define *form form)
-  (define var (cadr *form))
+  (define var (cadr form))
   #`(begin (set! #,var (+ #,var 1))))
 
 (define-syntax (dec! form)
-  (define *form form)
-  (define var (cadr *form))
+  (define var (cadr form))
   #`(begin (set! #,var (- #,var 1))))
 
-(displayln "finished macros1")
-
-(define exported-syntax
-  (list (cons 'and and)
-		(cons 'or or)
-		(cons 'let let)
-		(cons 'let* let*)
-		(cons 'letrec letrec)
-		(cons 'letrec*-helper letrec*-helper) ;; TODO: I shouldn't have to import this
-		(cons 'letrec* letrec*)
-		(cons 'cond cond)
-		(cons 'when when)
-		(cons 'unless unless)
-		(cons 'inc inc)
-		(cons 'dec dec)
-		(cons 'inc! inc!)
-		(cons 'dec! dec!)))
-
-(list '() exported-syntax) ;; exported module
+(display "FINISHED FILE: sly-lib/macros1.sly\n")

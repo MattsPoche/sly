@@ -1,15 +1,10 @@
-(require "sly-lib/macros1.sly")
-(require "sly-lib/syntax-case.sly")
+(define-syntax syntax-rules
+  (lambda (form)
+	  (syntax-case form ()
+		((_ (k ...) ((keyword . pattern) template) ...)
+		 #'(lambda (form)
+			 (syntax-case form (k ...)
+			   ((dummy . pattern) #'template)
+			   ...))))))
 
-(define-syntax (syntax-rules form)
-  (syntax-case form ()
-    ((_ (k ...) ((keyword . pattern) template) ...)
-     #'(lambda (form)
-         (syntax-case form (k ...)
-           ((dummy . pattern) #'template)
-           ...)))))
-
-(define exported-syntax
-  (list (cons 'syntax-rules syntax-rules)))
-
-(list '() exported-syntax) ;; exported module
+(display "FINISHED FILE: sly-lib/syntax-rules.sly\n")

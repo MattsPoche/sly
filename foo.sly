@@ -3,15 +3,31 @@
   (set! form (cdr form))
   (define condition (car form))
   (define body (cdr form))
-  ;; (datum->syntax fst (list #'if (list #'not condition)
-  ;; 						   (cons #'begin body)
-  ;; 						   (void)))
   #`(if (not #,condition)
-		(begin #,body)
+		(begin #,@body)
 		(void)))
 
+;; (define-syntax (when form)
+;;   (syntax-case form ()
+;; 	((when test e e* ...)
+;; 	 #'(begin
+;; 		 (displayln "hello, from new when!!!")
+;; 		 (if test (begin e e* ...) (void))))))
+
+(define-syntax when
+  (syntax-rules ()
+	((when test e e* ...)
+	 (begin
+	   (displayln "hello, from new when!!!")
+	   (if test (begin e e* ...) (void))))))
 
 ((lambda ()
    (define (not x) x)
    (my-unless #t
 			  (display "this should not be printed!\n"))))
+
+(when #t
+  (displayln "hello")
+  (displayln "world"))
+
+(display "hello, world\n")

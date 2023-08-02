@@ -1,6 +1,7 @@
 TAGS
 tags
 sly
+*#
 *.exe*
 *.d
 *.o

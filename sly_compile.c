@@ -839,6 +839,22 @@ sly_free_state(Sly_State *ss)
 	}
 }
 
+static void
+do_file(Sly_State *ss, char *file_path, sly_value env, int use_gc)
+{
+	ss->file_path = file_path;
+	ss->cc->cscope->proto = make_prototype(ss,
+										   make_vector(ss, 0, 8),
+										   make_vector(ss, 0, 8),
+										   make_vector(ss, 0, 8),
+										   0, 0, 0, 0);
+	sly_value ast = parse_file(ss, file_path, &ss->source_code);
+	ast = sly_expand(ss, env, ast);
+	ss->entry_point = sly_compile(ss, ast);
+	if (use_gc)	gc_collect(ss);
+	eval_closure(ss, ss->entry_point, SLY_NULL, use_gc);
+}
+
 void
 sly_do_file(char *file_path, int debug_info)
 {
@@ -846,33 +862,32 @@ sly_do_file(char *file_path, int debug_info)
 	gc_init(&ss);
 	ss.interned = make_dictionary(&ss);
 	sly_init_state(&ss);
-	ss.file_path = file_path;
-	char *source_code = cat_files(3,
-								  "sly-lib/list.sly",
-								  "sly-lib/quasiquote.sly",
-								  file_path);
-	sly_value ast = parse(&ss, source_code);
-	ast = sly_expand(&ss, ast);
-	FREE(ss.cc);
-	sly_init_state(&ss);
-	ss.entry_point = sly_compile(&ss, ast);
-	ss.proto = ss.cc->cscope->proto;
-	gc_collect(&ss);
-	eval_closure(&ss, ss.entry_point, SLY_NULL, 1);
+	sly_value env = make_dictionary(&ss);
+	do_file(&ss, "sly-lib/list.sly", env, 0);
+	do_file(&ss, "sly-lib/quasiquote.sly", env, 0);
+	do_file(&ss, "sly-lib/macros1.sly", env, 0);
+	do_file(&ss, "sly-lib/syntax-case.sly", env, 0);
+	do_file(&ss, "sly-lib/syntax-rules.sly", env, 0);
+	do_file(&ss, file_path, env, 1);
 	if (debug_info) dis_all(ss.frame, 1);
-	sly_free_state(&ss);
 	if (debug_info) {
 		printf("** Allocations: %d **\n", allocations);
 		printf("** Net allocations: %d **\n", net_allocations);
 		printf("** Total bytes allocated: %zu **\n", bytes_allocated);
 		printf("** GC Total Collections: %d **\n", ss.gc->collections);
 	}
+	sly_free_state(&ss);
 }
 
 sly_value
 sly_compile_lambda(Sly_State *ss, sly_value ast)
 {
 	sly_compile(ss, ast);
+	ss->cc->cscope->proto = make_prototype(ss,
+										   make_vector(ss, 0, 8),
+										   make_vector(ss, 0, 8),
+										   make_vector(ss, 0, 8),
+										   0, 0, 0, 0);
 	return last_compiled_prototype;
 }
 

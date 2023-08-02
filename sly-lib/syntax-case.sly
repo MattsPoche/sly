@@ -1,7 +1,3 @@
-(require "sly-lib/list.sly")
-(require "sly-lib/quasiquote.sly")
-(require "sly-lib/macros1.sly")
-
 ;;; Implementation of syntax-case and related functions
 ;;; Reference:
 ;;; https://docs.racket-lang.org/guide/syntax-case.html
@@ -32,6 +28,14 @@
 ;;; are identifiers.
 
 ;;; TODO: More tests
+
+(letrec* ([is-even? (lambda (n)
+                      (or (zero? n)
+                          (is-odd? (- n 1))))]
+          [is-odd? (lambda (n)
+                     (and (not (zero? n))
+                          (is-even? (- n 1))))])
+  (is-odd? 11))
 
 (define ellipsis #'...)
 
@@ -106,31 +110,33 @@
 
 (define (construct-form template match-vars)
   (let ([*template (if (syntax-pair? template)
-					  (syntax->list template)
-					  template)])
-	(define (construct-repeat *template match-vars)
-	  (let loop ([i 0] [form '()])
-		(let ([val (*construct-form *template match-vars i)])
-		  (if (or (and (pair? val)
-					   (contains val '**END-OF-LIST**))
-				  (equal? val '**END-OF-LIST**))
-			  form
-			  (loop (+ i 1) (append form (list val)))))))
-	(define (*construct-form *template match-vars repeat-level)
-	  (if (pair? *template)
-		  (if (check-ellipsis *template)
-			  (let ([form (construct-repeat (car *template) match-vars)])
-				(append form
-						(*construct-form (cddr *template) match-vars repeat-level)))
-			  (cons (*construct-form (car *template) match-vars repeat-level)
-					(*construct-form (cdr *template) match-vars repeat-level)))
-		  (if (identifier? *template)
-			  (let ([pvar (syntax->datum *template)])
-				(if (dictionary-has-key? match-vars pvar)
-					(list-ref (dictionary-ref match-vars pvar) repeat-level)
-					*template))
-			  *template)))
-	(datum->syntax template (*construct-form *template match-vars 0))))
+					   (syntax->list template)
+					   template)])
+	(letrec* ([construct-repeat
+			   (lambda (*template match-vars)
+				 (let loop ([i 0] [form '()])
+				   (let ([val (*construct-form *template match-vars i)])
+					 (if (or (and (pair? val)
+								  (contains val '**END-OF-LIST**))
+							 (equal? val '**END-OF-LIST**))
+						 form
+						 (loop (+ i 1) (append form (list val)))))))]
+			  [*construct-form
+			   (lambda (*template match-vars repeat-level)
+				 (if (pair? *template)
+					 (if (check-ellipsis *template)
+						 (let ([form (construct-repeat (car *template) match-vars)])
+						   (append form
+								   (*construct-form (cddr *template) match-vars repeat-level)))
+						 (cons (*construct-form (car *template) match-vars repeat-level)
+							   (*construct-form (cdr *template) match-vars repeat-level)))
+					 (if (identifier? *template)
+						 (let ([pvar (syntax->datum *template)])
+						   (if (dictionary-has-key? match-vars pvar)
+							   (list-ref (dictionary-ref match-vars pvar) repeat-level)
+							   *template))
+						 *template)))])
+	  (datum->syntax template (*construct-form *template match-vars 0)))))
 
 (define (syntax-case/run-tests)
   (displayln "test 1")
@@ -216,34 +222,30 @@
 
 ;; (syntax-case/run-tests)
 
-(define (transform-expr expr)
-  ;; If a `syntax-quote' form appears in an expression,
-  ;; it must be treated as a template.
-  ;; This function modifies the expression, transforming
-  ;; instances of syntax-quote into template expansions.
-  (if (pair? expr)
-	  (if (identifier=? (car expr) #'syntax-quote)
-		  #`(construct-form #,expr match-vars)
-		  (cons (transform-expr (car expr))
-				(transform-expr (cdr expr))))
-	  expr))
-
 (define-syntax (syntax-case form)
-  (let* ([*form (cdr (syntax->list form))]
+  (let* ([*form (cdr form)]
 		 [stx (list-ref *form 0)]
 		 [literals (list-ref *form 1)]
 		 [clause (list-ref *form 2)]
 		 [rest (cdr (cddr *form))]
-		 [pattern (car clause)]
-		 [expr (transform-expr (cadr clause))])
+		 [pattern (car clause)])
 	#`(let ([match-vars (syntax-match (syntax-quote #,pattern) #,literals #,stx)])
 		(if match-vars
-			#,expr
+			#,(letrec* ([transform-expr
+						 ;; If a `syntax-quote' form appears in an expression,
+						 ;; it must be treated as a template.
+						 ;; This function modifies the expression, transforming
+						 ;; instances of syntax-quote into template expansions.
+						 (lambda (expr)
+						   (if (pair? expr)
+							   (if (identifier=? (car expr) #'syntax-quote)
+								   #`(construct-form #,expr match-vars)
+								   (cons (transform-expr (car expr))
+										 (transform-expr (cdr expr))))
+							   expr))])
+				(transform-expr (cadr clause)))
 			#,(if (null? rest)
 				  #'(displayln "Error invalid syntax for syntax-case.")
 				  #`(syntax-case #,stx #,literals #,@rest))))))
 
-(define exported-syntax
-  (list (cons 'syntax-case syntax-case)))
-
-(list '() exported-syntax) ;; exported module
+(display "FINISHED FILE: sly-lib/syntax-case.sly\n")

@@ -42,9 +42,11 @@ static char *core_form_names[CORE_FORM_COUNT] = {
 	[cf_callwcc] = "call/cc",
 };
 
+static int init = 0;
 static sly_value core_forms = SLY_NULL;
 static sly_value core_scope = SLY_NULL;
 static sly_value variable = SLY_NULL;
+static sly_value undefined = SLY_NULL;
 static sly_value all_bindings = SLY_NULL;
 
 typedef sly_value (*set_op)(Sly_State *, sly_value, sly_value);
@@ -61,7 +63,6 @@ static sly_value expand_core_form(Sly_State *ss, sly_value s, sly_value env);
 static sly_value apply_transformer(Sly_State *ss, sly_value t, sly_value s);
 static sly_value compile(Sly_State *ss, sly_value s);
 static sly_value compile_lambda(Sly_State *ss, sly_value s);
-
 
 static sly_value
 macro_call(Sly_State *ss, sly_value macro, sly_value form)
@@ -133,7 +134,15 @@ set_flip(Sly_State *ss, sly_value set, sly_value value)
 static sly_value
 adjust_scope(Sly_State *ss, sly_value s, sly_value sc, set_op op)
 {
-	if (syntax_p(s)) {
+	if (syntax_pair_p(s)) {
+		if (null_p(syntax_scopes(s))) {
+			syntax *stx = GET_PTR(s);
+			stx->scope_set = make_dictionary(ss);
+		}
+		return csyntax(ss,
+					   adjust_scope(ss, syntax_to_datum(s), sc, op),
+					   op(ss, syntax_scopes(s), sc));
+	} else if (syntax_p(s)) {
 		if (null_p(syntax_scopes(s))) {
 			syntax *stx = GET_PTR(s);
 			stx->scope_set = make_dictionary(ss);
@@ -215,10 +224,8 @@ resolve(Sly_State *ss, sly_value id)
 {
 	sly_value candidate_ids = find_all_matching_bindings(ss, id);
 	if (null_p(candidate_ids)) {
-		sly_display(id, 1);
-		printf("\n");
+		return undefined;
 	}
-	sly_assert(!null_p(candidate_ids), "Error unresolved identifier");
 	sly_value max_id = get_max_id(candidate_ids);
 	check_unambiguous(ss, max_id, candidate_ids);
 	return dictionary_ref(all_bindings, max_id);
@@ -228,12 +235,6 @@ static sly_value
 introduce(Sly_State *ss, sly_value s)
 {
 	return add_scope(ss, s, core_scope);
-}
-
-static sly_value
-empty_env(Sly_State *ss)
-{
-	return make_dictionary(ss);
 }
 
 static sly_value
@@ -268,6 +269,7 @@ expand_identifier(Sly_State *ss, sly_value s, sly_value env)
 	sly_value binding = resolve(ss, s);
 	sly_assert(!vector_contains(ss, core_forms, binding),
 			   "Error identifier cannot be a core form");
+	if (sly_equal(binding, undefined)) return s;
 	sly_value v = env_lookup(env, binding);
 	if (sly_equal(v, variable)) return s;
 	sly_assert(!void_p(v), "Error out of context");
@@ -275,7 +277,7 @@ expand_identifier(Sly_State *ss, sly_value s, sly_value env)
 			   || closure_p(v)
 			   || cclosure_p(v)
 			   || continuation_p(v),
-			   "Error out of context");
+			   "Error bad syntax");
 	return s;
 }
 
@@ -284,9 +286,9 @@ add_arg_scope(Sly_State *ss, sly_value args, sly_value sc)
 {
 	if (null_p(args)) return args;
 	if (pair_p(args)) {
-		return cons(ss,
-					add_scope(ss, car(args), sc),
-					add_arg_scope(ss, cdr(args), sc));
+		sly_value fst = add_scope(ss, car(args), sc);
+		sly_value snd = add_arg_scope(ss, cdr(args), sc);
+		return cons(ss, fst, snd);
 	}
 	return add_scope(ss, args, sc);
 }
@@ -298,10 +300,12 @@ add_arg_bindings(Sly_State *ss, sly_value args, sly_value env)
 	if (pair_p(args)) {
 		add_arg_bindings(ss, car(args), env);
 		add_arg_bindings(ss, cdr(args), env);
-	} else {
+	} else if (identifier_p(args)) {
 		sly_value binding = gensym(ss);
 		add_binding(args, binding);
 		env_extend(ss, env, binding, variable);
+	} else {
+		sly_assert(0, "Error invalid syntax");
 	}
 }
 
@@ -314,9 +318,10 @@ expand_lambda(Sly_State *ss, sly_value s, sly_value env)
 	sly_value sc = scope();
 	sly_value ids = add_arg_scope(ss, arg_ids, sc);
 	add_arg_bindings(ss, ids, env);
+	body = add_scope(ss, body, sc);
 	return cons(ss, lambda_id,
 				cons(ss, ids,
-					 expand(ss, add_scope(ss, body, sc), env)));
+					 expand(ss, body, env)));
 }
 
 static sly_value
@@ -415,10 +420,9 @@ apply_transformer(Sly_State *ss, sly_value t, sly_value s)
 {
 	sly_value intro_scope = scope();
 	sly_value intro_s = add_scope(ss, s, intro_scope);
-	sly_value out = syntax_to_list(ss, macro_call(ss, t, intro_s));
-	out = flip_scope(ss, out, intro_scope);
-	// TODO: there is a bug with flip_scope
-	return out;
+	sly_value trans_s = syntax_to_list(ss, macro_call(ss, t, intro_s));
+	trans_s = copy_syntax(ss, trans_s);
+	return flip_scope(ss, trans_s, intro_scope);
 }
 
 static sly_value
@@ -440,11 +444,6 @@ expand(Sly_State *ss, sly_value s, sly_value env)
 	} else if (list_p(s)) {
 		return expand_app(ss, s, env);
 	}
-#if 0
-	sly_display(s, 1);
-	printf("\n");
-	sly_assert(0, "Error bad syntax");
-#endif
 	return s;
 }
 
@@ -477,7 +476,18 @@ static sly_value
 compile(Sly_State *ss, sly_value s)
 {
 	sly_value r;
-	if (identifier_p(s)) return resolve(ss, s);
+	if (identifier_p(s)) {
+		r = resolve(ss, s);
+		if (sly_equal(r, undefined)) {
+			printf("Identifier undefined :: ");
+			sly_display(s, 1);
+			printf("\n");
+			token t = syntax_get_token(ss, s);
+			printf("%.*s\n", t.eo - t.so,  &t.src[t.so]);
+			sly_assert(0, "Error undefined identifier");
+		}
+		return r;
+	}
 	if (pair_p(s)) {
 		if (identifier_p(car(s))) {
 			r = resolve(ss, car(s));
@@ -494,61 +504,64 @@ compile(Sly_State *ss, sly_value s)
 	return s;
 }
 
+#if 0
 static void
-hoist_top_level_defines(Sly_State *ss, sly_value s, sly_value env)
+hoist_top_level_defines(Sly_State *ss, sly_value s, sly_value sc, sly_value env)
 {
 	sly_value binding, sym;
 	while (!null_p(s)) {
 		binding = car(s);
 		if (identifier_p(binding)
 			&& sly_equal(syntax_to_datum(binding), core_symbol(cf_begin))) {
-			hoist_top_level_defines(ss, cdr(s), env);
-		} else if (sly_equal(car(binding), core_symbol(cf_define))
-				   || sly_equal(car(binding), core_symbol(cf_define_syntax))) {
+			hoist_top_level_defines(ss, cdr(s), sc, env);
+		} else if (pair_p(binding)
+				   && (sly_equal(car(binding), core_symbol(cf_define))
+					   || sly_equal(car(binding), core_symbol(cf_define_syntax)))) {
 			sym = car(cdr(s));
 			if (pair_p(sym)) {
 				sym = car(sym);
 			}
-			add_binding(csyntax(ss, sym, core_scope), SLY_NULL);
+			add_binding(csyntax(ss, sym, sc), SLY_NULL);
 			env_extend(ss, env, sym, variable);
 		}
 		s = cdr(s);
 	}
 }
+#endif
 
 sly_value
-sly_expand(Sly_State *ss, sly_value ast)
+sly_expand(Sly_State *ss, sly_value env, sly_value ast)
 {
-	all_bindings = make_dictionary(ss);
-	core_forms = make_vector(ss, 0, CORE_FORM_COUNT);
-	core_scope = scope();
-	variable = gensym(ss);
-	sly_value builtins = ss->cc->builtins;
-	sly_value sym, scope_set;
-	sly_value env = empty_env(ss);
-	for (size_t i = 0; i < CORE_FORM_COUNT; ++i) {
-		sym = make_symbol(ss, core_form_names[i], strlen(core_form_names[i]));
-		vector_append(ss, core_forms, sym);
-		scope_set = make_dictionary(ss);
-		dictionary_set(ss, scope_set, core_scope, SLY_NULL);
-		add_binding(csyntax(ss, sym, scope_set),
-					sym);
-	}
-	while (!null_p(builtins)) {
-		sym = car(car(builtins));
-		scope_set = make_dictionary(ss);
-		dictionary_set(ss, scope_set, core_scope, SLY_NULL);
-		add_binding(csyntax(ss, sym, scope_set), sym);
-		env_extend(ss, env, sym, variable);
-		builtins = cdr(builtins);
+	printf("EXPANDING FILE: %s\n", ss->file_path);
+	if (!init) {
+		all_bindings = make_dictionary(ss);
+		core_forms = make_vector(ss, 0, CORE_FORM_COUNT);
+		core_scope = scope();
+		variable = gensym(ss);
+		undefined = gensym(ss);
+		sly_value builtins = ss->cc->builtins;
+		sly_value sym, scope_set;
+		for (size_t i = 0; i < CORE_FORM_COUNT; ++i) {
+			sym = make_symbol(ss, core_form_names[i], strlen(core_form_names[i]));
+			vector_append(ss, core_forms, sym);
+			scope_set = make_dictionary(ss);
+			dictionary_set(ss, scope_set, core_scope, SLY_NULL);
+			add_binding(csyntax(ss, sym, scope_set),
+						sym);
+		}
+		while (!null_p(builtins)) {
+			sym = car(car(builtins));
+			scope_set = make_dictionary(ss);
+			dictionary_set(ss, scope_set, core_scope, SLY_NULL);
+			add_binding(csyntax(ss, sym, scope_set), sym);
+			env_extend(ss, env, sym, variable);
+			builtins = cdr(builtins);
+		}
+		init = 1;
 	}
 	sly_value before = ast;
 	ast = introduce(ss, syntax_to_list(ss, ast));
-	hoist_top_level_defines(ss, ast, env);
 	ast = compile(ss, expand(ss, ast, env));
-	printf("ast:\n");
-	sly_display(ast, 1);
-	printf("\n");
 	ast = datum_to_syntax(ss, before, ast);
 	return ast;
 }

@@ -123,3 +123,5 @@
 	  (begin
 		(apply f (*heads* xs))
 		(apply for-each f (*tails* xs)))))
+
+(display "FINISHED FILE: sly-lib/list.sly\n")

@@ -1277,6 +1277,25 @@ sly_equal(sly_value o1, sly_value o2)
 	return o1 == o2;
 }
 
+sly_value
+copy_syntax(Sly_State *ss, sly_value s)
+{
+	if (syntax_p(s)) {
+		syntax *stx = GET_PTR(s);
+		sly_value cpy = make_syntax(ss, stx->tok, stx->datum);
+		syntax *cpy_ptr = GET_PTR(cpy);
+		cpy_ptr->alias = stx->alias;
+		cpy_ptr->context = stx->context;
+		cpy_ptr->scope_set = copy_dictionary(ss, stx->scope_set);
+		cpy_ptr->datum = copy_syntax(ss, stx->datum);
+		return cpy;
+	} else if (pair_p(s)) {
+		sly_value fst = copy_syntax(ss, car(s));
+		sly_value snd = copy_syntax(ss, cdr(s));
+		return cons(ss, fst, snd);
+	}
+	return s;
+}
 
 sly_value
 make_syntax(Sly_State *ss, token tok, sly_value datum)
@@ -1360,6 +1379,10 @@ syntax_to_list_rec(Sly_State *ss, sly_value form)
 sly_value
 syntax_to_list(Sly_State *ss, sly_value form)
 {
+	if (!syntax_pair_p(form)) {
+		sly_display(form, 1);
+		printf("\n");
+	}
 	sly_assert(syntax_pair_p(form),
 			   "Type error expected syntax pair");
 	return syntax_to_list_rec(ss, form);
@@ -1382,6 +1405,21 @@ syntax_get_token(Sly_State *ss, sly_value stx)
 			   "Type error expected <syntax>");
 	syntax *s = GET_PTR(stx);
 	return s->tok;
+}
+
+sly_value
+copy_dictionary(Sly_State *ss, sly_value dict)
+{
+	sly_assert(dictionary_p(dict), "Type error expected dictionary");
+	sly_value entry, cpy = make_dictionary(ss);
+	vector *entries = GET_PTR(dict);
+	for (size_t i = 0; i < entries->cap; ++i) {
+		entry = entries->elems[i];
+		if (!slot_is_free(entry)) {
+			dictionary_set(ss, cpy, car(entry), cdr(entry));
+		}
+	}
+	return cpy;
 }
 
 static sly_value
@@ -1452,7 +1490,7 @@ dict_resize(Sly_State *ss, sly_value d)
 	vector *new = GET_PTR(d);
 	for (size_t i = 0; i < old->cap; ++i) {
 		sly_value entry = old->elems[i];
-		if (pair_p(entry)) {
+		if (!slot_is_free(entry)) {
 			dictionary_set(ss, d, car(entry), cdr(entry));
 		}
 	}
