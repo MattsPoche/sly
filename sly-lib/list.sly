@@ -1,5 +1,9 @@
 (define (displayln x) (display x)(display "\n"))
 
+(define (display-syntax p s)
+  (if p	(display p) (void))
+  (displayln (syntax->datum s)))
+
 (define (caar p)
   (car (car p)))
 

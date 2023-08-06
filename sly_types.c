@@ -382,7 +382,11 @@ cons(Sly_State *ss, sly_value car, sly_value cdr)
 sly_value
 car(sly_value obj)
 {
-	sly_assert(pair_p(obj), "Type Error (car): Expected Pair");
+	if (!pair_p(obj)) {
+		sly_display(obj, 1);
+		printf("\n");
+		sly_assert(0, "Type Error (car): Expected Pair");
+	}
 	pair *p = GET_PTR(obj);
 	return p->car;
 }

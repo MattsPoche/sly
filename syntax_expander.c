@@ -561,7 +561,8 @@ sly_expand(Sly_State *ss, sly_value env, sly_value ast)
 	}
 	sly_value before = ast;
 	ast = introduce(ss, syntax_to_list(ss, ast));
-	ast = compile(ss, expand(ss, ast, env));
+	ast = expand(ss, ast, env);
+	ast = compile(ss, ast);
 	ast = datum_to_syntax(ss, before, ast);
 	return ast;
 }

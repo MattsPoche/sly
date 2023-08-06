@@ -20,7 +20,8 @@
   (define bindings '())
   (define bodies   '())
   (define out '())
-  (if (pair? (car *form))
+  (if (or (pair? (car *form))
+		  (null? (car *form)))
 	  (begin
 		(set! bindings (car *form))
 		(set! bodies (cdr *form))
@@ -60,6 +61,7 @@
 	  (cons-cons (car ls) (split (cdr ls)))))
 
 (define-syntax (letrec form)
+;;; TODO: This appears to be broken
   (define *form (cdr  form))
   (define bindings (split (car *form)))
   (define vars (car bindings))
@@ -126,19 +128,5 @@
   (define condition (car (cdr form)))
   (define bodies (cdr (cdr form)))
   #`(if #,condition #,(void) (begin #,@bodies)))
-
-(define-syntax (inc form)
-  #`(+ #,(cadr form) 1))
-
-(define-syntax (dec form)
-  #`(- #,(cadr  form) 1))
-
-(define-syntax (inc! form)
-  (define var (cadr form))
-  #`(begin (set! #,var (+ #,var 1))))
-
-(define-syntax (dec! form)
-  (define var (cadr form))
-  #`(begin (set! #,var (- #,var 1))))
 
 (display "FINISHED FILE: sly-lib/macros1.sly\n")

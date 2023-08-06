@@ -64,8 +64,9 @@
 	match-vars))
 
 (define (syntax-match pattern literals form)
-  (let* ([pattern (cdr (syntax->list pattern))]
-		 [form (cdr (if (syntax-pair? form) (syntax->list form) form))]
+  (let* ([pattern (syntax->list pattern)]
+		 [form (if (syntax-pair? form) (syntax->list form) form)]
+		 [literals (if (syntax-pair? literals) (syntax->list literals) literals)]
 		 [match-vars (make-match-vars pattern literals)])
 	(define (*syntax-match pattern literals form)
 	  (define (match pattern literals form)
@@ -229,7 +230,9 @@
 		 [clause (list-ref *form 2)]
 		 [rest (cdr (cddr *form))]
 		 [pattern (car clause)])
-	#`(let ([match-vars (syntax-match (syntax-quote #,pattern) #,literals #,stx)])
+	#`(let ([match-vars (syntax-match (syntax-quote #,pattern)
+									  (syntax-quote #,literals)
+									  #,stx)])
 		(if match-vars
 			#,(letrec* ([transform-expr
 						 ;; If a `syntax-quote' form appears in an expression,
