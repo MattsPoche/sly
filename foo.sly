@@ -1,19 +1,51 @@
-(define-syntax (test-let x)
-  (syntax-case x ()
-	[(_ ((var value) ...) e1 e2 ...)
-	 #'((lambda (var ...) e1 e2 ...) value ...)]
-	[(_ name ((var value) ...) e1 e2 ...)
-	 #'((lambda ()
-		  (define (name var ...) e1 e2 ...)
-		  (name value ...)))]))
 
-(test-let ((x 420) (y 69)) (displayln (* x y)))
+(let* ([exports #'(_ foo bar)]
+	   [s (syntax-case exports (as)
+			[(_ (name as alias) rest ...)
+			 #'(cons (cons 'alias name) rest ...)]
+			[(_ name rest ...)
+			 #'(cons (cons 'name name) rest ...)])])
+  (displayln (syntax->datum s)))
 
-(test-let loop ((i 0))
-		  (when (< i 10)
-			(display i)
-			(loop (+ i 1))))
-(display "\n")
+
+;; (define-syntax make-exports-
+;;   (syntax-rules (as)
+;; 	[(_ (name as alias) rest ...)
+;; 	 (cons (cons 'alias name) rest ...)]
+;; 	[(_ name rest ...)
+;; 	 (cons (cons 'name name) rest ...)]))
+
+;; (define-syntax define-module
+;;   (syntax-rules (export)
+;; 	[(_ name (export exports ...) body ...)
+;; 	 (define name
+;; 	   (let ()
+;; 		 body ...
+;; 		 (make-dictionary (make-exports- exports ...))))]))
+
+;; (define-syntax module-ref
+;;   (syntax-rules ()
+;; 	[(_ module id)
+;; 	 (dictionary-ref module 'id)]))
+
+;; (define-module test-module
+;;   (export func1
+;; 		  func2)
+
+;;   (define (helper) (display "Hello from helper\n"))
+
+;;   (define (func1)
+;; 	(display "Hello from func1! Whats up??\n"))
+
+;;   (define (func2)
+;; 	(helper)
+;; 	(display "Hello from func2! ")
+;; 	(displayln (/ 420 69))))
+
+;; ((module-ref test-module func1))
+;; ((module-ref test-module func2))
+;; ((module-ref test-module helper))
+
 
 (display-syntax
  "((foo bar) baz buzz) => "
@@ -58,29 +90,42 @@
 							[(x y z)
 							 #'(z y x)])))
 
-(displayln (syntax->datum (syntax-case
-							  #'(cond [(> 69 420) (displayln "foo")]
-									  [#t (displayln "bar")])
-							  ()
-							[(_ c1 c2 ...)
-							 (let f ([c1 #'c1] [cmore (syntax->list #'(c2 ...))])
-							   (if (null? cmore)
-								   (syntax-case c1 (else =>)
-									 [(else e1 e2 ...) #'(begin e1 e2 ...)]
-									 [(e0) #'(let ([t e0]) (if t t))]
-									 [(e0 => e1) #'(let ([t e0]) (if t (e1 t) (void)))]
-									 [(e0 e1 e2 ...) #'(if e0 (begin e1 e2 ...) (void))])
-								   (with-syntax ([rest (f (car cmore) (cdr cmore))])
-									 (syntax-case c1 (=>)
-									   [(e0) #'(let ([t e0]) (if t t rest))]
-									   [(e0 => e1) #'(let ([t e0]) (if t (e1 t) rest))]
-									   [(e0 e1 e2 ...)
-										(begin
-										  (display-syntax "e0 :: " #'e0)
-										  (display-syntax "rest :: " #'rest)
-										  #'(if e0 (begin e1 e2 ...) rest))]))))])))
-
 (cond [(> 69 420) (displayln "foo")]
 	  [#t (displayln "bar")])
 
-(if #t (displayln "poop") (void))
+(define-syntax define-a
+  (lambda (form)
+	(syntax-case form ()
+	  [(define-a x)
+	   (with-syntax ([a (datum->syntax #'define-a 'a)])
+		 #'(define a x))])))
+
+(define-a 69)
+(displayln a)
+
+(define-syntax (define-macro form)
+  (syntax-case form ()
+      [(define-macro (name . pattern) e e* ...)
+       #'(define-syntax (name form)
+           (syntax-case form ()
+             [(name . pattern)
+              (begin e e* ...)]))]))
+
+(define-macro (swap! x y)
+  #'(let ((tmp x))
+	  (set! x y)
+	  (set! y tmp)))
+
+(define x 69)
+(define y 420)
+
+(swap! x y)
+(displayln x)
+(displayln y)
+
+(define-macro (my-let ((var value) ...) e e* ...)
+  #'((lambda (var ...) e e* ...) value ...))
+
+(my-let ((x 32)
+		 (y 69))
+		(displayln (* x y)))

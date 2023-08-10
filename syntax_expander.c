@@ -420,7 +420,10 @@ apply_transformer(Sly_State *ss, sly_value t, sly_value s)
 {
 	sly_value intro_scope = scope();
 	sly_value intro_s = add_scope(ss, s, intro_scope);
-	sly_value trans_s = syntax_to_list(ss, macro_call(ss, t, intro_s));
+	sly_value trans_s = macro_call(ss, t, intro_s);
+	if (syntax_pair_p(trans_s)) {
+		trans_s = syntax_to_list(ss, trans_s);
+	}
 	trans_s = copy_syntax(ss, trans_s);
 	return flip_scope(ss, trans_s, intro_scope);
 }
@@ -479,9 +482,9 @@ compile(Sly_State *ss, sly_value s)
 	if (identifier_p(s)) {
 		r = resolve(ss, s);
 		if (sly_equal(r, undefined)) {
-			printf("Identifier undefined :: ");
-			sly_display(s, 1);
-			printf("\n");
+			printf("Undefined Identifier `");
+			sly_display(strip_syntax(ss, s), 1);
+			printf("`\n");
 			token t = syntax_get_token(ss, s);
 			printf("%.*s\n", t.eo - t.so,  &t.src[t.so]);
 			sly_assert(0, "Error undefined identifier");

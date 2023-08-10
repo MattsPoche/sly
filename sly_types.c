@@ -1322,44 +1322,24 @@ syntax_to_datum(sly_value syn)
 	return s->datum;
 }
 
-static sly_value
-datum_to_syntax_rec(Sly_State *ss, sly_value id, sly_value datum)
-{
-	sly_assert(syntax_p(id), "Type Error expected #<syntax>");
-	syntax *s = GET_PTR(id);
-	token t = s->tok;
-	if (null_p(datum)
-		|| void_p(datum)
-		|| syntax_p(datum)) {
-		return datum;
-	}
-	if (pair_p(datum)) {
-		return cons(ss,
-					datum_to_syntax(ss, id, car(datum)),
-					datum_to_syntax_rec(ss, id, cdr(datum)));
-	}
-	return make_syntax(ss, t, datum);
-}
-
 sly_value
 datum_to_syntax(Sly_State *ss, sly_value id, sly_value datum)
 {
 	sly_assert(syntax_p(id), "Type Error expected #<syntax>");
-	syntax *s = GET_PTR(id);
-	token t = s->tok;
 	if (null_p(datum)
 		|| void_p(datum)
 		|| syntax_p(datum)) {
 		return datum;
 	}
-	sly_value stx;
+	syntax *s = GET_PTR(id);
+	sly_value stx = make_syntax(ss, s->tok, datum);
+	syntax *stx_ptr = GET_PTR(stx);
+	stx_ptr->scope_set = null_p(s->scope_set) ? SLY_NULL
+		: copy_dictionary(ss, s->scope_set);
 	if (pair_p(datum)) {
-		stx = make_syntax(ss, t,
-						  cons(ss,
-							   datum_to_syntax(ss, id, car(datum)),
-							   datum_to_syntax_rec(ss, id, cdr(datum))));
-	} else {
-		stx = make_syntax(ss, t, datum);
+		stx_ptr->datum = cons(ss,
+							  datum_to_syntax(ss, id, car(datum)),
+							  datum_to_syntax(ss, id, cdr(datum)));
 	}
 	return stx;
 }

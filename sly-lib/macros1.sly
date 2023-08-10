@@ -60,21 +60,7 @@
 	  '(() ())
 	  (cons-cons (car ls) (split (cdr ls)))))
 
-(define-syntax (letrec form)
-;;; TODO: This appears to be broken
-  (define *form (cdr  form))
-  (define bindings (split (car *form)))
-  (define vars (car bindings))
-  (define exps (cadr bindings))
-  (define bodies (cdr *form))
-  (define tmps (gen-temporaries (length vars)))
-  (displayln bodies)
-  #`(let #,(map (lambda (x) (list x (void))) vars)
-	  (let #,(map list tmps exps)
-		#,@(map (lambda (x y) (list #'set! x y)) vars tmps))
-	  #,@bodies))
-
-(define-syntax (letrec*-helper form)
+(define-syntax (letrec-helper form)
   (define *form (cdr form))
   (define bindings (car *form))
   (define bodies (cdr *form))
@@ -82,14 +68,14 @@
 	  #`(begin #,@bodies)
 	  #`(begin
 		  (define #,@(car bindings))
-		  (letrec*-helper #,(cdr bindings) #,@bodies))))
+		  (letrec-helper #,(cdr bindings) #,@bodies))))
 
-(define-syntax (letrec* form)
+(define-syntax (letrec form)
   (define *form (cdr form))
   (define bindings (car *form))
   (define bodies (cdr *form))
   #`((lambda ()
-	   (letrec*-helper #,bindings #,@bodies))))
+	   (letrec-helper #,bindings #,@bodies))))
 
 
 (define-syntax (cond form)
