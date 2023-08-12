@@ -1,52 +1,3 @@
-
-(let* ([exports #'(_ foo bar)]
-	   [s (syntax-case exports (as)
-			[(_ (name as alias) rest ...)
-			 #'(cons (cons 'alias name) rest ...)]
-			[(_ name rest ...)
-			 #'(cons (cons 'name name) rest ...)])])
-  (displayln (syntax->datum s)))
-
-
-;; (define-syntax make-exports-
-;;   (syntax-rules (as)
-;; 	[(_ (name as alias) rest ...)
-;; 	 (cons (cons 'alias name) rest ...)]
-;; 	[(_ name rest ...)
-;; 	 (cons (cons 'name name) rest ...)]))
-
-;; (define-syntax define-module
-;;   (syntax-rules (export)
-;; 	[(_ name (export exports ...) body ...)
-;; 	 (define name
-;; 	   (let ()
-;; 		 body ...
-;; 		 (make-dictionary (make-exports- exports ...))))]))
-
-;; (define-syntax module-ref
-;;   (syntax-rules ()
-;; 	[(_ module id)
-;; 	 (dictionary-ref module 'id)]))
-
-;; (define-module test-module
-;;   (export func1
-;; 		  func2)
-
-;;   (define (helper) (display "Hello from helper\n"))
-
-;;   (define (func1)
-;; 	(display "Hello from func1! Whats up??\n"))
-
-;;   (define (func2)
-;; 	(helper)
-;; 	(display "Hello from func2! ")
-;; 	(displayln (/ 420 69))))
-
-;; ((module-ref test-module func1))
-;; ((module-ref test-module func2))
-;; ((module-ref test-module helper))
-
-
 (display-syntax
  "((foo bar) baz buzz) => "
  (syntax-case #'((foo bar) baz buzz) ()
@@ -129,3 +80,87 @@
 (my-let ((x 32)
 		 (y 69))
 		(displayln (* x y)))
+
+(define-syntax (define-module form)
+  (letrec ([make-export-list
+			(lambda (form)
+			  (let ([form (syntax->list form)])
+				(map (lambda (x)
+					   (syntax-case x (as)
+						 [(id as alias) #'(cons 'alias id)]
+						 [id #'(cons 'id id)]))
+					 form)))])
+	(syntax-case form (export)
+	  [(_ name (export exports ...) body ...)
+	   (with-syntax ([(exports ...) (make-export-list #'(exports ...))]
+					 [(body ...) (syntax->list #'(body ...))])
+		 #'(dictionary-set!
+			*MODULES* 'name
+			(let ()
+			  body ...
+			  (make-dictionary exports ...))))])))
+
+(define-syntax module-ref
+  (syntax-rules ()
+	[(_ module id)
+	 (dictionary-ref
+	  (dictionary-ref *MODULES* 'module) 'id)]))
+
+(define-module test-module
+  (export (func1 as froopy-buttz)
+		  func2)
+
+  (define (helper) (display "Hello from helper\n"))
+
+  (define (func1)
+	(display "Hello from func1! Whats up??\n"))
+
+  (define (func2 x y)
+	(helper)
+	(display "Hello from func2! ")
+	(displayln (* x y))))
+
+((module-ref test-module froopy-buttz))
+((module-ref test-module func2) 420.0 69.0)
+
+(if (eq? 'hello (string->symbol "hello"))
+	(displayln "yes")
+	(displayln "no"))
+
+(define (string=? fst snd . rest)
+  (if (and (string? fst)
+		   (string? snd)
+		   (equal? fst snd))
+	  (if (null? rest)
+		  #t
+		  (apply string=? fst rest))
+	  #f))
+
+(if (string=? "foo" "foo" "foo" "foo")
+	(displayln "yes")
+	(displayln "no"))
+
+(displayln (+ 1 2 3 4))
+(displayln '(#\a
+			 #\b
+			 #\c
+			 #\$
+			 #\x
+			 #\\
+			 #\newline
+			 #\tab
+			 #\vtab
+			 #\10
+			 #\177
+			 #\xff
+			 #\nul))
+
+(let ((str (make-string 8 #\x)))
+  (displayln str)
+  (displayln (string-ref str 3))
+  (string-set! str 3 #\@)
+  (displayln str))
+
+(displayln (string-join (list "hello" "world") ", "))
+
+(displayln (/ 32 2))

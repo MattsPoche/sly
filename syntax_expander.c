@@ -10,7 +10,7 @@
 /* TODO: Implement module system */
 
 #define scope() gensym(ss)
-#define add_binding(id, binding)							\
+#define add_binding(id, binding)						\
 		dictionary_set(ss, all_bindings, id, binding);
 #define core_symbol(cf_i) \
 	vector_ref(core_forms, cf_i)
@@ -507,31 +507,6 @@ compile(Sly_State *ss, sly_value s)
 	return s;
 }
 
-#if 0
-static void
-hoist_top_level_defines(Sly_State *ss, sly_value s, sly_value sc, sly_value env)
-{
-	sly_value binding, sym;
-	while (!null_p(s)) {
-		binding = car(s);
-		if (identifier_p(binding)
-			&& sly_equal(syntax_to_datum(binding), core_symbol(cf_begin))) {
-			hoist_top_level_defines(ss, cdr(s), sc, env);
-		} else if (pair_p(binding)
-				   && (sly_equal(car(binding), core_symbol(cf_define))
-					   || sly_equal(car(binding), core_symbol(cf_define_syntax)))) {
-			sym = car(cdr(s));
-			if (pair_p(sym)) {
-				sym = car(sym);
-			}
-			add_binding(csyntax(ss, sym, sc), SLY_NULL);
-			env_extend(ss, env, sym, variable);
-		}
-		s = cdr(s);
-	}
-}
-#endif
-
 sly_value
 sly_expand(Sly_State *ss, sly_value env, sly_value ast)
 {
@@ -543,19 +518,21 @@ sly_expand(Sly_State *ss, sly_value env, sly_value ast)
 		variable = gensym(ss);
 		undefined = gensym(ss);
 		sly_value builtins = ss->cc->builtins;
-		sly_value sym, scope_set;
+		sly_value sym;
+		sly_value scope_set = make_dictionary(ss);
+		dictionary_set(ss, scope_set, core_scope, SLY_NULL);
 		for (size_t i = 0; i < CORE_FORM_COUNT; ++i) {
 			sym = make_symbol(ss, core_form_names[i], strlen(core_form_names[i]));
 			vector_append(ss, core_forms, sym);
-			scope_set = make_dictionary(ss);
-			dictionary_set(ss, scope_set, core_scope, SLY_NULL);
+			/* scope_set = make_dictionary(ss); */
+			/* dictionary_set(ss, scope_set, core_scope, SLY_NULL); */
 			add_binding(csyntax(ss, sym, scope_set),
 						sym);
 		}
 		while (!null_p(builtins)) {
 			sym = car(car(builtins));
-			scope_set = make_dictionary(ss);
-			dictionary_set(ss, scope_set, core_scope, SLY_NULL);
+			/* scope_set = make_dictionary(ss); */
+			/* dictionary_set(ss, scope_set, core_scope, SLY_NULL); */
 			add_binding(csyntax(ss, sym, scope_set), sym);
 			env_extend(ss, env, sym, variable);
 			builtins = cdr(builtins);

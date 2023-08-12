@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <stdarg.h>
+#include <ctype.h>
 #include "sly_types.h"
 #include "lexer.h"
 #include "parser.h"
@@ -11,6 +12,55 @@
 #define next_token() NEXT_TOKEN(tokens)
 
 static token_buff tokens;
+
+static i8
+parse_char(Sly_State *ss, char *str, size_t len)
+{
+	if (len == 3) {
+		return str[2];
+	}
+	if (isdigit(str[2])) {
+		long i = strtol(&str[2], NULL, 8);
+		if (i > UCHAR_MAX || i < CHAR_MIN) {
+			sly_raise_exception(ss, EXC_COMPILE, "Parse Error byte value out of range");
+		}
+		return i;
+	}
+	if (str[2] == 'x') {
+		long i = strtol(&str[3], NULL, 16);
+		if (i > UCHAR_MAX || i < CHAR_MIN) {
+			sly_raise_exception(ss, EXC_COMPILE, "Parse Error byte value out of range");
+		}
+		return i;
+	}
+	if (strncmp(str, "#\\nul", len) == 0) {
+		return 0x0;
+	} else if (strncmp(str, "#\\alarm", len) == 0) {
+		return 0x7;
+	} else if (strncmp(str, "#\\backspace", len) == 0) {
+		return 0x8;
+	} else if (strncmp(str, "#\\tab", len) == 0) {
+		return 0x9;
+	} else if (strncmp(str, "#\\newline", len) == 0
+			   || strncmp(str, "#\\linefeed", len) == 0) {
+		return 0xa;
+	} else if (strncmp(str, "#\\vtab", len) == 0) {
+		return 0xb;
+	} else if (strncmp(str, "#\\page", len) == 0) {
+		return 0xc;
+	} else if (strncmp(str, "#\\return", len) == 0) {
+		return 0xd;
+	} else if (strncmp(str, "#\\esc", len) == 0
+			   || strncmp(str, "#\\escape", len) == 0) {
+		return 0x1b;
+	} else if (strncmp(str, "#\\space", len) == 0) {
+		return 0x20;
+	} else if (strncmp(str, "#\\delete", len) == 0) {
+		return 0x7f;
+	}
+	sly_raise_exception(ss, EXC_COMPILE, "Parse Error unrecognized char literal");
+	return '\0';
+}
 
 static char *
 escape_string(Sly_State *ss, char *str, size_t len)
@@ -164,7 +214,7 @@ build_list:
 		sly_raise_exception(ss, EXC_COMPILE, "Parse Error bad dot");
 	} break;
 	case tok_char: {
-		sly_raise_exception(ss, EXC_COMPILE, "Error character parsing is not implemented");
+		return make_syntax(ss, t, make_byte(ss, parse_char(ss, &cstr[t.so], t.eo - t.so)));
 	} break;
 	case tok_string: {
 		char *s = escape_string(ss, &cstr[t.so+1], t.eo - t.so - 2);

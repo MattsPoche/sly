@@ -56,7 +56,7 @@
 	match-vars))
 
 (define (syntax-match pattern literals form)
-  (let* ([pattern (syntax->list pattern)]
+  (let* ([pattern (if (syntax-pair? pattern) (syntax->list pattern) pattern)]
 		 [form (if (syntax-pair? form) (syntax->list form) form)]
 		 [literals (if (syntax-pair? literals) (syntax->list literals) literals)]
 		 [match-vars (make-match-vars pattern literals)])

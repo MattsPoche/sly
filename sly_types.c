@@ -146,6 +146,8 @@ sly_display(sly_value v, int lit)
 	} else if (float_p(v)) {
 		f64 n = get_float(v);
 		printf("%g", n);
+	} else if (byte_p(v)) {
+		printf("%s", char_name_cstr(get_byte(v)));
 	} else if (symbol_p(v)) {
 		symbol *s = GET_PTR(v);
 		printf("%.*s", (int)s->len, (char *)s->name);
@@ -318,6 +320,15 @@ get_int(sly_value v)
 	return i->val.as_int;
 }
 
+i8
+get_byte(sly_value v)
+{
+	sly_assert(byte_p(v), "Type Error: Expected Byte");
+	union imm_value i;
+	i.v = v;
+	return i.i.val.as_byte;
+}
+
 f64
 get_float(sly_value v)
 {
@@ -339,13 +350,22 @@ make_int(Sly_State *ss, i64 i)
 		union imm_value v;
 		v.i.type = imm_int;
 		v.i.val.as_int = i;
-		sly_value s = v.v;
-		return (s & ~TAG_MASK) | st_imm;
+		return (v.v & ~TAG_MASK) | st_imm;
 	}
 	number *n = gc_alloc(ss, sizeof(*n));
 	n->h.type = tt_int;
 	n->val.as_int = i;
 	return (sly_value)n;
+}
+
+sly_value
+make_byte(Sly_State *ss, i8 i)
+{
+	UNUSED(ss);
+	union imm_value v;
+	v.i.type = imm_byte;
+	v.i.val.as_byte = i;
+	return (v.v & ~TAG_MASK) | st_imm;
 }
 
 sly_value
@@ -529,10 +549,10 @@ make_byte_vector(Sly_State *ss, size_t len, size_t cap)
 sly_value
 byte_vector_ref(Sly_State *ss, sly_value v, size_t idx)
 {
-	sly_assert(vector_p(v), "Type Error: Expected byte-vector");
+	sly_assert(byte_vector_p(v), "Type Error: Expected byte-vector");
 	byte_vector *vec = GET_PTR(v);
 	sly_assert(idx < vec->len, "Error: Index out of bounds");
-	return make_int(ss, vec->elems[idx]);
+	return make_byte(ss, vec->elems[idx]);
 }
 
 void
@@ -758,6 +778,40 @@ intern_symbol(Sly_State *ss, sly_value sym)
 	dictionary_set(ss, interned, str, sym);
 }
 
+char *
+char_name_cstr(char c)
+{
+	static char s[8];
+	switch (c) {
+	case '\n': return "#\\newline";
+	case '\a': return "#\\alarm";
+	case '\b': return "#\\backspace";
+	case ' ':  return "#\\space";
+	case '\f': return "#\\page";
+	case '\r': return "#\\return";
+	case '\t': return "#\\tab";
+	case '\v': return "#\\vtab";
+	case '\0': return "#\\nul";
+	case 0x1b: return "#\\escape";
+	case 0x7f: return "#\\delete";
+	default: {
+		if (c < 0) {
+			snprintf(s, sizeof(s), "#\\x%x", (u8)c);
+		} else {
+			snprintf(s, sizeof(s), "#\\%c", c);
+		}
+		return s;
+	}
+	}
+}
+
+sly_value
+char_name(Sly_State *ss, sly_value c)
+{
+	char *s = char_name_cstr(get_byte(c));
+	return make_string(ss, s, strlen(s));
+}
+
 sly_value
 make_string(Sly_State *ss, char *cstr, size_t len)
 {
@@ -766,6 +820,69 @@ make_string(Sly_State *ss, char *cstr, size_t len)
 	vec->h.type = tt_string;
 	memcpy(vec->elems, cstr, len);
 	return val;
+}
+
+sly_value
+make_uninitialized_string(Sly_State *ss, size_t len)
+{
+	sly_value val = make_byte_vector(ss, len, len);
+	byte_vector *vec = GET_PTR(val);
+	vec->h.type = tt_string;
+	return val;
+}
+
+sly_value
+string_ref(Sly_State *ss, sly_value v, size_t idx)
+{
+	sly_assert(string_p(v), "Type Error: Expected string");
+	byte_vector *vec = GET_PTR(v);
+	sly_assert(idx < vec->len, "Error: Index out of bounds");
+	return make_byte(ss, vec->elems[idx]);
+}
+
+void
+string_set(sly_value v, size_t idx, sly_value b)
+{
+	sly_assert(string_p(v), "Type Error: Expected string");
+	byte_vector *vec = GET_PTR(v);
+	sly_assert(idx < vec->len, "Error: Index out of bounds");
+	vec->elems[idx] = get_byte(b);
+}
+
+sly_value
+string_join(Sly_State *ss, sly_value ls, sly_value delim)
+{
+	size_t dlen = string_len(delim);
+	size_t tlen = 0;
+	sly_value xs = ls;
+	if (null_p(xs)) return make_string(ss, "", 0);
+	while (!null_p(xs)) {
+		tlen += string_len(car(xs)) + dlen;
+		xs = cdr(xs);
+	}
+	tlen -= dlen;
+	sly_value str = make_uninitialized_string(ss, tlen);
+	sly_value x;
+	size_t i = 0;
+	size_t slen;
+	xs = ls;
+	while (!null_p(cdr(xs))) {
+		x = car(xs);
+		slen = string_len(x);
+		for (size_t j = 0; j < slen; ++j, ++i) {
+			string_set(str, i, string_ref(ss, x, j));
+		}
+		for (size_t j = 0; j < dlen; ++j, ++i) {
+			string_set(str, i, string_ref(ss, delim, j));
+		}
+		xs = cdr(xs);
+	}
+	x = car(xs);
+	slen = string_len(x);
+	for (size_t j = 0; j < slen; ++j, ++i) {
+		string_set(str, i, string_ref(ss, x, j));
+	}
+	return str;
 }
 
 char *
@@ -1022,7 +1139,7 @@ divix(Sly_State *ss, i64 x, sly_value y)
 {
 	sly_assert(number_p(y), "Type Error expected number");
 	if (int_p(y)) {
-		return make_int(ss, x / get_int(y));
+		return make_float(ss, (f64)x / (f64)get_int(y));
 	} else if (float_p(y)) {
 		return make_float(ss, (f64)x / get_float(y));
 	}
@@ -1067,6 +1184,8 @@ num_eqfx(f64 x, sly_value y)
 		return x  == get_int(y);
 	} else if (float_p(y)) {
 		return x == get_float(y);
+	} else if (byte_p(y)) {
+		return x == get_byte(y);
 	}
 	sly_assert(0, "Error Unreachable");
 	return 0;
@@ -1080,6 +1199,8 @@ num_eqix(i64 x, sly_value y)
 		return x == get_int(y);
 	} else if (float_p(y)) {
 		return x == get_float(y);
+	} else if (byte_p(y)) {
+		return x == get_byte(y);
 	}
 	sly_assert(0, "Error Unreachable");
 	return 0;
@@ -1093,8 +1214,9 @@ sly_num_eq(sly_value x, sly_value y)
 		return num_eqix(get_int(x), y);
 	} else if (float_p(x)) {
 		return num_eqfx(get_float(x), y);
+	} else if (byte_p(x)) {
+		return num_eqix(get_byte(x), y);
 	}
-	sly_assert(0, "Error Unreachable");
 	return 0;
 }
 

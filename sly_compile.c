@@ -61,17 +61,7 @@ union symbol_properties {
 };
 
 #define IS_GLOBAL(scope) ((scope)->parent == NULL)
-#define ADD_BUILTIN(name, fn, nargs, has_vargs)							\
-	do {																\
-		sym = make_symbol(ss, name, strlen(name));						\
-		dictionary_set(ss, symtable, sym, st_prop.v);					\
-		sly_value entry = cons(ss, sym,									\
-							   make_cclosure(ss, fn, nargs, has_vargs)); \
-		dictionary_set(ss, cc->globals, car(entry), cdr(entry));		\
-		cc->builtins = cons(ss, entry, cc->builtins);					\
-	} while (0)
 #define EMPTY_SYNTAX() make_syntax(ss, (token){0}, SLY_NULL)
-
 #define CAR(val) (syntax_p(val) ? car(syntax_to_datum(val)) : car(val))
 #define CDR(val) (syntax_p(val) ? cdr(syntax_to_datum(val)) : cdr(val))
 #define syntax_cons(car, cdr) make_syntax(ss, (token){0}, cons(ss, car, cdr))
@@ -675,8 +665,8 @@ forward_scan_block(Sly_State *ss, sly_value form)
 					if (pair_p(name) || syntax_pair_p(name)) {
 						name = CAR(name);
 					}
-				    // name := identifier of variable
-					// var  := raw symbol of variable
+                    /* name := identifier of variable
+					 * var  := raw symbol of variable */
 				defvar:
 					var = syntax_to_datum(name);
 					if (IS_GLOBAL(scope)) {

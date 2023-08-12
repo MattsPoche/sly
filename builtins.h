@@ -5,6 +5,25 @@
  * Include once in sly_compile.c
  */
 
+#define ADD_BUILTIN(name, fn, nargs, has_vargs)							\
+	do {																\
+		sym = make_symbol(ss, name, strlen(name));						\
+		dictionary_set(ss, symtable, sym, st_prop.v);					\
+		sly_value entry = cons(ss, sym,									\
+							   make_cclosure(ss, fn, nargs, has_vargs)); \
+		dictionary_set(ss, cc->globals, car(entry), cdr(entry));		\
+		cc->builtins = cons(ss, entry, cc->builtins);					\
+	} while (0)
+#define ADD_VARIABLE(name, value_expr)					\
+	do {												\
+		sym = make_symbol(ss, name, strlen(name));		\
+		dictionary_set(ss, symtable, sym, st_prop.v);	\
+		sly_value value = value_expr;					\
+		sly_value entry = cons(ss, sym, value);			\
+		dictionary_set(ss, cc->globals, sym, value);	\
+		cc->builtins = cons(ss, entry, cc->builtins);	\
+	} while (0)
+
 static sly_value
 cadd(Sly_State *ss, sly_value args)
 {
@@ -262,6 +281,53 @@ cdictionary_p(Sly_State *ss, sly_value args)
 {
 	UNUSED(ss);
 	return ctobool(dictionary_p(vector_ref(args, 0)));
+}
+
+static sly_value
+cmake_string(Sly_State *ss, sly_value args)
+{
+	size_t len = get_int(vector_ref(args, 0));
+	sly_value str = make_uninitialized_string(ss, len);
+	sly_value ch = vector_ref(args, 1);
+	if (!null_p(ch)) {
+		ch = car(ch);
+		for (size_t i = 0; i < len; ++i) {
+			string_set(str, i, ch);
+		}
+	}
+	return str;
+}
+
+static sly_value
+cstring_ref(Sly_State *ss, sly_value args)
+{
+	sly_value str = vector_ref(args, 0);
+	sly_value idx = vector_ref(args, 1);
+	return string_ref(ss, str, get_int(idx));
+}
+
+static sly_value
+cstring_set(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	sly_value str = vector_ref(args, 0);
+	sly_value idx = vector_ref(args, 1);
+	sly_value val = vector_ref(args, 2);
+	string_set(str, get_int(idx), val);
+	return val;
+}
+
+static sly_value
+cstring_join(Sly_State *ss, sly_value args)
+{
+	sly_value ls = vector_ref(args, 0);
+	sly_value delim = vector_ref(args, 1);
+	if (!null_p(delim)) {
+		delim = car(delim);
+	} else {
+		delim = make_string(ss, " ", 1);
+	}
+	return string_join(ss, ls, delim);
 }
 
 static sly_value
@@ -597,34 +663,19 @@ static sly_value
 capply(Sly_State *ss, sly_value args)
 {
 	sly_value fn = vector_ref(args, 0);
-	sly_value fst = vector_ref(args, 1);
-	sly_value rest = vector_ref(args, 2);
+	args = vector_ref(args, 1);
 	sly_value regs = make_vector(ss, 0, 8);
 	vector_append(ss, regs, fn); /* push function */
-	if (void_p(rest) || null_p(rest)) {
-		if (pair_p(fst)) {
-			while (!null_p(fst)) {
-				vector_append(ss, regs, car(fst));
-				fst = cdr(fst);
-			}
-		} else {
-			vector_append(ss, regs, fst);
-		}
-	} else {
-		vector_append(ss, regs, fst);
-		while (!null_p(cdr(rest))) {
-			vector_append(ss, regs, car(rest));
-			rest = cdr(rest);
-		}
-		rest = car(rest);
-		if (pair_p(rest)) {
-			while (!null_p(rest)) {
-				vector_append(ss, regs, car(rest));
-				rest = cdr(rest);
-			}
-		} else {
-			vector_append(ss, regs, rest);
-		}
+	while (!null_p(cdr(args))) {
+		vector_append(ss, regs, car(args));
+		args = cdr(args);
+	}
+	sly_value last = car(args);
+	sly_assert(pair_p(last) || null_p(last),
+			   "Type Error the last argument of apply must be a list");
+	while (!null_p(last)) {
+		vector_append(ss, regs, car(last));
+		last = cdr(last);
 	}
 	return call_closure(ss, regs);
 }
@@ -771,6 +822,10 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("display", cdisplay, 1, 0);
 	ADD_BUILTIN("gensym", cgensym, 0, 0);
 	ADD_BUILTIN("void", cvoid, 0, 0);
+	ADD_BUILTIN("make-string", cmake_string, 1, 1);
+	ADD_BUILTIN("string-ref", cstring_ref, 2, 0);
+	ADD_BUILTIN("string-set!", cstring_set, 3, 0);
+	ADD_BUILTIN("string-join", cstring_join, 1, 1);
 	ADD_BUILTIN("string->symbol", cstring_to_symbol, 1, 0);
 	ADD_BUILTIN("symbol->string", csymbol_to_string, 1, 0);
 	ADD_BUILTIN("syntax->datum", csyntax_to_datum, 1, 0);
@@ -794,7 +849,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("dictionary-set!", cdictionary_set, 3, 0);
 	ADD_BUILTIN("dictionary-has-key?", cdictionary_has_key, 2, 0);
 	ADD_BUILTIN("list", clist, 0, 1);
-	ADD_BUILTIN("apply", capply, 2, 1);
+	ADD_BUILTIN("apply", capply, 1, 1);
 	ADD_BUILTIN("console-clear-screen", cclear_screen, 0, 0);
 	ADD_BUILTIN("raise-macro-exception", craise_macro_exception, 1, 0);
 	ADD_BUILTIN("error", cerror, 0, 1);
@@ -804,6 +859,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("builtins", cbuiltins, 0, 0);
 	ADD_BUILTIN("get-vargs", cvargs, 0, 0);
 	ADD_BUILTIN("syntax-source-info", csyntax_source_info, 1, 0);
+	ADD_VARIABLE("*MODULES*", make_dictionary(ss));
 }
 
 #endif /* SLY_BUILTINS_H_ */

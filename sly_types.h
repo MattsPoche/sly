@@ -78,6 +78,8 @@ union imm_value {
 			u32 as_uint;
 			i32 as_int;
 			f32 as_float;
+			i8 as_byte;
+			i8 as_char;
 		} val;
 	} i;
 };
@@ -102,14 +104,14 @@ enum type_tag {
 	tt_stack_frame,		// 16
 };
 
-#define OBJ_HEADER gc_object h
-
 typedef struct _gc_object {
 	struct _gc_object *next;
 	struct _gc_object *ngray;
 	u8 color;
-	u8 type;
+	u8 type;  // enum type_tag
 } gc_object;
+
+#define OBJ_HEADER gc_object h
 
 typedef struct _pair {
 	OBJ_HEADER;
@@ -225,7 +227,9 @@ int symbol_eq(sly_value o1, sly_value o2);
 int identifier_eq(sly_value o1, sly_value o2);
 i64 get_int(sly_value v);
 f64 get_float(sly_value v);
+i8 get_byte(sly_value v);
 sly_value make_int(Sly_State *ss, i64 i);
+sly_value make_byte(Sly_State *ss, i8 i);
 sly_value make_float(Sly_State *ss, f64 f);
 sly_value make_small_float(Sly_State *ss, f32  f);
 sly_value cons(Sly_State *ss, sly_value car, sly_value cdr);
@@ -262,7 +266,13 @@ sly_value make_symbol(Sly_State *ss, char *cstr, size_t len);
 sly_value gensym(Sly_State *ss);
 sly_value get_interned_symbol(sly_value alist, char *name, size_t len);
 void intern_symbol(Sly_State *ss, sly_value sym_v);
+char *char_name_cstr(char c);
+sly_value char_name(Sly_State *ss, sly_value c);
 sly_value make_string(Sly_State *ss, char *cstr, size_t len);
+sly_value make_uninitialized_string(Sly_State *ss, size_t len);
+sly_value string_ref(Sly_State *ss, sly_value v, size_t idx);
+void string_set(sly_value v, size_t idx, sly_value b);
+sly_value string_join(Sly_State *ss, sly_value ls, sly_value delim);
 char *string_to_cstr(sly_value s);
 size_t string_len(sly_value str);
 sly_value string_eq(sly_value s1, sly_value s2);
