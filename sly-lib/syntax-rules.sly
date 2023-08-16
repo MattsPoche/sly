@@ -1,3 +1,8 @@
+(require "sly-lib/list.sly")
+(require "sly-lib/quasiquote.sly")
+(require "sly-lib/macros1.sly")
+(require "sly-lib/syntax-case.sly")
+
 (define-syntax (syntax-rules form)
   (syntax-case form ()
 	((_ (k ...) ((keyword . pattern) template) ...)

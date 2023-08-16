@@ -1,3 +1,5 @@
+(require "sly-lib/base.sly")
+
 (display-syntax
  "((foo bar) baz buzz) => "
  (syntax-case #'((foo bar) baz buzz) ()
@@ -164,3 +166,7 @@
 (displayln (string-join (list "hello" "world") ", "))
 
 (displayln (/ 32 2))
+
+(define foo 69)
+(displayln foo)
+(displayln *REQUIRED*)

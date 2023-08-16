@@ -1,3 +1,6 @@
+(require "sly-lib/list.sly")
+(require "sly-lib/quasiquote.sly")
+
 (define-syntax (and form)
   (define *form (cdr form))
   (define x (car *form))

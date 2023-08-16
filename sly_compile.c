@@ -829,22 +829,6 @@ sly_free_state(Sly_State *ss)
 	}
 }
 
-static void
-do_file(Sly_State *ss, char *file_path, sly_value env, int use_gc)
-{
-	ss->file_path = file_path;
-	ss->cc->cscope->proto = make_prototype(ss,
-										   make_vector(ss, 0, 8),
-										   make_vector(ss, 0, 8),
-										   make_vector(ss, 0, 8),
-										   0, 0, 0, 0);
-	sly_value ast = parse_file(ss, file_path, &ss->source_code);
-	ast = sly_expand(ss, env, ast);
-	ss->entry_point = sly_compile(ss, ast);
-	if (use_gc)	gc_collect(ss);
-	eval_closure(ss, ss->entry_point, SLY_NULL, use_gc);
-}
-
 void
 sly_do_file(char *file_path, int debug_info)
 {
@@ -853,12 +837,19 @@ sly_do_file(char *file_path, int debug_info)
 	ss.interned = make_dictionary(&ss);
 	sly_init_state(&ss);
 	sly_value env = make_dictionary(&ss);
-	do_file(&ss, "sly-lib/list.sly", env, 0);
-	do_file(&ss, "sly-lib/quasiquote.sly", env, 0);
-	do_file(&ss, "sly-lib/macros1.sly", env, 0);
-	do_file(&ss, "sly-lib/syntax-case.sly", env, 0);
-	do_file(&ss, "sly-lib/syntax-rules.sly", env, 0);
-	do_file(&ss, file_path, env, 1);
+	{
+		ss.file_path = file_path;
+		ss.cc->cscope->proto = make_prototype(&ss,
+											  make_vector(&ss, 0, 8),
+											  make_vector(&ss, 0, 8),
+											  make_vector(&ss, 0, 8),
+											  0, 0, 0, 0);
+		sly_value ast = parse_file(&ss, file_path, &ss.source_code);
+		ast = sly_expand(&ss, env, ast);
+		ss.entry_point = sly_compile(&ss, ast);
+		gc_collect(&ss);
+		eval_closure(&ss, ss.entry_point, SLY_NULL, 1);
+	}
 	if (debug_info) dis_all(ss.frame, 1);
 	if (debug_info) {
 		printf("** Allocations: %d **\n", allocations);
