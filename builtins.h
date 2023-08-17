@@ -860,7 +860,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("get-vargs", cvargs, 0, 0);
 	ADD_BUILTIN("syntax-source-info", csyntax_source_info, 1, 0);
 	ADD_VARIABLE("*MODULES*", make_dictionary(ss));
-	ADD_VARIABLE("*REQUIRED*", SLY_NULL);
+	ADD_VARIABLE("*REQUIRED*", make_dictionary(ss));
 }
 
 #endif /* SLY_BUILTINS_H_ */

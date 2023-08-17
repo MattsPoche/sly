@@ -1,6 +1,15 @@
 (require "sly-lib/list.sly")
 (require "sly-lib/quasiquote.sly")
 
+(provide and
+		 or
+		 let
+		 let*
+		 letrec
+		 cond
+		 when
+		 unless)
+
 (define-syntax (and form)
   (define *form (cdr form))
   (define x (car *form))

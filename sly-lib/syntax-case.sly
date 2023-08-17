@@ -2,6 +2,8 @@
 (require "sly-lib/quasiquote.sly")
 (require "sly-lib/macros1.sly")
 
+(provide syntax-case)
+
 ;;; Implementation of syntax-case and related functions
 ;;; Reference:
 ;;; https://docs.racket-lang.org/guide/syntax-case.html

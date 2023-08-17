@@ -28,6 +28,7 @@ enum core_form {
 	cf_call_with_current_continuation,
 	cf_callwcc,
 	cf_require,
+	cf_provide,
 	CORE_FORM_COUNT,
 };
 
@@ -42,7 +43,8 @@ static char *core_form_names[CORE_FORM_COUNT] = {
 	[cf_define_syntax] = "define-syntax",
 	[cf_call_with_current_continuation] = "call-with-current-continuation",
 	[cf_callwcc] = "call/cc",
-	[cf_require] = "require"
+	[cf_require] = "require",
+	[cf_provide] = "provide",
 };
 
 static int init = 0;
@@ -391,21 +393,27 @@ expand_core_form(Sly_State *ss, sly_value s, sly_value env)
 	return cons(ss, id, exp_body);
 }
 
-static int
-chk_required(Sly_State *ss, sly_value file_path)
+static sly_value
+get_provides(Sly_State *ss, sly_value file_path)
 {
 	sly_value key = cstr_to_symbol("*REQUIRED*");
 	sly_value required = dictionary_entry_ref(ss->cc->globals, key);
 	required = cdr(required);
-	sly_value list = required;
-	while (!null_p(list)) {
-		if (sly_equal(file_path, car(list))) {
-			return 1;
-		}
-		list = cdr(list);
+	sly_value provides = dictionary_entry_ref(required, file_path);
+	if (slot_is_free(provides)) {
+		return SLY_VOID;
+	} else {
+		return cdr(provides);
 	}
-	dictionary_set(ss, ss->cc->globals, key, cons(ss, file_path, required));
-	return 0;
+}
+
+static void
+set_provides(Sly_State *ss, sly_value file_path, sly_value provides)
+{
+	sly_value key = cstr_to_symbol("*REQUIRED*");
+	sly_value required = dictionary_entry_ref(ss->cc->globals, key);
+	required = cdr(required);
+	dictionary_set(ss, required, file_path, provides);
 }
 
 static sly_value
@@ -414,13 +422,11 @@ expand_require(Sly_State *ss, sly_value s, sly_value env)
 	sly_value file_path = syntax_to_datum(car(cdr(s)));
 	sly_assert(string_p(file_path),
 			   "Type Error expected file path as string in require form");
-	if (chk_required(ss, file_path)) {
-		return SLY_VOID;
-	}
-	char *old_file_path = ss->file_path;
-	sly_value old_proto = ss->cc->cscope->proto;
-	sly_value old_entry_point = ss->entry_point;
-	{
+	sly_value provides = get_provides(ss, file_path);
+	if (void_p(provides)) {
+		char *old_file_path = ss->file_path;
+		sly_value old_proto = ss->cc->cscope->proto;
+		sly_value old_entry_point = ss->entry_point;
 		ss->file_path = string_to_cstr(file_path);
 		ss->cc->cscope->proto = make_prototype(ss,
 											   make_vector(ss, 0, 8),
@@ -431,10 +437,28 @@ expand_require(Sly_State *ss, sly_value s, sly_value env)
 		ast = sly_expand(ss, env, ast);
 		ss->entry_point = sly_compile(ss, ast);
 		eval_closure(ss, ss->entry_point, SLY_NULL, 0);
+		ss->file_path = old_file_path;
+		ss->cc->cscope->proto = old_proto;
+		ss->entry_point = old_entry_point;
+		provides = get_provides(ss, file_path);
 	}
-	ss->file_path = old_file_path;
-	ss->cc->cscope->proto = old_proto;
-	ss->entry_point = old_entry_point;
+	sly_value scopes = syntax_scopes(car(s));
+	while (!null_p(provides)) {
+		sly_value id = car(provides);
+		sly_value binding = resolve(ss, id);
+		id = csyntax(ss, syntax_to_datum(id), scopes);
+		add_binding(id, binding);
+		provides = cdr(provides);
+	}
+	return SLY_VOID;
+}
+
+static sly_value
+expand_provide(Sly_State *ss, sly_value s, sly_value env)
+{
+	UNUSED(env);
+	sly_value file_path = make_string(ss, ss->file_path, strlen(ss->file_path));
+	set_provides(ss, file_path, cdr(s));
 	return SLY_VOID;
 }
 
@@ -457,6 +481,9 @@ expand_id_application_form(Sly_State *ss, sly_value s, sly_value env)
 	}
 	if (sly_equal(binding, core_symbol(cf_require))) {
 		return expand_require(ss, s, env);
+	}
+	if (sly_equal(binding, core_symbol(cf_provide))) {
+		return expand_provide(ss, s, env);
 	}
 	if (vector_contains(ss, core_forms, binding)) {
 		return expand_core_form(ss, s, env);
@@ -564,6 +591,7 @@ sly_value
 sly_expand(Sly_State *ss, sly_value env, sly_value ast)
 {
 	printf("EXPANDING FILE: %s\n", ss->file_path);
+	set_provides(ss, make_string(ss, ss->file_path, strlen(ss->file_path)), SLY_NULL);
 	if (!init) {
 		all_bindings = make_dictionary(ss);
 		core_forms = make_vector(ss, 0, CORE_FORM_COUNT);
@@ -577,8 +605,7 @@ sly_expand(Sly_State *ss, sly_value env, sly_value ast)
 			vector_append(ss, core_forms, sym);
 			scope_set = make_dictionary(ss);
 			dictionary_set(ss, scope_set, core_scope, SLY_NULL);
-			add_binding(csyntax(ss, sym, scope_set),
-						sym);
+			add_binding(csyntax(ss, sym, scope_set), sym);
 		}
 		while (!null_p(builtins)) {
 			sym = car(car(builtins));
@@ -592,6 +619,7 @@ sly_expand(Sly_State *ss, sly_value env, sly_value ast)
 	}
 	sly_value before = ast;
 	ast = introduce(ss, syntax_to_list(ss, ast));
+	ast = add_scope(ss, ast, scope());
 	ast = expand(ss, ast, env);
 	ast = compile(ss, ast);
 	ast = datum_to_syntax(ss, before, ast);

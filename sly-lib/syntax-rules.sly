@@ -3,6 +3,8 @@
 (require "sly-lib/macros1.sly")
 (require "sly-lib/syntax-case.sly")
 
+(provide syntax-rules)
+
 (define-syntax (syntax-rules form)
   (syntax-case form ()
 	((_ (k ...) ((keyword . pattern) template) ...)

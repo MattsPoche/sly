@@ -6,4 +6,42 @@
 
 (displayln "hello, from base.sly")
 
+(provide displayln
+		 display-syntax
+		 caar
+		 cdar
+		 cadr
+		 cddr
+		 caddr
+		 cdddr
+		 cadddr
+		 zero?
+		 fold-left
+		 fold-right
+		 contains
+		 remove
+		 append
+		 reverse
+		 last-pair
+		 list-copy
+		 length
+		 list-ref
+		 count
+		 argmax
+		 map
+		 for-each
+		 provide
+		 quasiquote
+		 syntax-quasiquote
+		 and
+		 or
+		 let
+		 let*
+		 letrec
+		 cond
+		 when
+		 unless
+		 syntax-case
+		 syntax-rules)
+
 (display "FINISHED FILE: sly-lib/base.sly\n")

@@ -169,4 +169,3 @@
 
 (define foo 69)
 (displayln foo)
-(displayln *REQUIRED*)

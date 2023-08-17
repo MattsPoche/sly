@@ -1,6 +1,8 @@
 ;;; Basic implementation of quasiquote and syntax-quasiquote
 (require "sly-lib/list.sly")
 
+(provide quasiquote syntax-quasiquote)
+
 (define-syntax (quasiquote form)
   (define (qq term)
 	(define q '())

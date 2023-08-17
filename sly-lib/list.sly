@@ -1,3 +1,29 @@
+(provide displayln
+		 display-syntax
+		 caar
+		 cdar
+		 cadr
+		 cddr
+		 caddr
+		 cdddr
+		 cadddr
+		 zero?
+		 fold-left
+		 fold-right
+		 contains
+		 remove
+		 append
+		 reverse
+		 last-pair
+		 list-copy
+		 length
+		 list-ref
+		 count
+		 argmax
+		 map
+		 for-each
+		 provide)
+
 (define (displayln x) (display x)(display "\n"))
 
 (define (display-syntax p s)
