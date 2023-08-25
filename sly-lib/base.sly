@@ -1,10 +1,9 @@
 (require "sly-lib/list.sly")
 (require "sly-lib/quasiquote.sly")
-(require "sly-lib/macros1.sly")
 (require "sly-lib/syntax-case.sly")
 (require "sly-lib/syntax-rules.sly")
-
-(displayln "hello, from base.sly")
+(require "sly-lib/with-syntax.sly")
+(require "sly-lib/macros1.sly")
 
 (provide displayln
 		 display-syntax
@@ -42,6 +41,7 @@
 		 when
 		 unless
 		 syntax-case
-		 syntax-rules)
+		 syntax-rules
+		 with-syntax)
 
 (display "FINISHED FILE: sly-lib/base.sly\n")

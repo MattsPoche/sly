@@ -35,8 +35,6 @@ enum kw {
 	kw_define_syntax,
 	kw_call_with_continuation,
 	kw_call_cc,
-	kw_require,
-	kw_export,
 	KW_COUNT,
 };
 
@@ -80,8 +78,6 @@ keywords(int idx)
 	case kw_define_syntax: return "define-syntax";
 	case kw_call_with_continuation: return "call-with-continuation";
 	case kw_call_cc: return "call/cc";
-	case kw_require: return "require";
-	case kw_export: return "export";
 	case KW_COUNT: break;
 	}
 	sly_assert(0, "Error, No such keyword");
@@ -782,14 +778,6 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			if (!null_p(CDR(form))) {
 				sly_raise_exception(ss, EXC_COMPILE, "Error malformed display expression");
 			}
-		} break;
-		case kw_require: { /* do nothing */
-			if (ss->cc->cscope->level > 0) {
-				sly_raise_exception(ss, EXC_COMPILE,
-									"Error: load form is only allowed in a top-level context");
-			}
-		} break;
-		case kw_export: {
 		} break;
 		case KW_COUNT: {
 			sly_raise_exception(ss, EXC_COMPILE, "(KW_COUNT) Not a real keyword");

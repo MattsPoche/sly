@@ -176,7 +176,7 @@ sly_display(sly_value v, int lit)
 	} else if (dictionary_p(v)) {
 		vector *vec = GET_PTR(v);
 		printf("#dict(");
-		if (vec->cap) {
+		if (vec->len) {
 			for (size_t i = 0; i < vec->cap; ++i) {
 				sly_value v = vec->elems[i];
 				if (!slot_is_free(v)) {
@@ -205,10 +205,16 @@ sly_display(sly_value v, int lit)
 			printf(">");
 		}
 		printf(">");
-
 	} else {
 		printf("#<UNEMPLEMENTED %#lx, %zu, %d>", v, v & TAG_MASK, TYPEOF(v));
 	}
+}
+
+void
+sly_displayln(sly_value v)
+{
+	sly_display(v, 1);
+	putchar('\n');
 }
 
 static u64
@@ -493,6 +499,21 @@ list_len(sly_value list)
 	size_t len = 0;
 	for (; pair_p(list); list = cdr(list)) len++;
 	return len;
+}
+
+sly_value
+list_ref(sly_value list, size_t idx)
+{
+	size_t i = 0;
+	while (!null_p(list)) {
+		if (i == idx) {
+			return car(list);
+		}
+		i++;
+		list = cdr(list);
+	}
+	sly_assert(0, "Error Index out of bounds (list-ref)");
+	return SLY_NULL;
 }
 
 int
@@ -1307,10 +1328,7 @@ sly_eq(sly_value o1, sly_value o2)
 	if (number_p(o1) && number_p(o2)) {
 		return sly_num_eq(o1, o2);
 	}
-	if (string_p(o1) && string_p(o2)) {
-		return string_eq(o1, o2);
-	}
-	return 0;
+	return o1 == o2;
 }
 
 #if 0
@@ -1642,7 +1660,12 @@ sly_value
 dictionary_ref(sly_value d, sly_value key)
 {
 	sly_value entry = dictionary_entry_ref(d, key);
-	sly_assert(!slot_is_free(entry), "Dictionary Key Error key not found");
+	if (slot_is_free(entry)) {
+		printf("Key not found: ");
+		sly_display(key, 1);
+		printf("\n");
+		sly_assert(0, "Dictionary Key Error key not found");
+	}
 	return cdr(entry);
 }
 
@@ -1814,4 +1837,272 @@ upvalue_isclosed(sly_value uv)
 	sly_assert(upvalue_p(uv), "Type Error expected <upvalue>");
 	upvalue *u = GET_PTR(uv);
 	return u->isclosed;
+}
+
+#define ELLIPSIS cstr_to_symbol("...")
+#define EMPTY_PATTERN cstr_to_symbol("_")
+#define EXPANSION_END cstr_to_symbol("* END OF EXPANSION *")
+#define SINGLE cstr_to_symbol("* SINGLE *")
+
+static int
+match_id_symbol(sly_value pattern, sly_value sym)
+{
+	if (identifier_p(pattern)) {
+		pattern = syntax_to_datum(pattern);
+	}
+	return symbol_p(pattern) && sly_equal(pattern, sym);
+}
+
+static int
+match_id_ellipsis(Sly_State *ss, sly_value pattern)
+{
+	return match_id_symbol(pattern, ELLIPSIS);
+}
+
+static int
+match_id_empty_pattern(Sly_State *ss, sly_value pattern)
+{
+	return match_id_symbol(pattern, EMPTY_PATTERN);
+}
+
+static int
+is_literal(sly_value id, sly_value literals)
+{
+	if (null_p(literals)) {
+		return 0;
+	}
+	if (identifier_eq(id, car(literals))) {
+		return 1;
+	} else {
+		return is_literal(id, cdr(literals));
+	}
+}
+
+static int
+id_in(sly_value id, sly_value list)
+{
+	if (null_p(list)) {
+		return 0;
+	}
+	if (match_id_symbol(id, car(list))) {
+		return 1;
+	} else {
+		return id_in(id, cdr(list));
+	}
+}
+
+static void
+pvar_bind(Sly_State *ss, sly_value pvars, sly_value p, sly_value f, int repeat)
+{
+	sly_value key = strip_syntax(ss, p);
+	sly_value entry = dictionary_entry_ref(pvars, key);
+	if (repeat) {
+		if (slot_is_free(entry)) {
+			dictionary_set(ss, pvars, key, cons(ss, f, SLY_NULL));
+		} else {
+			append(cdr(entry), cons(ss, f, SLY_NULL));
+		}
+	} else if (match_id_ellipsis(ss, p)) {
+		if (slot_is_free(entry)) {
+			dictionary_set(ss, pvars, key, f);
+		} else {
+			dictionary_import(ss, cdr(entry), f);
+		}
+	} else {
+		/* Single */
+		dictionary_set(ss, pvars, key, cons(ss, SINGLE, f));
+	}
+}
+
+static sly_value
+pvar_value(Sly_State *ss, sly_value pvars, sly_value t, size_t idx)
+{
+	sly_value key = strip_syntax(ss, t);
+	sly_value entry = dictionary_entry_ref(pvars, key);
+	if (slot_is_free(entry)) {
+		return SLY_VOID;
+	}
+	sly_value v = cdr(entry);
+	if (pair_p(v)) {
+		if (match_id_symbol(car(v), SINGLE)) {
+			return cdr(v);
+		} else if (idx < list_len(v)) {
+			return list_ref(v, idx);
+		} else {
+			return EXPANSION_END;
+		}
+	} else {
+		return v;
+	}
+}
+
+sly_value
+get_pattern_var_names(Sly_State *ss, sly_value pattern, sly_value literals)
+{
+	if (identifier_p(pattern)
+		&& !is_literal(pattern, literals)
+		&& !match_id_ellipsis(ss, pattern)
+		&& !match_id_empty_pattern(ss, pattern)) {
+		return syntax_to_datum(pattern);
+	} else if (pair_p(pattern)) {
+		sly_value p = pattern;
+		sly_value names = SLY_NULL;
+		while (pair_p(p)) {
+			sly_value name = get_pattern_var_names(ss, car(p), literals);
+			if (pair_p(name)) {
+				append(name, names);
+				names = name;
+			} else if (!null_p(name)) {
+				names = cons(ss, name, names);
+			}
+			p = cdr(p);
+		}
+		if (identifier_p(p)) {
+			names = cons(ss, syntax_to_datum(p), names);
+		}
+		return names;
+	} else {
+		return SLY_NULL;
+	}
+}
+
+static int
+chk_ellipsis(Sly_State *ss, sly_value pattern)
+{
+
+	sly_value f = car(cdr(pattern));
+	return 	match_id_symbol(f, ELLIPSIS);
+}
+
+int
+match_syntax(Sly_State *ss, sly_value pattern, sly_value literals,
+			 sly_value form, sly_value pvars, int repeat)
+{
+	if (identifier_p(pattern)) {
+		if (is_literal(pattern, literals)) {
+			return identifier_eq(pattern, form);
+		} else if (match_id_empty_pattern(ss, pattern)) {
+			return 1;
+		} else {
+			pvar_bind(ss, pvars, pattern, form, repeat);
+			return 1;
+		}
+	}
+	while (pair_p(pattern) && pair_p(form)) {
+		sly_value p = car(pattern);
+		sly_value f = car(form);
+		if (pair_p(cdr(pattern)) && chk_ellipsis(ss, pattern)) {
+			sly_value repvars = make_dictionary(ss);
+			while (pair_p(form)
+				   && match_syntax(ss, p, literals, car(form), repvars, 1)) {
+				form = cdr(form);
+			}
+			pattern = cdr(pattern);
+			pvar_bind(ss, pvars, ELLIPSIS, repvars, repeat);
+		} else if (identifier_p(p)) {
+			if (is_literal(p, literals)) {
+				if (!identifier_eq(p, f)) {
+					return 0;
+				}
+			} else if (match_id_empty_pattern(ss, pattern)) {
+				// pass
+			} else {
+				pvar_bind(ss, pvars, p, f, repeat);
+			}
+		} else if (pair_p(p)) {
+			if (!(pair_p(f) || null_p(f))) {
+				return 0;
+			}
+			if (!match_syntax(ss, p, literals, f, pvars, repeat)) {
+				return 0;
+			}
+		} else if (null_p(p) && !null_p(f)) {
+			return 0;
+		}
+		if (pair_p(pattern)) {
+			pattern = cdr(pattern);
+		}
+		if (pair_p(form)) {
+			form = cdr(form);
+		}
+	}
+	if (pair_p(pattern) && !(pair_p(form) || null_p(form))) {
+		return 0;
+	}
+	if (identifier_p(pattern)) {
+		pvar_bind(ss, pvars, pattern, form, repeat);
+	}
+	return 1;
+}
+
+static int
+syntax_contains(sly_value s, sly_value v)
+{
+	if (null_p(s)) {
+		return 0;
+	} else if (pair_p(s)) {
+		return syntax_contains(car(s), v)
+			|| syntax_contains(cdr(s), v);
+	} else {
+		return sly_equal(s, v);
+	}
+}
+
+sly_value
+construct_syntax(Sly_State *ss, sly_value template, sly_value pvars, sly_value names, size_t idx)
+{
+	if (null_p(template)) {
+		return template;
+	}
+	if (identifier_p(template)) {
+		sly_value x = pvar_value(ss, pvars, template, idx);
+		if (void_p(x)) {
+			if (id_in(template, names)) {
+				return EXPANSION_END;
+			} else {
+				return template;
+			}
+		} else {
+			return x;
+		}
+	}
+	if (pair_p(template)) {
+		sly_value h = car(template);
+		sly_value t = cdr(template);
+		if (pair_p(t) && match_id_ellipsis(ss, car(t))) {
+			sly_value f = SLY_NULL;
+			sly_value sub = pvar_value(ss, pvars, ELLIPSIS, idx);
+			if (match_id_symbol(sub, EXPANSION_END)) {
+				return SLY_NULL;
+			}
+			sly_value expvars = make_dictionary(ss);
+			dictionary_import(ss, expvars, pvars);
+			dictionary_import(ss, expvars, sub);
+			size_t i = 0;
+			for (;;) {
+				sly_value n = construct_syntax(ss, h, expvars, names, i);
+				if (syntax_contains(n, EXPANSION_END)) {
+					break;
+				}
+				i++;
+				if (null_p(f)) {
+					f = cons(ss, n, SLY_NULL);
+				} else {
+					append(f, cons(ss, n, SLY_NULL));
+				}
+			}
+			if (null_p(f)) {
+				f = construct_syntax(ss, cdr(t), pvars, names, idx);
+			} else {
+				append(f, construct_syntax(ss, cdr(t), pvars, names, idx));
+			}
+			return f;
+		} else {
+			return cons(ss,
+						construct_syntax(ss, h, pvars, names, idx),
+						construct_syntax(ss, t, pvars, names, idx));
+		}
+	}
+	sly_assert(0, "Something went wrong");
+	return SLY_NULL;
 }

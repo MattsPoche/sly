@@ -222,6 +222,7 @@ typedef struct _syntax {
 void _sly_assert(int p, char *msg, int line_number, const char *func_name, char *file_name);
 void sly_raise_exception(Sly_State *ss, int excpt, char *msg);
 void sly_display(sly_value v, int lit);
+void sly_displayln(sly_value v);
 u64 sly_hash(sly_value v);
 int symbol_eq(sly_value o1, sly_value o2);
 int identifier_eq(sly_value o1, sly_value o2);
@@ -243,6 +244,7 @@ sly_value copy_list(Sly_State *ss, sly_value list);
 int list_eq(sly_value o1, sly_value o2);
 void append(sly_value p, sly_value v);
 size_t list_len(sly_value list);
+sly_value list_ref(sly_value list, size_t idx);
 int list_contains(sly_value list, sly_value value);
 sly_value list_to_vector(Sly_State *ss, sly_value list);
 sly_value vector_to_list(Sly_State *ss, sly_value vec);
@@ -322,6 +324,11 @@ sly_value make_closed_upvalue(Sly_State *ss, sly_value val);
 int upvalue_isclosed(sly_value uv);
 sly_value upvalue_get(sly_value uv);
 void upvalue_set(sly_value uv, sly_value value);
+int match_syntax(Sly_State *ss, sly_value pattern, sly_value literals,
+				 sly_value form, sly_value pvars, int repeat);
+sly_value get_pattern_var_names(Sly_State *ss, sly_value pattern, sly_value literals);
+sly_value construct_syntax(Sly_State *ss, sly_value template, sly_value pvars,
+						   sly_value names, size_t idx);
 
 #define sly_assert(p, msg) _sly_assert(p, msg, __LINE__, __func__, __FILE__)
 #define cstr_to_symbol(cstr) (make_symbol(ss, (cstr), strlen(cstr)))

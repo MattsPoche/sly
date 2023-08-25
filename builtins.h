@@ -367,7 +367,7 @@ ceq_p(Sly_State *ss, sly_value args)
 	UNUSED(ss);
 	sly_value v1 = vector_ref(args, 0);
 	sly_value v2 = vector_ref(args, 1);
-	return ctobool(v1 == v2);
+	return ctobool(sly_eq(v1, v2));
 }
 
 static sly_value
@@ -772,6 +772,48 @@ cvargs(Sly_State *ss, sly_value args)
 	return dictionary_ref(ss->cc->globals, cstr_to_symbol("__VARGS__"));
 }
 
+static sly_value
+cmatch_syntax(Sly_State *ss, sly_value args)
+{
+	sly_value pattern = vector_ref(args, 0);
+	sly_value literals = vector_ref(args, 1);
+	sly_value form = vector_ref(args, 2);
+	sly_value pvars = vector_ref(args, 3);
+	if (syntax_pair_p(pattern)) {
+		pattern = syntax_to_list(ss, pattern);
+	}
+	if (syntax_pair_p(form)) {
+		form = syntax_to_list(ss, form);
+	}
+	return ctobool(match_syntax(ss, pattern, literals, form, pvars, 0));
+}
+
+static sly_value
+cget_pattern_var_names(Sly_State *ss, sly_value args)
+{
+	sly_value pattern = vector_ref(args, 0);
+	sly_value literals = vector_ref(args, 1);
+	if (syntax_pair_p(pattern)) {
+		pattern = syntax_to_list(ss, pattern);
+	}
+	return get_pattern_var_names(ss, pattern, literals);
+}
+
+static sly_value
+cconstruct_syntax(Sly_State *ss, sly_value args)
+{
+	sly_value template = vector_ref(args, 0);
+	sly_value pvars = vector_ref(args, 1);
+	sly_value names = vector_ref(args, 2);
+	sly_value slist;
+	if (syntax_pair_p(template)) {
+		slist = construct_syntax(ss, syntax_to_list(ss, template), pvars, names, 0);
+	} else {
+		slist = construct_syntax(ss, template, pvars, names, 0);
+	}
+	return datum_to_syntax(ss, template, slist);
+}
+
 static void
 init_builtins(Sly_State *ss)
 {
@@ -859,6 +901,9 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("builtins", cbuiltins, 0, 0);
 	ADD_BUILTIN("get-vargs", cvargs, 0, 0);
 	ADD_BUILTIN("syntax-source-info", csyntax_source_info, 1, 0);
+	ADD_BUILTIN("match-syntax", cmatch_syntax, 4, 0);
+	ADD_BUILTIN("get-pattern-var-names", cget_pattern_var_names, 2, 0);
+	ADD_BUILTIN("construct-syntax", cconstruct_syntax, 3, 0);
 	ADD_VARIABLE("*MODULES*", make_dictionary(ss));
 	ADD_VARIABLE("*REQUIRED*", make_dictionary(ss));
 }

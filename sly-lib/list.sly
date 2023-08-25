@@ -22,6 +22,9 @@
 		 argmax
 		 map
 		 for-each
+		 assoc
+		 alist-cons
+		 alist-copy
 		 provide)
 
 (define (displayln x) (display x)(display "\n"))
@@ -153,5 +156,21 @@
 	  (begin
 		(apply f (*heads* xs))
 		(apply for-each f (*tails* xs)))))
+
+(define (assoc key alist)
+  (define x '())
+  (if (null? alist) '()
+	  (begin
+		(set! x (car alist))
+		(if (equal? key (car x)) x
+			(assoc key (cdr alist))))))
+
+(define (alist-cons key datum alist)
+  (cons (cons key datum) alist))
+
+(define (alist-copy alist)
+  (fold-right (lambda (x xs)
+				(alist-cons (car x) (cdr x) alist))
+			  '() alist))
 
 (display "FINISHED FILE: sly-lib/list.sly\n")

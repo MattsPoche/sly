@@ -1,171 +1,18 @@
 (require "sly-lib/base.sly")
 
-(display-syntax
- "((foo bar) baz buzz) => "
- (syntax-case #'((foo bar) baz buzz) ()
-   [(x y z)
-	(let ()
-	  (display-syntax "z :: " #'z)
-	  (display-syntax "y :: " #'y)
-	  (display-syntax "x :: " #'x)
-	  #'(z y x))]))
+(let ([x 69] [y 420])
+ (displayln x)
+ (displayln y)
+ (displayln (+ x y)))
 
-(define-syntax with-syntax
-  (lambda (x)
-    (syntax-case x ()
-      [(_ ((p e) ...) b1 b2 ...)
-	   #'(syntax-case (list e ...) ()
-		   [(p ...) (let () b1 b2 ...)])])))
+(let loop ([i 0])
+  (when (< i 10)
+	(displayln i)
+	(loop (+ i 1))))
 
-;; UPDATE: Appears to be working more testing needed of course ;)
-
-(define-syntax cond
-  (lambda (x)
-    (syntax-case x ()
-      [(_ c1 c2 ...)
-       (let f ([c1 #'c1] [cmore (syntax->list #'(c2 ...))])
-         (if (null? cmore)
-             (syntax-case c1 (else =>)
-			   ;; need to check for literals in the first position
-               [(else e1 e2 ...) #'(begin e1 e2 ...)]
-               [(e0) #'(let ([t e0]) (if t t))]
-               [(e0 => e1) #'(let ([t e0]) (if t (e1 t) (void)))]
-			   ;; need to not ignore the first pattern element
-               [(e0 e1 e2 ...) #'(if e0 (begin e1 e2 ...) (void))])
-             (with-syntax ([rest (f (car cmore) (cdr cmore))])
-               (syntax-case c1 (=>)
-                 [(e0) #'(let ([t e0]) (if t t rest))]
-                 [(e0 => e1) #'(let ([t e0]) (if t (e1 t) rest))]
-                 [(e0 e1 e2 ...)
-                  #'(if e0 (begin e1 e2 ...) rest)]))))])))
-
-(displayln (syntax->datum (syntax-case #'(foo bar baz) ()
-							[(x y z)
-							 #'(z y x)])))
-
-(cond [(> 69 420) (displayln "foo")]
-	  [#t (displayln "bar")])
-
-(define-syntax define-a
-  (lambda (form)
-	(syntax-case form ()
-	  [(define-a x)
-	   (with-syntax ([a (datum->syntax #'define-a 'a)])
-		 #'(define a x))])))
-
-(define-a 69)
-(displayln a)
-
-(define-syntax (define-macro form)
-  (syntax-case form ()
-      [(define-macro (name . pattern) e e* ...)
-       #'(define-syntax (name form)
-           (syntax-case form ()
-             [(name . pattern)
-              (begin e e* ...)]))]))
-
-(define-macro (swap! x y)
-  #'(let ((tmp x))
-	  (set! x y)
-	  (set! y tmp)))
-
-(define x 69)
-(define y 420)
-
-(swap! x y)
-(displayln x)
-(displayln y)
-
-(define-macro (my-let ((var value) ...) e e* ...)
-  #'((lambda (var ...) e e* ...) value ...))
-
-(my-let ((x 32)
-		 (y 69))
-		(displayln (* x y)))
-
-(define-syntax (define-module form)
-  (letrec ([make-export-list
-			(lambda (form)
-			  (let ([form (syntax->list form)])
-				(map (lambda (x)
-					   (syntax-case x (as)
-						 [(id as alias) #'(cons 'alias id)]
-						 [id #'(cons 'id id)]))
-					 form)))])
-	(syntax-case form (export)
-	  [(_ name (export exports ...) body ...)
-	   (with-syntax ([(exports ...) (make-export-list #'(exports ...))]
-					 [(body ...) (syntax->list #'(body ...))])
-		 #'(dictionary-set!
-			*MODULES* 'name
-			(let ()
-			  body ...
-			  (make-dictionary exports ...))))])))
-
-(define-syntax module-ref
-  (syntax-rules ()
-	[(_ module id)
-	 (dictionary-ref
-	  (dictionary-ref *MODULES* 'module) 'id)]))
-
-(define-module test-module
-  (export (func1 as froopy-buttz)
-		  func2)
-
-  (define (helper) (display "Hello from helper\n"))
-
-  (define (func1)
-	(display "Hello from func1! Whats up??\n"))
-
-  (define (func2 x y)
-	(helper)
-	(display "Hello from func2! ")
-	(displayln (* x y))))
-
-((module-ref test-module froopy-buttz))
-((module-ref test-module func2) 420.0 69.0)
-
-(if (eq? 'hello (string->symbol "hello"))
-	(displayln "yes")
-	(displayln "no"))
-
-(define (string=? fst snd . rest)
-  (if (and (string? fst)
-		   (string? snd)
-		   (equal? fst snd))
-	  (if (null? rest)
-		  #t
-		  (apply string=? fst rest))
-	  #f))
-
-(if (string=? "foo" "foo" "foo" "foo")
-	(displayln "yes")
-	(displayln "no"))
-
-(displayln (+ 1 2 3 4))
-(displayln '(#\a
-			 #\b
-			 #\c
-			 #\$
-			 #\x
-			 #\\
-			 #\newline
-			 #\tab
-			 #\vtab
-			 #\10
-			 #\177
-			 #\xff
-			 #\nul))
-
-(let ((str (make-string 8 #\x)))
-  (displayln str)
-  (displayln (string-ref str 3))
-  (string-set! str 3 #\@)
-  (displayln str))
-
-(displayln (string-join (list "hello" "world") ", "))
-
-(displayln (/ 32 2))
-
-(define foo 69)
-(displayln foo)
+(let* ([x 69]
+	   [y 420]
+	   [z (* x y)])
+  (displayln x)
+  (displayln y)
+  (displayln z))

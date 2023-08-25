@@ -1,6 +1,5 @@
 (require "sly-lib/list.sly")
 (require "sly-lib/quasiquote.sly")
-(require "sly-lib/macros1.sly")
 (require "sly-lib/syntax-case.sly")
 
 (provide syntax-rules)
