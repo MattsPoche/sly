@@ -3,6 +3,17 @@
 
 (provide syntax-case)
 
+;;; NOTE: This implementation of syntax-case breaks if you try to syntax-quasiquote
+;;; in a match-expression template.
+;;; This means that if you want to break hygiene and introduce bindings into the expansion context,
+;;; doing this will not work:
+;;; #`(define #,(datum->syntax #'id 'my-variable) 69)
+;;; You can still break hygiene using with-syntax:
+;;; (with-syntax ([my-variable (datum->syntax #'id 'my-variable)])
+;;;    #'(define my-variable 69))
+
+;;; TODO: Make quasiquoting work in syntax-case templates. See note below.
+
 (define-syntax (syntax-case form)
   (define *form (cdr form))
   (define stx (car *form))
@@ -11,9 +22,20 @@
   (define rest (cdddr *form))
   (define pattern (car clause))
   (define expr (cadr clause))
-  #`((lambda (names pvars)
+  #`((lambda ()
+	   (define names
+		 (get-pattern-var-names (syntax-quote #,pattern) (quote #,literals)))
+	   (define pvars (make-dictionary))
 	   (if (match-syntax (syntax-quote #,pattern) (quote #,literals) #,stx pvars)
 		   #,((lambda ()
+				;; NOTE: This function scans the expression clause and wraps syntax-quote
+				;; forms in construct-syntax so that templates are expanded.
+				;; This does not work for syntax-quasiquote as such quasiquote forms
+				;; cannot be used as templates.
+				;; The issue is that syntax-quasiquote itself is a macro that expands
+				;; after this function inserts the calls to construct-syntax.
+				;; A possible fix is to manually expand all quasiquote-syntax forms
+				;; in the expression before applying transform-expr.
 				(define (transform-expr expr)
 				  (if (pair? expr)
 					  (if (identifier=? (car expr) #'syntax-quote)
@@ -24,162 +46,8 @@
 				(transform-expr expr)))
 		   #,(if (null? rest)
 				 #`(begin
-					 (displayln (syntax->datum #,stx))
+					 (displayln (quote #,pattern))
+					 (displayln #,stx)
 					 (displayln pvars)
 					 (error "Error invalid syntax for syntax-case."))
-				 #`(syntax-case #,stx #,literals #,@rest))))
-	 (get-pattern-var-names (syntax-quote #,pattern) (quote #,literals))
-	 (make-dictionary)))
-
-(displayln "FINISHED FILE: sly-lib/syntax-case.sly")
-
-;; (syntax-rules ()
-;;   ((_ ((var val) ...) body ...)
-;;    ((lambda (var ...) body ...) val ...))
-;;   ((_ name ((var val) ...) body ...)
-;;    ((lambda () (define name (lambda (var ...) body ...)) (name val ...)))))
-
-
-;; (define tests
-;;   (list
-;;    (make-dictionary (cons 'pattern #'(let ((var val) ...) body ...))
-;; 					(cons 'literals '())
-;; 					(cons 'form #'(let ([foo 1] [bar 2])
-;; 									 (displayln (+ 1 2))
-;; 									 (displayln "hello, world")))
-;; 					(cons 'template #'((lambda (var ...) body ...) val ...))
-;; 					(cons 'expected #'((lambda (foo bar)
-;; 										  (displayln (+ 1 2))
-;; 										  (displayln "hello, world"))
-;; 										1 2)))
-;;    (make-dictionary (cons 'pattern #'(let ((var val) ...) body ...))
-;; 					(cons 'literals '())
-;; 					(cons 'form #'(let ()
-;; 									 (displayln (+ 1 2))
-;; 									 (displayln "hello, world")))
-;; 					(cons 'template #'((lambda (var ...) body ...) val ...))
-;; 					(cons 'expected #'((lambda ()
-;; 										  (displayln (+ 1 2))
-;; 										  (displayln "hello, world")))))
-;;    (make-dictionary (cons 'pattern #'(define-record-type type
-;; 										(constructor constructor-tag ...)
-;; 										predicate
-;; 										(field-tag accessor more ...) ...))
-;; 					(cons 'literals '())
-;; 					(cons 'form #'(define-record-type :pare
-;; 									 (kons x y)
-;; 									 pare?
-;; 									 (x kar set-kar!)
-;; 									 (y kdr)))
-;; 					(cons 'template #'(begin
-;; 										 (define type
-;; 										   (make-record-type 'type '(field-tag ...)))
-;; 										 (define constructor
-;; 										   (record-constructor type '(constructor-tag ...)))
-;; 										 (define predicate
-;; 										   (record-predicate type))
-;; 										 (define-record-field type field-tag accessor more ...) ...))
-;; 					(cons 'expected #'(begin
-;; 										 (define :pare
-;; 										   (make-record-type ':pare '(x y)))
-;; 										 (define kons
-;; 										   (record-constructor :pare '(x y)))
-;; 										 (define pare? (record-predicate :pare))
-;; 										 (define-record-field :pare x kar set-kar!)
-;; 										 (define-record-field :pare y kdr))))
-;;    (make-dictionary (cons 'pattern #'(define-record-type type
-;; 										(constructor constructor-tag ...)
-;; 										predicate
-;; 										(field-tag accessor . more) ...))
-;; 					(cons 'literals '())
-;; 					(cons 'form #'(define-record-type :pare
-;; 									 (kons x y)
-;; 									 pare?
-;; 									 (x kar set-kar!)
-;; 									 (y kdr)))
-;; 					(cons 'template #'(begin
-;; 										 (define type
-;; 										   (make-record-type 'type '(field-tag ...)))
-;; 										 (define constructor
-;; 										   (record-constructor type '(constructor-tag ...)))
-;; 										 (define predicate
-;; 										   (record-predicate type))
-;; 										 (define-record-field type field-tag accessor . more) ...))
-;; 					(cons 'expected #'(begin
-;; 										 (define :pare
-;; 										   (make-record-type ':pare '(x y)))
-;; 										 (define kons
-;; 										   (record-constructor :pare '(x y)))
-;; 										 (define pare? (record-predicate :pare))
-;; 										 (define-record-field :pare x kar set-kar!)
-;; 										 (define-record-field :pare y kdr))))
-;;    (make-dictionary (cons 'pattern #'(_ (k ...) ((keyword . pattern) template) ...))
-;; 					(cons 'literals '())
-;; 					(cons 'form #'(syntax-rules ()
-;; 									 [(let ((var val) ...) body ...)
-;; 									  ((lambda (var ...) body ...) val ...)]))
-;; 					(cons 'template #'(lambda (form)
-;; 										 (syntax-case form (k ...)
-;; 										   ((syntax-rules . pattern) #'template) ...)))
-;; 					(cons 'expected #'(lambda (form)
-;; 										(syntax-case form ()
-;; 										  ((syntax-rules ((var val) ...) body ...)
-;; 										   (syntax-quote ((lambda (var ...) body ...) val ...)))))))
-;;    (make-dictionary (cons 'pattern #'(_ x -> y))
-;; 					(cons 'literals '(->))
-;; 					(cons 'form #'(foo 32 -> 69))
-;; 					(cons 'template #'(displayln y x))
-;; 					(cons 'expected #'(displayln 69 32)))))
-
-
-;; (define (run-test dict)
-;;   (let* ([pattern (dictionary-ref dict 'pattern)]
-;; 		 [literals (dictionary-ref dict 'literals)]
-;; 		 [template (dictionary-ref dict 'template)]
-;; 		 [form (dictionary-ref dict 'form)]
-;; 		 [expected (dictionary-ref dict 'expected)]
-;; 		 [names (get-pattern-var-names pattern literals)]
-;; 		 [pvars (make-dictionary)])
-;; 	(if (match-syntax pattern literals form pvars)
-;; 		(let ([new-form (construct-syntax template pvars names)])
-;; 		  (if (equal? new-form expected)
-;; 			  (displayln "Test passed")
-;; 			  (begin
-;; 				(displayln "Test failed")
-;; 				(display "expected :: ")
-;; 				(displayln (syntax->datum expected))
-;; 				(display "result :: ")
-;; 				(displayln (syntax->datum new-form))
-;; 				(display "pvars :: ")
-;; 				(displayln pvars))))
-;; 		(displayln "Test failed"))))
-
-;; (define-syntax (syntax-case form)
-;;   (let* ([id (car form)]
-;; 		 [*form (cdr form)]
-;; 		 [stx (car *form)]
-;; 		 [literals (cadr *form)]
-;; 		 [clause (caddr *form)]
-;; 		 [rest (cdddr *form)]
-;; 		 [pattern (car clause)]
-;; 		 [expr (cadr clause)])
-;; 	#`(let ([names (get-pattern-var-names (syntax-quote #,pattern) (quote #,literals))]
-;; 			[pvars (make-dictionary)])
-;; 		(if (match-syntax (syntax-quote #,pattern) (quote #,literals) #,stx pvars)
-;; 			#,(letrec ([transform-expr
-;; 						;; If a `syntax-quote' form appears in an expression,
-;; 						;; it must be treated as a template.
-;; 						;; This function modifies the expression, transforming
-;; 						;; instances of syntax-quote into template expansions.
-;; 						(lambda (expr)
-;; 						  (if (pair? expr)
-;; 							  (cond [(identifier=? (car expr) #'syntax-quote)
-;; 									 #`(construct-syntax #,expr pvars names)]
-;; 									[else
-;; 									 (cons (transform-expr (car expr))
-;; 										   (transform-expr (cdr expr)))])
-;; 							  expr))])
-;; 				(transform-expr expr))
-;; 			#,(if (null? rest)
-;; 				  #'(displayln "Error invalid syntax for syntax-case.")
-;; 				  #`(syntax-case #,stx #,literals #,@rest))))))
+				 #`(syntax-case #,stx #,literals #,@rest))))))

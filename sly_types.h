@@ -134,6 +134,7 @@ typedef struct _symbol {
 	u64 hash;
 	size_t len;
 	u8 *name;
+	sly_value alias;
 } symbol;
 
 typedef struct _byte_vector {
@@ -154,13 +155,14 @@ typedef struct _proto {
 	OBJ_HEADER;
 	sly_value uplist;   // <vector> list of upval locations
 	sly_value K;        // <vector> constants
-	sly_value syntax_info; // <vector> syntax
 	sly_value code;     // <vector> Byte code segment
 	size_t entry;       // entry point
 	size_t nregs;       // count of registers needed
 	size_t nargs;       // count of arguments
 	size_t nvars;       // count of arguments + variables
 	int has_varg;       // has variable argument
+	sly_value syntax_info; // <vector> syntax
+	sly_value binding;  // symbol
 } prototype;
 
 typedef struct _upvalue {
@@ -212,10 +214,8 @@ enum syntax_context {
 typedef struct _syntax {
 	OBJ_HEADER;
 	token tok;
-	sly_value env;
 	sly_value scope_set;
 	sly_value datum;
-	sly_value alias;
 	u32 context;
 } syntax;
 
@@ -287,6 +287,7 @@ sly_value make_continuation(Sly_State *ss,
 							struct _stack_frame *frame,
 							size_t pc,
 							size_t ret_slot);
+sly_value get_prototype(sly_value clos);
 int sly_arity(sly_value proc);
 sly_value sly_add(Sly_State *ss, sly_value x, sly_value y);
 sly_value sly_sub(Sly_State *ss, sly_value x, sly_value y);
@@ -306,6 +307,9 @@ sly_value datum_to_syntax(Sly_State *ss, sly_value id, sly_value datum);
 sly_value syntax_to_list(Sly_State *ss, sly_value form);
 sly_value syntax_scopes(sly_value value);
 token syntax_get_token(Sly_State *ss, sly_value stx);
+char *symbol_to_cstr(sly_value sym);
+void symbol_set_alias(sly_value sym, sly_value alias);
+sly_value symbol_get_alias(sly_value sym);
 sly_value make_dictionary(Sly_State *ss);
 sly_value copy_dictionary(Sly_State *ss, sly_value dict);
 int slot_is_free(sly_value slot);

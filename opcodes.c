@@ -196,13 +196,13 @@ dis_code(sly_value code, sly_value si)
 }
 
 static void
-dis_prototype(prototype *proto, int lstk)
+_dis_prototype(prototype *proto, int lstk)
 {
 	printf("Disassembly of function @ 0x%lx\n", (uintptr_t)proto);
 	dis_code(proto->code, proto->syntax_info);
-	size_t len = vector_len(proto->K);
-	size_t ulen = vector_len(proto->uplist);
 	if (lstk) {
+		size_t len = vector_len(proto->K);
+		size_t ulen = vector_len(proto->uplist);
 		printf("Regs: %zu\n", proto->nregs);
 		printf("Upvalues: %zu\n", vector_len(proto->uplist));
 		printf("Upinfo\n");
@@ -213,16 +213,45 @@ dis_prototype(prototype *proto, int lstk)
 		}
 		printf("Constants\n");
 		for (size_t i = 0; i < len; ++i) {
+			sly_value k = vector_ref(proto->K, i);
 			printf("%-10zu", i);
-			sly_display(vector_ref(proto->K, i), 1);
-			printf("\n");
+			if (symbol_p(k)) {
+				sly_value alias = symbol_get_alias(k);
+				if (null_p(alias)) {
+					sly_display(k, 1);
+					printf("\n");
+				} else {
+					int pad;
+					printf("%s%n", symbol_to_cstr(alias), &pad);
+					printf("%*s->%*s%s\n",
+						   12 - pad, "",
+						   8, "",
+						   symbol_to_cstr(k));
+				}
+			} else {
+				sly_display(k, 1);
+				printf("\n");
+			}
 		}
 	}
+}
+
+void
+dis_prototype(sly_value proto, int lstk)
+{
+	_dis_prototype(GET_PTR(proto), lstk);
+}
+
+static void
+dis_prototype_rec(prototype *proto, int lstk)
+{
+	_dis_prototype(proto, lstk);
 	printf("============================================\n");
+	size_t len = vector_len(proto->K);
 	for (size_t i = 0; i < len; ++i) {
 		sly_value value = vector_ref(proto->K, i);
 		if (prototype_p(value)) {
-			dis_prototype(GET_PTR(value), lstk);
+			dis_prototype_rec(GET_PTR(value), lstk);
 		}
 	}
 }
@@ -253,7 +282,7 @@ dis_all(stack_frame *frame, int lstk)
 	for (size_t i = 0; i < len; ++i) {
 		sly_value value = vector_ref(frame->K, i);
 		if (prototype_p(value)) {
-			dis_prototype(GET_PTR(value), lstk);
+			dis_prototype_rec(GET_PTR(value), lstk);
 		}
 	}
 }

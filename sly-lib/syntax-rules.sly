@@ -10,5 +10,3 @@
 	 #'(lambda (form)
 		 (syntax-case form (k ...)
 		   ((syntax-rules . pattern) #'template) ...)))))
-
-(display "FINISHED FILE: sly-lib/syntax-rules.sly\n")

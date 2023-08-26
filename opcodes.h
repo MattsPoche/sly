@@ -78,6 +78,8 @@ stack_frame *make_stack(Sly_State *ss, size_t nregs);
 void dis(INSTR instr, sly_value si);
 void dis_code(sly_value code, sly_value si);
 void dis_all(stack_frame *frame, int lstk);
+void dis_prototype(sly_value proto, int lstk);
+
 
 #ifdef OPCODES_INCLUDE_INLINE
 

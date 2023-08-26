@@ -186,6 +186,8 @@ init_symtable(Sly_State *ss, sly_value symtable)
 static int
 comp_define(Sly_State *ss, sly_value form, int reg)
 {
+	sly_value id = CAR(form);
+	form = CDR(form);
 	struct compile *cc = ss->cc;
 	sly_value globals  = cc->globals;
 	sly_value stx = CAR(form);
@@ -193,11 +195,12 @@ comp_define(Sly_State *ss, sly_value form, int reg)
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	sly_value var;
 	if (syntax_pair_p(stx)) { /* function definition */
+		/* NOTE: This branch is obsolete. The syntax-expander already does this. */
 		var = syntax_to_datum(CAR(stx));
 		sly_value params = CDR(stx);
 		stx = CAR(stx); /* name */
 		/* build lambda form */
-		form = syntax_cons(syntax_cons(make_syntax(ss, (token){0}, make_symbol(ss, "lambda", 6)),
+		form = syntax_cons(syntax_cons(datum_to_syntax(ss, id, make_symbol(ss, "lambda", 6)),
 									   cons(ss, params, CDR(form))), SLY_NULL);
 	} else {
 		var = syntax_to_datum(stx);
@@ -706,7 +709,6 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 	if (symbol_p(datum) && (kw = is_keyword(datum)) != -1) {
 		switch ((enum kw)kw) {
 		case kw_define: {
-			form = CDR(form);
 			reg = comp_define(ss, form, reg);
 		} break;
 		case kw_lambda: {
@@ -756,7 +758,7 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 				s = GET_PTR(CAR(form));
 				s->context = FLAG_ON(s->context, ctx_tail_pos);
 			}
-			return comp_expr(ss, CAR(form), proto->nvars);
+			return comp_expr(ss, CAR(form), reg);
 		} break;
 		case kw_if: {
 			reg = comp_if(ss, form, reg);
@@ -765,7 +767,6 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			comp_set(ss, form, reg);
 		} break;
 		case kw_define_syntax: {
-			form = CDR(form);
 			reg = comp_define(ss, form, reg);
 		} break;
 		case kw_call_with_continuation: /* fallthrough intended */

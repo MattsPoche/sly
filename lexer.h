@@ -19,13 +19,14 @@ enum token {
 	tok_byte_vector,			// 14
 	tok_dictionary,				// 15
 	tok_bool,					// 16
-	tok_hex,					// 19
-	tok_float,					// 20
-	tok_int,					// 21
-	tok_char,					// 22
-	tok_keyword,				// 23
-	tok_ident,					// 24
-	tok_string,					// 25
+	tok_sexp_comment,
+	tok_hex,
+	tok_float,
+	tok_int,
+	tok_char,
+	tok_keyword,
+	tok_ident,
+	tok_string,
 	tok_max,
 	tok_nomatch,
 	tok_eof,

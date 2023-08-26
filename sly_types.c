@@ -760,6 +760,7 @@ make_uninterned_symbol(Sly_State *ss, char *cstr, size_t len)
 	sym->len = len;
 	memcpy(sym->name, cstr, len);
 	sym->hash = hash_symbol(cstr, len);
+	sym->alias = SLY_NULL;
 	ss->gc->bytes += len;
 	return (sly_value)sym;
 }
@@ -953,6 +954,7 @@ make_prototype(Sly_State *ss, sly_value uplist, sly_value constants, sly_value c
 	proto->entry = entry;
 	proto->has_varg = has_varg;
 	proto->syntax_info = make_vector(ss, 0, 8);
+	proto->binding = SLY_NULL;
 	return (sly_value)proto;
 }
 
@@ -990,6 +992,14 @@ make_continuation(Sly_State *ss, struct _stack_frame *frame, size_t pc, size_t r
 	cc->pc = pc;
 	cc->ret_slot = ret_slot;
 	return (sly_value)cc;
+}
+
+sly_value
+get_prototype(sly_value clos)
+{
+	sly_assert(closure_p(clos), "Type Error expected closure");
+	closure *ptr = GET_PTR(clos);
+	return ptr->proto;
 }
 
 int
@@ -1421,18 +1431,26 @@ sly_equal(sly_value o1, sly_value o2)
 	return o1 == o2;
 }
 
+static sly_value
+shallow_copy_syntax(Sly_State *ss, sly_value s)
+{
+	sly_assert(syntax_p(s), "Type Error expected syntax");
+	syntax *sp = GET_PTR(s);
+	sly_value c = make_syntax(ss, (token) {0}, SLY_VOID);
+	syntax *cp = GET_PTR(c);
+	cp->context = sp->context;
+	cp->datum = sp->datum;
+	cp->tok = sp->tok;
+	cp->scope_set = null_p(sp->scope_set) ? SLY_NULL
+		: copy_dictionary(ss, sp->scope_set);
+	return c;
+}
+
 sly_value
 copy_syntax(Sly_State *ss, sly_value s)
 {
 	if (syntax_p(s)) {
-		syntax *stx = GET_PTR(s);
-		sly_value cpy = make_syntax(ss, stx->tok, stx->datum);
-		syntax *cpy_ptr = GET_PTR(cpy);
-		cpy_ptr->alias = stx->alias;
-		cpy_ptr->context = stx->context;
-		cpy_ptr->scope_set = copy_dictionary(ss, stx->scope_set);
-		cpy_ptr->datum = copy_syntax(ss, stx->datum);
-		return cpy;
+		return shallow_copy_syntax(ss, s);
 	} else if (pair_p(s)) {
 		sly_value fst = copy_syntax(ss, car(s));
 		sly_value snd = copy_syntax(ss, cdr(s));
@@ -1450,8 +1468,15 @@ make_syntax(Sly_State *ss, token tok, sly_value datum)
 	stx->datum = datum;
 	stx->context = 0;
 	stx->scope_set = SLY_NULL;
-	stx->env = SLY_VOID;
 	return (sly_value)stx;
+}
+
+static void
+syntax_set_datum(sly_value s, sly_value datum)
+{
+	sly_assert(syntax_p(s), "Type Error expected <syntax>");
+	syntax *sp = GET_PTR(s);
+	sp->datum = datum;
 }
 
 sly_value
@@ -1471,45 +1496,47 @@ datum_to_syntax(Sly_State *ss, sly_value id, sly_value datum)
 		|| syntax_p(datum)) {
 		return datum;
 	}
-	syntax *s = GET_PTR(id);
-	sly_value stx = make_syntax(ss, s->tok, datum);
-	syntax *stx_ptr = GET_PTR(stx);
-	stx_ptr->scope_set = null_p(s->scope_set) ? SLY_NULL
-		: copy_dictionary(ss, s->scope_set);
+	sly_value stx = shallow_copy_syntax(ss, id);
 	if (pair_p(datum)) {
-		stx_ptr->datum = cons(ss,
-							  datum_to_syntax(ss, id, car(datum)),
-							  datum_to_syntax(ss, id, cdr(datum)));
+		syntax_set_datum(stx, cons(ss,
+								   datum_to_syntax(ss, id, car(datum)),
+								   datum_to_syntax(ss, id, cdr(datum))));
+	} else {
+		syntax_set_datum(stx, datum);
 	}
 	return stx;
 }
 
-static sly_value
-syntax_to_list_rec(Sly_State *ss, sly_value form)
-{
-	if (syntax_pair_p(form)) {
-		syntax *s = GET_PTR(form);
-		sly_value p = s->datum;
-		return cons(ss, syntax_to_list_rec(ss, car(p)),
-					syntax_to_list_rec(ss, cdr(p)));
-	}
-	if (pair_p(form)) {
-		return cons(ss, syntax_to_list_rec(ss, car(form)),
-					syntax_to_list_rec(ss, cdr(form)));
-	}
-	return form;
-}
+/* static sly_value */
+/* syntax_to_list_rec(Sly_State *ss, sly_value form) */
+/* { */
+/* 	if (syntax_pair_p(form)) { */
+/* 		syntax *s = GET_PTR(form); */
+/* 		sly_value p = s->datum; */
+/* 		return cons(ss, syntax_to_list_rec(ss, car(p)), */
+/* 					syntax_to_list_rec(ss, cdr(p))); */
+/* 	} */
+/* 	if (pair_p(form)) { */
+/* 		return cons(ss, syntax_to_list_rec(ss, car(form)), */
+/* 					syntax_to_list_rec(ss, cdr(form))); */
+/* 	} */
+/* 	return form; */
+/* } */
 
 sly_value
 syntax_to_list(Sly_State *ss, sly_value form)
 {
-	if (!syntax_pair_p(form)) {
-		sly_display(form, 1);
-		printf("\n");
+	if (syntax_pair_p(form)) {
+		syntax *s = GET_PTR(form);
+		sly_value p = s->datum;
+		return cons(ss, syntax_to_list(ss, car(p)),
+					syntax_to_list(ss, cdr(p)));
+	} else if (pair_p(form)) {
+		return cons(ss, syntax_to_list(ss, car(form)),
+					syntax_to_list(ss, cdr(form)));
+	} else {
+		return form;
 	}
-	sly_assert(syntax_pair_p(form),
-			   "Type error expected syntax pair");
-	return syntax_to_list_rec(ss, form);
 }
 
 sly_value
@@ -1529,6 +1556,33 @@ syntax_get_token(Sly_State *ss, sly_value stx)
 			   "Type error expected <syntax>");
 	syntax *s = GET_PTR(stx);
 	return s->tok;
+}
+
+char *
+symbol_to_cstr(sly_value sym)
+{
+	sly_assert(symbol_p(sym), "Type error expected <string>");
+	symbol *s = GET_PTR(sym);
+	char *cstr = MALLOC(s->len + 1);
+	memcpy(cstr, s->name, s->len);
+	cstr[s->len] = '\0';
+	return cstr;
+}
+
+void
+symbol_set_alias(sly_value sym, sly_value alias)
+{
+	sly_assert(symbol_p(sym), "Type Error expected syntax");
+	symbol *s = GET_PTR(sym);
+	s->alias = alias;
+}
+
+sly_value
+symbol_get_alias(sly_value sym)
+{
+	sly_assert(symbol_p(sym), "Type Error expected syntax");
+	symbol *s = GET_PTR(sym);
+	return s->alias;
 }
 
 sly_value
@@ -1871,7 +1925,7 @@ is_literal(sly_value id, sly_value literals)
 	if (null_p(literals)) {
 		return 0;
 	}
-	if (identifier_eq(id, car(literals))) {
+	if (sly_equal(syntax_to_datum(id), car(literals))) {
 		return 1;
 	} else {
 		return is_literal(id, cdr(literals));
@@ -2053,8 +2107,7 @@ construct_syntax(Sly_State *ss, sly_value template, sly_value pvars, sly_value n
 {
 	if (null_p(template)) {
 		return template;
-	}
-	if (identifier_p(template)) {
+	} else if (identifier_p(template)) {
 		sly_value x = pvar_value(ss, pvars, template, idx);
 		if (void_p(x)) {
 			if (id_in(template, names)) {
@@ -2065,14 +2118,13 @@ construct_syntax(Sly_State *ss, sly_value template, sly_value pvars, sly_value n
 		} else {
 			return x;
 		}
-	}
-	if (pair_p(template)) {
+	} else if (pair_p(template)) {
 		sly_value h = car(template);
 		sly_value t = cdr(template);
 		if (pair_p(t) && match_id_ellipsis(ss, car(t))) {
 			sly_value f = SLY_NULL;
 			sly_value sub = pvar_value(ss, pvars, ELLIPSIS, idx);
-			if (match_id_symbol(sub, EXPANSION_END)) {
+			if (void_p(sub) || match_id_symbol(sub, EXPANSION_END)) {
 				return SLY_NULL;
 			}
 			sly_value expvars = make_dictionary(ss);
@@ -2102,7 +2154,13 @@ construct_syntax(Sly_State *ss, sly_value template, sly_value pvars, sly_value n
 						construct_syntax(ss, h, pvars, names, idx),
 						construct_syntax(ss, t, pvars, names, idx));
 		}
+	} else {
+		return template;
 	}
+	printf("template :: ");
+	sly_displayln(template);
+	printf("pvars :: ");
+	sly_displayln(pvars);
 	sly_assert(0, "Something went wrong");
 	return SLY_NULL;
 }

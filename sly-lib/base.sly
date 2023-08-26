@@ -3,7 +3,7 @@
 (require "sly-lib/syntax-case.sly")
 (require "sly-lib/syntax-rules.sly")
 (require "sly-lib/with-syntax.sly")
-(require "sly-lib/macros1.sly")
+(require "sly-lib/basic-special-forms.sly")
 
 (provide displayln
 		 display-syntax
@@ -29,6 +29,7 @@
 		 argmax
 		 map
 		 for-each
+		 generate-temporaries
 		 provide
 		 quasiquote
 		 syntax-quasiquote
@@ -43,5 +44,3 @@
 		 syntax-case
 		 syntax-rules
 		 with-syntax)
-
-(display "FINISHED FILE: sly-lib/base.sly\n")

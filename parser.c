@@ -159,6 +159,10 @@ parse_value(Sly_State *ss, char *cstr)
 	case tok_comment: {
 		return parse_value(ss, cstr);
 	} break;
+	case tok_sexp_comment: {
+		parse_value(ss, cstr); // ignore
+		return parse_value(ss, cstr);
+	} break;
 	case tok_lbracket: {
 		token start_list;
 		if (peek().tag == tok_rbracket) {

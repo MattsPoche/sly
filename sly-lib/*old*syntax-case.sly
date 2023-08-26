@@ -249,5 +249,3 @@
 			#,(if (null? rest)
 				  #'(displayln "Error invalid syntax for syntax-case.")
 				  #`(syntax-case #,stx #,literals #,@rest))))))
-
-(display "FINISHED FILE: sly-lib/syntax-case.sly\n")

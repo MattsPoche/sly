@@ -42,55 +42,52 @@
 	 (let ([var val])
 	   (let* ([var* val*] ...) body ...))]))
 
-;; (define-syntax (letrec-helper form)
-;;   (define *form (cdr form))
-;;   (define bindings (car *form))
-;;   (define bodies (cdr *form))
-;;   (if (null? bindings)
-;; 	  #`(begin #,@bodies)
-;; 	  #`(begin
-;; 		  (define #,@(car bindings))
-;; 		  (letrec-helper #,(cdr bindings) #,@bodies))))
-
-;; (define-syntax (letrec form)
-;;   (define *form (cdr form))
-;;   (define bindings (car *form))
-;;   (define bodies (cdr *form))
-;;   #`((lambda ()
-;; 	   (letrec-helper #,bindings #,@bodies))))
-
-(define-syntax letrec-helper
+(define-syntax letrec*-helper
   (syntax-rules ()
 	[(_ () body ...)
 	 (begin body ...)]
-	[(_ ([var val] [var* val*] ...) body ...)
+	[(_ ([var val] rest ...) body ...)
 	 (begin
 	   (define var val)
-	   (letrec-helper [var* val*] ...) body...)]))
+	   (letrec*-helper rest ...) body...)]))
 
-(define-syntax letrec
+(define-syntax letrec*
   (syntax-rules ()
 	[(_ bindings body ...)
 	 ((lambda ()
-		(letrec-helper bindings body ...)))]))
+		(letrec*-helper bindings body ...)))]))
+
+(define-syntax letrec
+  (lambda (x)
+	(syntax-case x ()
+	  [(letrec ([id val] ...) body ...)
+	   (with-syntax ([(tmp ...) (generate-temporaries #'(id ...))]
+					 [(id ...) #'(id ...)]
+					 [(val ...) #'(val ...)]
+					 [(body ...) #'(body ...)])
+		 #'(let ([id #f] ...)
+			 (let ([tmp val] ...)
+			   (set! id tmp) ...
+			   (let () body ...))))])))
 
 (define-syntax cond
   (lambda (x)
     (syntax-case x ()
       [(_ c1 c2 ...)
-       (let f ([c1 #'c1] [cmore #'(c2 ...)])
+       (let f ([c1 #'c1]
+			   [cmore (syntax->list #'(c2 ...))])
          (if (null? cmore)
              (syntax-case c1 (else =>)
                [(else e1 e2 ...) #'(begin e1 e2 ...)]
-               [(e0) #'(let ([t e0]) (if t t))]
                [(e0 => e1) #'(let ([t e0]) (if t (e1 t) (void)))]
-               [(e0 e1 e2 ...) #'(if e0 (begin e1 e2 ...) (void))])
+               [(e0 e1 e2 ...) #'(if e0 (begin e1 e2 ...) (void))]
+			   [(e0) #'(let ([t e0]) (if t t))])
              (with-syntax ([rest (f (car cmore) (cdr cmore))])
                (syntax-case c1 (=>)
-                 [(e0) #'(let ([t e0]) (if t t rest))]
                  [(e0 => e1) #'(let ([t e0]) (if t (e1 t) rest))]
                  [(e0 e1 e2 ...)
-                  #'(if e0 (begin e1 e2 ...) rest)]))))])))
+                  #'(if e0 (begin e1 e2 ...) rest)]
+				 [(e0) #'(let ([t e0]) (if t t rest))]))))])))
 
 ;;; TODO: Implement `do' form.
 
@@ -107,5 +104,3 @@
 	 (if condition
 		 (void)
 		 (begin body ...))]))
-
-(display "FINISHED FILE: sly-lib/macros1.sly\n")

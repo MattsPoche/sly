@@ -77,5 +77,3 @@
 					(list #'syntax-quote (car form))
 					(fold-right transform '() form*)) (syntax-scopes (car form)))
 	  (syntax (list #'syntax-quote form*) (syntax-scopes form))))
-
-(display "FINISHED FILE: sly-lib/quasiquote.sly\n")

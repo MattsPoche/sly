@@ -29,13 +29,14 @@ static char retok[] =
 	"|^(#uv8\\()"											// 14 byte-vector
 	"|^(#dict\\()"											// 15 dictionary
 	"|^(#t|#f)"												// 18 boolean
-	"|^(#[xX][0-9A-Fa-f]+)"									// 19 hex
-	"|^([-+]?[0-9]+\\.[0-9]+)"								// 20 float
-	"|^([-+]?[0-9]+)"										// 21 int
-	"|^(#\\\\[^[:space:]][^][(){};[:space:]]*)"				// 22 char
-	"|^(#:[^][(){};'`\"#,[:space:]][^][(){};[:space:]]*)"	// 23 keyword
-	"|^([^][(){};'`\"#,[:space:]][^][(){};[:space:]]*)"		// 24 identifier
-	"|^(\"([^\"]|\\\\.)*\")";								// 25 string
+	"|^(#;)"												// 19 sexp-comment
+	"|^(#[xX][0-9A-Fa-f]+)"									// 20 hex
+	"|^([-+]?[0-9]+\\.[0-9]+)"								// 21 float
+	"|^([-+]?[0-9]+)"										// 22 int
+	"|^(#\\\\[^[:space:]][^][(){};[:space:]]*)"				// 23 char
+	"|^(#:[^][(){};'`\"#,[:space:]][^][(){};[:space:]]*)"	// 24 keyword
+	"|^([^][(){};'`\"#,[:space:]][^][(){};[:space:]]*)"		// 25 identifier
+	"|^(\"([^\"]|\\\\.)*\")";								// 26 string
 
 static regmatch_t pmatch[tok_max] = {0};
 static regex_t rexpr = {0};
@@ -70,6 +71,7 @@ tok_to_string(enum token t)
 	case tok_bool: return "bool";
 	case tok_string: return "string";
 	case tok_float: return "float";
+	case tok_sexp_comment: return "comment-sexp";
 	case tok_hex: return "hex";
 	case tok_int: return "integer";
 	case tok_keyword: return "keyword";

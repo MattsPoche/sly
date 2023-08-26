@@ -1,3 +1,5 @@
+;;; Basic list operations
+
 (provide displayln
 		 display-syntax
 		 caar
@@ -22,6 +24,7 @@
 		 argmax
 		 map
 		 for-each
+		 generate-temporaries
 		 assoc
 		 alist-cons
 		 alist-copy
@@ -157,6 +160,15 @@
 		(apply f (*heads* xs))
 		(apply for-each f (*tails* xs)))))
 
+(define (generate-temporaries ls)
+  (map (lambda (x)
+		 (datum->syntax x (string->symbol
+						   (string-join
+							(list "temp" (symbol->string (syntax->datum x)))
+							"--"))))
+	   (syntax->list ls)))
+
+
 (define (assoc key alist)
   (define x '())
   (if (null? alist) '()
@@ -172,5 +184,3 @@
   (fold-right (lambda (x xs)
 				(alist-cons (car x) (cdr x) alist))
 			  '() alist))
-
-(display "FINISHED FILE: sly-lib/list.sly\n")

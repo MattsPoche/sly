@@ -5,18 +5,9 @@
 
 (provide with-syntax)
 
-;; (define-syntax with-syntax
-;;   (lambda (x)
-;; 	(syntax-case x ()
-;;       [(with-syntax ((p e) ...) b1 b2 ...)
-;; 	   #'(syntax-case (datum->syntax #'with-syntax (list e ...)) ()
-;; 		   [(p ...) (begin b1 b2 ...)])])))
-
 (define-syntax with-syntax
   (lambda (x)
 	(syntax-case x ()
-      [(_ ((p e) ...) b1 b2 ...)
+      [(with-syntax ((p e) ...) b1 b2 ...)
 	   #'(syntax-case (list e ...) ()
 		   [(p ...) (begin b1 b2 ...)])])))
-
-(display "FINISHED FILE: sly-lib/with-syntax.sly\n")

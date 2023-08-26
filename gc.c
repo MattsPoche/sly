@@ -53,6 +53,12 @@ mark_object(gc_object *obj, u8 color)
 }
 
 static void
+traverse_symbol(Sly_State *ss, symbol *sym)
+{
+	mark_gray(ss, GET_PTR(sym->alias));
+}
+
+static void
 traverse_frame(Sly_State *ss, stack_frame *frame)
 {
 	mark_object(GET_PTR(frame->code), GC_BLACK);
@@ -103,6 +109,7 @@ traverse_prototype(Sly_State *ss, prototype *proto)
 	mark_object(GET_PTR(proto->code), GC_BLACK);
 	mark_gray(ss, GET_PTR(proto->K));
 	mark_gray(ss, GET_PTR(proto->syntax_info));
+	mark_gray(ss, GET_PTR(proto->binding));
 }
 
 static void
@@ -117,8 +124,6 @@ traverse_syntax(Sly_State *ss, syntax *stx)
 {
 	mark_gray_safe(ss, stx->scope_set);
 	mark_gray_safe(ss, stx->datum);
-	mark_gray_safe(ss, stx->env);
-	mark_gray_safe(ss, stx->alias);
 }
 
 static void
@@ -154,7 +159,9 @@ traverse_object(Sly_State *ss, gc_object *obj)
 	case tt_byte: break;
 	case tt_int: break;
 	case tt_float: break;
-	case tt_symbol: break;
+	case tt_symbol:
+		traverse_symbol(ss, (symbol *)obj);
+		break;
 	case tt_string: break;
 	case tt_byte_vector: break;
 	case tt_vector:

@@ -569,6 +569,7 @@ compile(Sly_State *ss, sly_value s)
 			printf("%.*s\n", t.eo - t.so,  &t.src[t.so]);
 			sly_assert(0, "Error undefined identifier");
 		}
+		symbol_set_alias(r, syntax_to_datum(s));
 		return r;
 	}
 	if (pair_p(s)) {
@@ -576,9 +577,8 @@ compile(Sly_State *ss, sly_value s)
 			r = resolve(ss, car(s));
 			if (sly_equal(r, core_symbol(cf_lambda))) {
 				return compile_lambda(ss, s);
-			} else if (sly_equal(r, core_symbol(cf_quote))) {
-				return s;
-			} else if (sly_equal(r, core_symbol(cf_syntax_quote))) {
+			} else if (sly_equal(r, core_symbol(cf_quote))
+					   || sly_equal(r, core_symbol(cf_syntax_quote))) {
 				return s;
 			}
 		}
@@ -590,7 +590,6 @@ compile(Sly_State *ss, sly_value s)
 sly_value
 sly_expand(Sly_State *ss, sly_value env, sly_value ast)
 {
-	printf("EXPANDING FILE: %s\n", ss->file_path);
 	set_provides(ss, make_string(ss, ss->file_path, strlen(ss->file_path)), SLY_NULL);
 	if (!init) {
 		all_bindings = make_dictionary(ss);
@@ -621,6 +620,7 @@ sly_expand(Sly_State *ss, sly_value env, sly_value ast)
 	ast = introduce(ss, syntax_to_list(ss, ast));
 	ast = add_scope(ss, ast, scope());
 	ast = expand(ss, ast, env);
+	sly_displayln(strip_syntax(ss, ast));
 	ast = compile(ss, ast);
 	ast = datum_to_syntax(ss, before, ast);
 	return ast;
