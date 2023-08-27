@@ -47,7 +47,6 @@ static char *core_form_names[CORE_FORM_COUNT] = {
 	[cf_provide] = "provide",
 };
 
-static int init = 0;
 static sly_value core_forms = SLY_NULL;
 static sly_value core_scope = SLY_NULL;
 static sly_value variable = SLY_NULL;
@@ -587,40 +586,42 @@ compile(Sly_State *ss, sly_value s)
 	return s;
 }
 
+void
+sly_expand_init(Sly_State *ss, sly_value env)
+{
+	all_bindings = make_dictionary(ss);
+	core_forms = make_vector(ss, 0, CORE_FORM_COUNT);
+	core_scope = scope();
+	variable = gensym(ss);
+	undefined = gensym(ss);
+	sly_value builtins = ss->cc->builtins;
+	sly_value sym, scope_set;
+	for (size_t i = 0; i < CORE_FORM_COUNT; ++i) {
+		sym = make_symbol(ss, core_form_names[i], strlen(core_form_names[i]));
+		vector_append(ss, core_forms, sym);
+		scope_set = make_dictionary(ss);
+		dictionary_set(ss, scope_set, core_scope, SLY_NULL);
+		add_binding(csyntax(ss, sym, scope_set), sym);
+	}
+	while (!null_p(builtins)) {
+		sym = car(car(builtins));
+		scope_set = make_dictionary(ss);
+		dictionary_set(ss, scope_set, core_scope, SLY_NULL);
+		add_binding(csyntax(ss, sym, scope_set), sym);
+		env_extend(ss, env, sym, variable);
+		builtins = cdr(builtins);
+	}
+}
+
 sly_value
 sly_expand(Sly_State *ss, sly_value env, sly_value ast)
 {
 	set_provides(ss, make_string(ss, ss->file_path, strlen(ss->file_path)), SLY_NULL);
-	if (!init) {
-		all_bindings = make_dictionary(ss);
-		core_forms = make_vector(ss, 0, CORE_FORM_COUNT);
-		core_scope = scope();
-		variable = gensym(ss);
-		undefined = gensym(ss);
-		sly_value builtins = ss->cc->builtins;
-		sly_value sym, scope_set;
-		for (size_t i = 0; i < CORE_FORM_COUNT; ++i) {
-			sym = make_symbol(ss, core_form_names[i], strlen(core_form_names[i]));
-			vector_append(ss, core_forms, sym);
-			scope_set = make_dictionary(ss);
-			dictionary_set(ss, scope_set, core_scope, SLY_NULL);
-			add_binding(csyntax(ss, sym, scope_set), sym);
-		}
-		while (!null_p(builtins)) {
-			sym = car(car(builtins));
-			scope_set = make_dictionary(ss);
-			dictionary_set(ss, scope_set, core_scope, SLY_NULL);
-			add_binding(csyntax(ss, sym, scope_set), sym);
-			env_extend(ss, env, sym, variable);
-			builtins = cdr(builtins);
-		}
-		init = 1;
-	}
 	sly_value before = ast;
 	ast = introduce(ss, syntax_to_list(ss, ast));
 	ast = add_scope(ss, ast, scope());
 	ast = expand(ss, ast, env);
-	sly_displayln(strip_syntax(ss, ast));
+	/* sly_displayln(strip_syntax(ss, ast)); */
 	ast = compile(ss, ast);
 	ast = datum_to_syntax(ss, before, ast);
 	return ast;

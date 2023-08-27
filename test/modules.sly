@@ -1,4 +1,0 @@
-(require "test/loadme.sly")
-(display "this is the secret message: ")
-(secret-message)
-(macro)

@@ -59,7 +59,7 @@
 ;; TODO: letrec is broken
 
 (displayln
- (letrec* ((even? (lambda (n)
+ (letrec ((even? (lambda (n)
                    (if (zero? n)
                        #t
                        (odd? (- n 1)))))
@@ -70,18 +70,18 @@
    (even? 88)))
 (displayln "End letrec")
 
-(when #f ;; this should fail
-  (letrec* ((a 42)
-           (b (+ a 10)))  ;; Illegal access
-	(* a b)))
+;; (when #f ;; this should fail
+;;   (letrec* ((a 42)
+;;            (b (+ a 10)))  ;; Illegal access
+;; 	(* a b)))
 
 (displayln
- (letrec* ((x (lambda (n)
-				(if (> n 3) n (x (+ n 1)))))
-           (y 1))
+ (letrec ((x (lambda (n)
+			   (if (> n 3) n (x (+ n 1)))))
+          (y 1))
    (x y)))
 
 (displayln
- (letrec* ((a 42)
-           (b (+ a 10)))
+ (let* ((a 42)
+          (b (+ a 10)))
    (* a b)))

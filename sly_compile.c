@@ -828,6 +828,7 @@ sly_do_file(char *file_path, int debug_info)
 	ss.interned = make_dictionary(&ss);
 	sly_init_state(&ss);
 	sly_value env = make_dictionary(&ss);
+	sly_expand_init(&ss, env);
 	{
 		ss.file_path = file_path;
 		ss.cc->cscope->proto = make_prototype(&ss,
