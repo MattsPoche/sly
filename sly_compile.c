@@ -13,17 +13,19 @@
  * Note: simi-done; bugs.
  */
 
-/* TODO: macros are unable to call functions defined in the same file.
- */
-
 /* TODO: properly implement vector literals
  */
 
 /* TODO: Implement module system
  */
 
-/* NOTE: try storing globals as upvalues for faster global access.
+/*
+ * Idea: named-lambda
  */
+
+/* TODO: Re-write this code.
+ */
+
 enum kw {
 	kw_define = 0,
 	kw_lambda,

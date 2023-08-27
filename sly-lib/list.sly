@@ -12,7 +12,9 @@
 		 zero?
 		 fold-left
 		 fold-right
-		 contains
+		 member
+		 memv
+		 memq
 		 remove
 		 append
 		 reverse
@@ -73,12 +75,19 @@
 		 (f x (fold-right f z xs)))
 	   (car xs) (cdr xs))))
 
-(define (contains xs x)
+(define (member x xs . compare)
+  (if (null? compare)
+	  (set! compare equal?)
+	  (set! compare (car compare)))
   (if (null? xs)
 	  #f
-	  (if (equal? (car xs) x)
-		  #t
-		  (contains (cdr xs) x))))
+	  (if (compare x (car xs))
+		  (car xs)
+		  (member x (cdr xs) compare))))
+
+(define (memq x xs) (member x xs eq?))
+
+(define memv member) ;; TODO: emplement eqv?
 
 (define (remove xs x)
   (if (null? xs)
@@ -167,7 +176,6 @@
 							(list "temp" (symbol->string (syntax->datum x)))
 							"--"))))
 	   (syntax->list ls)))
-
 
 (define (assoc key alist)
   (define x '())

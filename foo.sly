@@ -1,43 +1,90 @@
 (require "sly-lib/base.sly")
+(require "sly-lib/srfi-9/record.sly")
 
-(let ([x 69] [y 420])
- (displayln x)
- (displayln y)
- (displayln (+ x y)))
+(define-record-type <pare>
+  (kons x y)
+  pare?
+  (x kar set-kar!)
+  (y kdr))
 
-(let loop ([i 0])
-  (when (< i 10)
-	(displayln i)
-	(loop (+ i 1))))
+(displayln (pare? (kons 1 2)))
+(displayln (pare? (cons 1 2)))
+(displayln (kar (kons 1 2)))
+(displayln (kdr (kons 1 2)))
 
-(let* ([x 69]
-	   [y 420]
-	   [z (* x y )])
-  (displayln x)
-  (displayln y)
-  (displayln z))
+(define-record-type <employee>
+  (make-employee name age salary)
+  employee?
+  (name employee-name)
+  (age employee-age set-employee-age!)
+  (salary employee-salary set-employee-salary!))
+
+(define fred (make-employee "Fred" 45 20000.0))
+
+(displayln (employee? fred))
+(displayln (employee-age fred))
+(displayln (employee-salary fred))
+(set-employee-salary! fred 25000.0)
+(displayln (employee-salary fred))
+(displayln (record-type-name (record-type fred)))
+
+(define k (kons 1 2))
+(set-kar! k 3)
+(displayln (kar k))
+(displayln (kdr k))
+(displayln (kdr k))
+(displayln (pare? k))
+(displayln (employee? k))
+(displayln (record-type-name (record-type k)))
+
+(if (eq? (record-type k) <employee>)
+	(displayln "True")
+	(displayln "False"))
+
+(if (eq? (record-type k) <pare>)
+	(displayln "True")
+	(displayln "False"))
+
+(if (eq? (record-type fred) <employee>)
+	(displayln "True")
+	(displayln "False"))
+
+(if (eq? (record-type fred) <pare>)
+	(displayln "True")
+	(displayln "False"))
+
+(displayln "and:")
+(displayln (and #t #t #t))
+(displayln (and #t #f #t))
+(displayln (and #f #t #t))
+(displayln (and #f #f #t))
+
+(displayln "or:")
+(displayln (or #t #t #t))
+(displayln (or #t #f #t))
+(displayln (or #f #t #t))
+(displayln (or #f #f #t))
+
+
+(displayln "case-test:")
+(displayln
+ (case (* 2 3)
+   ((2 3 5 7) 'prime)
+   ((1 4 6 8 9) 'composite)))
 
 (displayln
- (letrec ((even?
-           (lambda (n)
-             (if (zero? n)
-                 #t
-                 (odd? (- n 1)))))
-          (odd?
-           (lambda (n)
-             (if (zero? n)
-                 #f
-                 (even? (- n 1))))))
-   (even? 88)))
+ (do ([vec (make-vector 5)]
+      [i 0 (+ i 1)])
+     ((= i 5) vec)
+   (displayln i)
+   (vector-set! vec i i)))
 
-(disassemble (lambda ()
-			   (displayln
-				(if (> 3 3)
-					(begin 'greater)
-					(if (< 3 3)
-						(begin 'less)
-						(begin  'equal))))))
+(displayln
+ (let ((x '(1 3 5 7 9)))
+   (do ((x x (cdr x))
+        (sum 0 (+ sum (car x))))
+       ((null? x) sum))))
 
-(displayln (cond [(> 3 3) 'greater]
-				 [(< 3 3) 'less]
-				 [else 'equal]))
+(define (xyz) #(1 2 3 4 5))
+
+(disassemble xyz)

@@ -2080,8 +2080,16 @@ match_syntax(Sly_State *ss, sly_value pattern, sly_value literals,
 			form = cdr(form);
 		}
 	}
-	if (pair_p(pattern) && !(pair_p(form) || null_p(form))) {
+	if (null_p(pattern) && !null_p(form)) {
 		return 0;
+	}
+	if (pair_p(pattern)) {
+		/* If pattern is a list at this point:
+		 * match if pattern = (var ...) && form = ()
+		 */
+		return list_len(pattern) == 2
+			&& match_id_ellipsis(ss, car(cdr(pattern)))
+			&& null_p(form);
 	}
 	if (identifier_p(pattern)) {
 		pvar_bind(ss, pvars, pattern, form, repeat);
@@ -2150,17 +2158,13 @@ construct_syntax(Sly_State *ss, sly_value template, sly_value pvars, sly_value n
 			}
 			return f;
 		} else {
-			return cons(ss,
-						construct_syntax(ss, h, pvars, names, idx),
-						construct_syntax(ss, t, pvars, names, idx));
+			sly_value x = construct_syntax(ss, h, pvars, names, idx);
+			sly_value y = construct_syntax(ss, t, pvars, names, idx);
+			return cons(ss, x, y);
 		}
 	} else {
 		return template;
 	}
-	printf("template :: ");
-	sly_displayln(template);
-	printf("pvars :: ");
-	sly_displayln(pvars);
 	sly_assert(0, "Something went wrong");
 	return SLY_NULL;
 }

@@ -13,7 +13,6 @@
 
 #define mark_gray_safe(ss, v) if (heap_obj_p(v)) mark_gray(ss, GET_PTR(v))
 
-
 void
 gc_init(struct _sly_state *ss)
 {

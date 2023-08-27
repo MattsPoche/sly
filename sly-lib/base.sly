@@ -17,7 +17,9 @@
 		 zero?
 		 fold-left
 		 fold-right
-		 contains
+		 member
+		 memv
+		 memq
 		 remove
 		 append
 		 reverse
@@ -39,6 +41,8 @@
 		 let*
 		 letrec
 		 cond
+		 case
+		 do
 		 when
 		 unless
 		 syntax-case

@@ -10,6 +10,8 @@
 		 let*
 		 letrec
 		 cond
+		 case
+		 do
 		 when
 		 unless)
 
@@ -89,7 +91,44 @@
                   #'(if e0 (begin e1 e2 ...) rest)]
 				 [(e0) #'(let ([t e0]) (if t t rest))]))))])))
 
-;;; TODO: Implement `do' form.
+
+(define-syntax case
+  (lambda (x)
+    (syntax-case x ()
+      [(_ e c1 c2 ...)
+       (with-syntax ([body
+					  (let f ([c1 #'c1] [cmore (syntax->list #'(c2 ...))])
+						(if (null? cmore)
+							(syntax-case c1 (else)
+							  [(else e1 e2 ...)  #'(begin e1 e2 ...)]
+							  [((k ...) e1 e2 ...)
+							   #'(if (memv t '(k ...)) (begin e1 e2 ...) (void))])
+							(with-syntax ((rest (f (car cmore) (cdr cmore))))
+							  (syntax-case c1 ()
+								[((k ...) e1 e2 ...)
+								 #'(if (memv t '(k ...))
+									   (begin e1 e2 ...)
+									   rest)]))))])
+         #'(let ((t e)) body))])))
+
+(define-syntax do
+  (lambda (x)
+    (syntax-case x ()
+      [(_ (binding ...) (test res ...) exp ...)
+       (with-syntax ([((var val update) ...)
+                      (map (lambda (b)
+                             (syntax-case b ()
+                               ((var val)
+                                #'(var val var))
+                               ((var val update)
+                                #'(var val update))))
+                           (syntax->list #'(binding ...)))]
+					 [(test res ...) #'(test res ...)]
+					 [(exp ...) #'(exp ...)])
+		 #'(let doloop ([var val] ...)
+             (if test
+                 (begin (void) res ...)
+                 (begin exp ... (doloop update ...)))))])))
 
 (define-syntax when
   (syntax-rules ()
