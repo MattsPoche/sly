@@ -114,6 +114,50 @@ escape_string(Sly_State *ss, char *str, size_t len)
 	return buf;
 }
 
+static int
+break_at_char(char c, token *t, token *k)
+{
+	for (int i = t->so; i < t->eo; ++i) {
+		if (t->src[i] == c) {
+			*k = *t;
+			k->so = i + 1;
+			k->eo = t->eo;
+			t->eo = i;
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static sly_value
+try_parse_dict_access(Sly_State *ss, token t)
+{
+	token k;
+	if (break_at_char('#', &t, &k)) {
+		sly_value dict = make_syntax(ss, t, make_symbol(ss, &t.src[t.so], t.eo - t.so));
+		sly_value key;
+		t = k;
+		while (break_at_char('#', &t, &k)) {
+			key = syntax_cons(make_syntax(ss, t, cstr_to_symbol("quote")),
+							  cons(ss,
+								   make_syntax(ss, t, make_symbol(ss, &t.src[t.so], t.eo - t.so)),
+								   SLY_NULL));
+			dict = syntax_cons(make_syntax(ss, t, cstr_to_symbol("dictionary-ref")),
+							   cons(ss, dict, cons(ss, key, SLY_NULL)));
+			t = k;
+		}
+		key = syntax_cons(make_syntax(ss, t, cstr_to_symbol("quote")),
+						  cons(ss,
+							   make_syntax(ss, t, make_symbol(ss, &t.src[t.so], t.eo - t.so)),
+							   SLY_NULL));
+		return syntax_cons(make_syntax(ss, t, cstr_to_symbol("dictionary-ref")),
+						   cons(ss, dict, cons(ss, key, SLY_NULL)));
+
+	} else {
+		return make_syntax(ss, t, make_symbol(ss, &t.src[t.so], t.eo - t.so));
+	}
+}
+
 static sly_value
 parse_value(Sly_State *ss, char *cstr)
 {
@@ -122,7 +166,7 @@ parse_value(Sly_State *ss, char *cstr)
 	switch (t.tag) {
 	case tok_any: {
 		printf("(parse_value) any\n");
-		sly_assert(0, "(parse_value, tok_any)UNEMPLEMENTED");
+		sly_assert(0, "(parse_value, tok_any) UNIMPLEMENTED");
 	} break;
 	case tok_quote: {
 		return syntax_cons(make_syntax(ss, t, cstr_to_symbol("quote")),
@@ -247,17 +291,15 @@ build_list:
 						   make_syntax(ss, t, make_symbol(ss, &cstr[t.so], t.eo - t.so)));
 	} break;
 	case tok_ident: {
-		size_t len = t.eo - t.so;
-		sly_value stx = make_syntax(ss, t, make_symbol(ss, &cstr[t.so], len));
-		return stx;
+		return try_parse_dict_access(ss, t);
 	} break;
 	case tok_max: {
 		printf("(parse_value) max\n");
-		sly_assert(0, "(parse_value, tok_max) UNEMPLEMENTED");
+		sly_assert(0, "(parse_value, tok_max) UNIMPLEMENTED");
 	} break;
 	case tok_nomatch: {
 		printf("(parse_value) nomatch %d, %d\n", t.so, t.eo);
-		sly_assert(0, "(parse_value, tok_nomatch) UNEMPLEMENTED");
+		sly_assert(0, "(parse_value, tok_nomatch) UNIMPLEMENTED");
 	} break;
 	case tok_eof: {
 	} break;

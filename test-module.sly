@@ -1,0 +1,10 @@
+(require "sly-lib/base.sly")
+(require "sly-lib/module.sly")
+
+(define-module test-module
+  (export fun fun2)
+  (define (fun)
+	(displayln "Hello from test-module!!!!!"))
+  (define (fun2 msg)
+	(displayln "Hello again!")
+	(displayln msg)))

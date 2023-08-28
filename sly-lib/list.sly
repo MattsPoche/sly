@@ -30,6 +30,8 @@
 		 assoc
 		 alist-cons
 		 alist-copy
+		 plist-get
+		 plist-put
 		 provide)
 
 (define (displayln x) (display x)(display "\n"))
@@ -192,3 +194,17 @@
   (fold-right (lambda (x xs)
 				(alist-cons (car x) (cdr x) alist))
 			  '() alist))
+
+(define (plist-get plist prop)
+  (if (null? plist) #f
+	  (if (if (eq? (car plist) prop) (pair? (cdr plist)) #f)
+		  (cadr plist)
+		  (plist-get (cdr plist) prop))))
+
+(define (plist-put plist prop val)
+  (if (null? plist)
+	  (list prop val)
+	  (if (if (eq? (car plist) prop) (pair? (cdr plist)) #f)
+		  (append (list prop val) (cddr plist))
+		  (append (list (car plist) (cadr plist))
+				  (plist-put (cddr plist) prop val)))))

@@ -12,6 +12,10 @@
 
 #define LINE_SIZE 1024
 
+/* Old identifier regex
+ *
+ */
+
 static char retok[] =
 	"^(')"													// 1  quote
 	"|^(`)"													// 2  quasiquote
@@ -34,8 +38,8 @@ static char retok[] =
 	"|^([-+]?[0-9]+\\.[0-9]+)"								// 21 float
 	"|^([-+]?[0-9]+)"										// 22 int
 	"|^(#\\\\[^[:space:]][^][(){};[:space:]]*)"				// 23 char
-	"|^(#:[^][(){};'`\"#,[:space:]][^][(){};[:space:]]*)"	// 24 keyword
-	"|^([^][(){};'`\"#,[:space:]][^][(){};[:space:]]*)"		// 25 identifier
+	"|^(#:[^][(){};'`\"#,[:space:]][^][(){};[:space:]]*)"	// 25 keyword
+	"|^([^][(){};'`\"#,[:space:]][^][(){};[:space:]]*)"		// 26 identifier
 	"|^(\"([^\"]|\\\\.)*\")";								// 26 string
 
 static regmatch_t pmatch[tok_max] = {0};
@@ -136,7 +140,7 @@ next_token(void)
 			}
 		}
 		if (i == tok_max) {
-			printf("reg nomatch (%d, %d)\n", line_number, column_number);
+			printf("(tok_max) reg nomatch (%d, %d)\n", line_number, column_number);
 			printf("%s\n", &text[off]);
 			t.tag = tok_nomatch;
 			return t;
@@ -195,7 +199,8 @@ lex_str(char *str, token_buff *_tokens)
 	do {
 		t = next_token();
 		push_token(&tokens, t);
-	} while (t.tag != tok_eof);
+	} while (t.tag != tok_eof
+			 && t.tag != tok_nomatch);
 	*_tokens = tokens;
 	regfree(&rexpr);
 	return 0;

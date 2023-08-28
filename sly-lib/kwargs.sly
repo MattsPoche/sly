@@ -1,0 +1,50 @@
+(require "sly-lib/list.sly")
+(require "sly-lib/quasiquote.sly")
+(require "sly-lib/syntax-case.sly")
+(require "sly-lib/syntax-rules.sly")
+(require "sly-lib/with-syntax.sly")
+(require "sly-lib/basic-special-forms.sly")
+
+(provide lambda& define&)
+
+(define (parse-formals formals)
+  (let ([def '()]
+		[non-def '()])
+	(set! formals
+		  (let loop ([formals formals])
+			(cond [(null? formals) '()]
+				  [(pair? (car formals)) formals]
+				  [else
+				   (set! def (append def (list (car formals))))
+				   (loop (cdr formals))])))
+	(let loop ([formals formals])
+	  (cond [(null? formals) '()]
+			[(not (pair? (car formals))) (error "Non-defalut argument follows default argument")]
+			[else
+			 (set! non-def (append non-def (list (car formals))))
+			 (loop (cdr formals))]))
+	(cons def non-def)))
+
+(define-syntax lambda&
+  (lambda (x)
+	(syntax-case x ()
+	  [(_ (formals ...) body ...)
+	   (let* ([formals (parse-formals (syntax->list #'(formals ...)))]
+			  [defs (car formals)]
+			  [non-defs (cdr formals)])
+		 (with-syntax ([(def ...) defs]
+					   [((kw val) ...) non-defs]
+					   [(body ...) #'(body ...)])
+		   #'(lambda (def ... . args)
+			   (let ([kw (let ([t (plist-get args 'kw)]) (if t t val))] ...)
+				 body ...))))])))
+
+;; #'(lambda (formals ... . args)
+;; 		   )
+
+(define-syntax define&
+  (syntax-rules ()
+	[(_ (name formals ...) body ...)
+	 (define name (lambda& (formals ...) body ...))]
+	[(_ name value)
+	 (define name value)]))

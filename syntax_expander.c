@@ -442,6 +442,11 @@ expand_require(Sly_State *ss, sly_value s, sly_value env)
 		provides = get_provides(ss, file_path);
 	}
 	sly_value scopes = syntax_scopes(car(s));
+	sly_value id_list = cons(ss, csyntax(ss, core_symbol(cf_lambda), scopes),
+							 cons(ss, SLY_NULL,
+								  cons(ss, cons(ss, csyntax(ss, core_symbol(cf_quote), scopes),
+												cons(ss, provides, SLY_NULL)),
+									   SLY_NULL)));
 	while (!null_p(provides)) {
 		sly_value id = car(provides);
 		sly_value binding = resolve(ss, id);
@@ -449,7 +454,7 @@ expand_require(Sly_State *ss, sly_value s, sly_value env)
 		add_binding(id, binding);
 		provides = cdr(provides);
 	}
-	return SLY_VOID;
+	return id_list;
 }
 
 static sly_value
@@ -457,7 +462,13 @@ expand_provide(Sly_State *ss, sly_value s, sly_value env)
 {
 	UNUSED(env);
 	sly_value file_path = make_string(ss, ss->file_path, strlen(ss->file_path));
-	set_provides(ss, file_path, cdr(s));
+	sly_value p = get_provides(ss, file_path);
+	if (null_p(p)) {
+		set_provides(ss, file_path, cdr(s));
+	} else {
+		append(p, cdr(s));
+	}
+
 	return SLY_VOID;
 }
 

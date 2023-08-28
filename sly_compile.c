@@ -605,6 +605,7 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 		reg = comp_expr(ss, CAR(form), proto->nvars);
 	}
 	if (reg == -1) reg = tmp;
+	if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 	vector_append(ss, proto->code, iA(OP_RETURN, reg, -1));
 	cc->cscope = cc->cscope->parent;
 	reg = preg;

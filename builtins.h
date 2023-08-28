@@ -335,7 +335,7 @@ cstring_to_symbol(Sly_State *ss, sly_value args)
 {
 	sly_value arg = vector_ref(args, 0);
 	if (!string_p(arg)) {
-		sly_raise_exception(ss, EXC_TYPE, "Type Error expected symbol");
+		sly_raise_exception(ss, EXC_TYPE, "Type Error expected string");
 	}
 	byte_vector *bv = GET_PTR(arg);
 	return make_symbol(ss, (char *)bv->elems, bv->len);
@@ -346,6 +346,7 @@ csymbol_to_string(Sly_State *ss, sly_value args)
 {
 	sly_value arg = vector_ref(args, 0);
 	if (!symbol_p(arg)) {
+		sly_displayln(arg);
 		sly_raise_exception(ss, EXC_TYPE, "Type Error expected symbol");
 	}
 	symbol *sym = GET_PTR(arg);
@@ -899,7 +900,6 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("get-pattern-var-names", cget_pattern_var_names, 2, 0);
 	ADD_BUILTIN("construct-syntax", cconstruct_syntax, 3, 0);
 	ADD_BUILTIN("disassemble", cdis_dis, 1, 0);
-	ADD_VARIABLE("*MODULES*", make_dictionary(ss));
 	ADD_VARIABLE("*REQUIRED*", make_dictionary(ss));
 }
 
