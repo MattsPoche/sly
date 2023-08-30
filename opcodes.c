@@ -109,6 +109,11 @@ dis(INSTR ins, sly_value si)
 		u8 b = GET_B(instr);
 		printf("(CALL %d %d)%n", a, b, &pad);
 	} break;
+	case OP_APPLY: {
+		u8 a = GET_A(instr);
+		u8 b = GET_B(instr);
+		printf("(APPLY %d %d)%n", a, b, &pad);
+	} break;
 	case OP_CALLWCC: {
 		u8 a = GET_A(instr);
 		u8 b = GET_B(instr);

@@ -531,9 +531,8 @@ list_contains(sly_value list, sly_value value)
 sly_value
 list_to_vector(Sly_State *ss, sly_value list)
 {
-	size_t cap = list_len(list);
-	sly_value vec = make_vector(ss, 0, cap);
-	while (pair_p(list)) {
+	sly_value vec = make_vector(ss, 0, 8); /* arbitrary starting cap */
+	while (!null_p(list)) {
 		vector_append(ss, vec, car(list));
 		list = cdr(list);
 	}
@@ -544,14 +543,15 @@ sly_value
 vector_to_list(Sly_State *ss, sly_value vec)
 {
 	size_t len = vector_len(vec);
-	if (len == 0) return SLY_NULL;
-	if (len == 1) return cons(ss, vector_ref(vec, 0), SLY_NULL);
-	/* construct list back to front */
-	sly_value list = cons(ss, vector_ref(vec, len - 1), SLY_NULL);
-	for (size_t i = len - 2; i > 0; ++i) {
-		list = cons(ss, vector_ref(vec, i), list);
+	sly_value list = SLY_NULL;
+	if (len == 0) {
+		return SLY_NULL;
 	}
-	return cons(ss, vector_ref(vec, 0), list);
+	size_t i = len;
+	while (i--) {
+		list = cons(ss, vector_ref(vec, i), list);;
+	}
+	return list;
 }
 
 sly_value

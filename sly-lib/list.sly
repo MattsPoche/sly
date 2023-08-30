@@ -27,6 +27,7 @@
 		 map
 		 for-each
 		 generate-temporaries
+		 take
 		 assoc
 		 alist-cons
 		 alist-copy
@@ -89,7 +90,7 @@
 
 (define (memq x xs) (member x xs eq?))
 
-(define memv member) ;; TODO: emplement eqv?
+(define memv member) ;; TODO: emplement `eqv?'
 
 (define (remove xs x)
   (if (null? xs)
@@ -171,13 +172,19 @@
 		(apply f (*heads* xs))
 		(apply for-each f (*tails* xs)))))
 
-(define (generate-temporaries ls)
-  (map (lambda (x)
-		 (datum->syntax x (string->symbol
-						   (string-join
-							(list "temp" (symbol->string (syntax->datum x)))
-							"--"))))
-	   (syntax->list ls)))
+(define (generate-temporaries ids)
+  (if (syntax? ids) (set! ids (syntax->list ids)) #f)
+  (map (lambda (id)
+		 (define x (syntax->datum id))
+		 (datum->syntax id (string->symbol (string-join (list "temp" (symbol->string x)) "--"))))
+	   ids))
+
+(define (take ls n)
+  (if (<= n 0)
+	  '()
+	  (if (null? ls)
+		  (error "List out-of-bounds")
+		  (cons (car ls) (take (- n 1) (cdr ls))))))
 
 (define (assoc key alist)
   (define x '())

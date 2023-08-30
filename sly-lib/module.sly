@@ -5,7 +5,7 @@
 (require "sly-lib/with-syntax.sly")
 (require "sly-lib/basic-special-forms.sly")
 
-(provide define-module import)
+(provide define-module import add-module-path!)
 
 (define-syntax define-module
   (syntax-rules ()
@@ -16,9 +16,26 @@
 	   body ...
 	   (dictionary-set! name 'id id) ...)]))
 
+(define dirs
+  (list "./"
+		"/home/matt/Projects/sly/sly-lib/"))
+
+(define (add-module-path! path)
+  (if (string? path)
+	  (set! dirs (cons path dirs))
+	  (error "Type Error expected string")))
+
+(define (name->file-path name)
+  (let loop ([dirs dirs])
+	(if (null? dirs)
+		(error "Import failed, file not found")
+		(let ([dir (string-join (list (car dirs) (symbol->string name) ".sly") "")])
+		  (if (file-readable? dir #f) dir
+			  (loop (cdr dirs)))))))
+
 (define-syntax import
   (lambda (x)
 	(syntax-case x ()
-	  [(import s-name)
-	   (let ([name (string-join (list (symbol->string (syntax->datum #'s-name)) ".sly") "")])
-		 (datum->syntax #'import (list 'require name)))])))
+	  [(_ s-name)
+	   (let ([path (name->file-path (syntax->datum #'s-name))])
+		 (datum->syntax (car x) (list 'require path)))])))

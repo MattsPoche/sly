@@ -1,8 +1,11 @@
+#define OPCODES_INCLUDE_INLINE 1
 #include "sly_types.h"
 #include "opcodes.h"
 #include "sly_compile.h"
 #include "gc.h"
 #include "sly_vm.h"
+#include "eval.h"
+#include "opcodes.h"
 
 #define next_instr()    vector_ref(ss->frame->code, ss->frame->pc++)
 #define get_const(i)    vector_ref(ss->frame->K, (i))
@@ -11,6 +14,14 @@
 #define get_upval(i)    upvalue_get(vector_ref(ss->frame->U, (i)))
 #define set_upval(i, v) upvalue_set(vector_ref(ss->frame->U, (i)), (v))
 #define TOP_LEVEL_P(frame) ((frame)->level == 0 || (frame)->parent == NULL)
+#define vm_exit()								\
+	do {										\
+		if (run_gc) {							\
+			GARBAGE_COLLECT(ss);				\
+		}										\
+		return ret_val;							\
+	} while (0)
+
 
 static void close_upvalues(Sly_State *ss, stack_frame *frame);
 static int funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall);
@@ -74,13 +85,14 @@ funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall)
 			vector_set(args, i, get_reg(a + 1 + i));
 		}
 		sly_value r = clos->fn(ss, args);
-/*
-		dis_all(ss->frame, 1);
-		printf("pc :: %zu\n", ss->frame->pc);
-		sly_display(val, 1);
-		printf("\n");
-*/
-		set_reg(a, r);
+		if (!TOP_LEVEL_P(ss->frame) && as_tailcall) {
+			size_t ret_slot = ss->frame->ret_slot;
+			close_upvalues(ss, ss->frame);
+			ss->frame = ss->frame->parent;
+			set_reg(ret_slot, r);
+		} else {
+			set_reg(a, r);
+		}
 	} else if (closure_p(val)) {
 		closure *clos = GET_PTR(val);
 		prototype *proto = GET_PTR(clos->proto);
@@ -144,6 +156,7 @@ funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall)
 static void
 close_upvalues(Sly_State *ss, stack_frame *frame)
 {
+	if (null_p(frame->clos)) return;
 	vector *vec = GET_PTR(frame->R);
 	upvalue *uv = NULL;
 	upvalue *parent = NULL;
@@ -173,9 +186,6 @@ vm_run(Sly_State *ss, int run_gc)
 	}
     for (;;) {
 		instr.v = next_instr();
-		/* if (instr.i.ln != -1) { */
-		/* 	line = instr.i.ln; */
-		/* } */
 		enum opcode i = GET_OP(instr);
 		switch (i) {
 		case OP_NOP: break;
@@ -295,14 +305,36 @@ vm_run(Sly_State *ss, int run_gc)
 				nframe->parent = ss->frame;
 				ss->frame = nframe;
 			} else {
-				sly_assert(0, "CALL/CC Not emplemented for procedure type");
+				sly_assert(0, "CALL/CC Not implemented for procedure type");
 			}
+		} break;
+		case OP_APPLY: {
+			u8 a = GET_A(instr);
+			u8 b = GET_B(instr);
+			sly_value args = make_vector(ss, 0, 8);
+			for (int i = a; i < b - 1; ++i) {
+				vector_append(ss, args, vector_ref(ss->frame->R, i));
+			}
+			sly_value list = vector_ref(ss->frame->R, b - 1);
+			sly_assert(pair_p(list) || null_p(list), "Error Expected list");
+			while (!null_p(list)) {
+				vector_append(ss, args, car(list));
+				list = cdr(list);
+			}
+			stack_frame *nframe = make_eval_stack(ss, args);
+			size_t len = vector_len(nframe->R);
+			vector_append(ss, nframe->code, iAB(OP_CALL, 0, len, -1));
+			vector_append(ss, nframe->code, iA(OP_RETURN, 0, -1));
+			nframe->parent = ss->frame;
+			nframe->level = ss->frame->level + 1;
+			nframe->ret_slot = a;
+			ss->frame = nframe;
 		} break;
 		case OP_RETURN: {
 			u8 a = GET_A(instr);
 			if (TOP_LEVEL_P(ss->frame)) {
 				ret_val = get_reg(a);
-				goto vm_exit;
+				vm_exit();
 			}
 			size_t ret_slot = ss->frame->ret_slot;
 			ret_val = get_reg(a);
@@ -326,9 +358,5 @@ vm_run(Sly_State *ss, int run_gc)
 			GARBAGE_COLLECT(ss);
 		}
 	}
-vm_exit:
-	if (run_gc) {
-		GARBAGE_COLLECT(ss);
-	}
-	return ret_val;
+	vm_exit();
 }

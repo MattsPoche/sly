@@ -10,3 +10,45 @@
 
 (displayln (cat "foo" "bar"))
 (displayln (cat "hello" "world" 'delim " => "))
+
+(define (values . things)
+  (call/cc  (lambda (cc) (apply cc things))))
+
+(define test (lambda ()
+			   (display "(* (values 420) 2) => ")
+			   (displayln (* (values 420) 2))))
+
+(test)
+(display "(values 69) => ")
+(displayln (values 69))
+(displayln (- (*)))
+
+(displayln
+ (letrec ([even? (lambda (n)
+				   (if (zero? n)
+					   #t
+					   (odd? (- n 1))))]
+          [odd? (lambda (n)
+                  (if (zero? n)
+                      #f
+                      (even? (- n 1))))])
+   (even? 88)))
+
+(letrec* ([p (lambda (x)
+			   (+ 1 (q (- x 1))))]
+		  [q (lambda (y)
+			   (if (zero? y)
+				   0
+				   (+ 1 (p (- y 1)))))]
+		  [x (p 5)]
+		  [y x])
+  (displayln y))
+
+(define (add-three a b c)
+  (+ a b c))
+
+(let ()
+  (displayln (apply + '(1 2 3)))
+  (displayln (apply + 1 2 '(3))))
+
+(displayln (list->vector '(a b c d)))

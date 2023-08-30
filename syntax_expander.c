@@ -27,6 +27,7 @@ enum core_form {
 	cf_define_syntax,
 	cf_call_with_current_continuation,
 	cf_callwcc,
+	cf_apply,
 	cf_require,
 	cf_provide,
 	CORE_FORM_COUNT,
@@ -43,6 +44,7 @@ static char *core_form_names[CORE_FORM_COUNT] = {
 	[cf_define_syntax] = "define-syntax",
 	[cf_call_with_current_continuation] = "call-with-current-continuation",
 	[cf_callwcc] = "call/cc",
+	[cf_apply] = "apply",
 	[cf_require] = "require",
 	[cf_provide] = "provide",
 };
@@ -576,7 +578,11 @@ compile(Sly_State *ss, sly_value s)
 			sly_display(strip_syntax(ss, s), 1);
 			printf("`\n");
 			token t = syntax_get_token(ss, s);
-			printf("%.*s\n", t.eo - t.so,  &t.src[t.so]);
+			if (t.src != NULL) {
+				printf("%p\n", t.src);
+				printf("%.*s\n", t.eo - t.so,  &t.src[t.so]);
+				printf("%d:%d\n", t.ln, t.cn);
+			}
 			sly_assert(0, "Error undefined identifier");
 		}
 		symbol_set_alias(r, syntax_to_datum(s));
@@ -632,7 +638,9 @@ sly_expand(Sly_State *ss, sly_value env, sly_value ast)
 	ast = introduce(ss, syntax_to_list(ss, ast));
 	ast = add_scope(ss, ast, scope());
 	ast = expand(ss, ast, env);
-	/* sly_displayln(strip_syntax(ss, ast)); */
+#if 0
+	sly_displayln(strip_syntax(ss, ast));
+#endif
 	ast = compile(ss, ast);
 	ast = datum_to_syntax(ss, before, ast);
 	return ast;

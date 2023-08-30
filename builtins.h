@@ -175,6 +175,13 @@ clist_p(Sly_State *ss, sly_value args)
 }
 
 static sly_value
+clist_to_vector(Sly_State *ss, sly_value args)
+{
+	sly_value list = vector_ref(args, 0);
+	return list_to_vector(ss, list);
+}
+
+static sly_value
 cboolean_p(Sly_State *ss, sly_value args)
 {
 	UNUSED(ss);
@@ -297,6 +304,14 @@ cmake_string(Sly_State *ss, sly_value args)
 	}
 	return str;
 }
+
+static sly_value
+cstring_length(Sly_State *ss, sly_value args)
+{
+	sly_value s = vector_ref(args, 0);
+	return make_int(ss, string_len(s));
+}
+
 
 static sly_value
 cstring_ref(Sly_State *ss, sly_value args)
@@ -514,9 +529,14 @@ static sly_value
 cmake_vector(Sly_State *ss, sly_value args)
 {
 	size_t len = get_int(vector_ref(args, 0));
+	sly_value rest = vector_ref(args, 1);
+	sly_value val = make_int(ss, 0);
+	if (!null_p(rest)) {
+		val = car(rest);
+	}
 	sly_value vec = make_vector(ss, len, len);
 	for (size_t i = 0; i < len; ++i) {
-		vector_set(vec, i, SLY_FALSE);
+		vector_set(vec, i, val);
 	}
 	return vec;
 }
@@ -546,6 +566,13 @@ cvector_length(Sly_State *ss, sly_value args)
 {
 	sly_value vec = vector_ref(args, 0);
 	return make_int(ss, vector_len(vec));
+}
+
+static sly_value
+cvector_to_list(Sly_State *ss, sly_value args)
+{
+	sly_value vec = vector_ref(args, 0);
+	return vector_to_list(ss, vec);
 }
 
 static sly_value
@@ -658,13 +685,14 @@ clist(Sly_State *ss, sly_value args)
 	return vector_ref(args, 0);
 }
 
+#if 0
 static sly_value
 capply(Sly_State *ss, sly_value args)
 {
 	sly_value fn = vector_ref(args, 0);
 	args = vector_ref(args, 1);
 	sly_value regs = make_vector(ss, 0, 8);
-	vector_append(ss, regs, fn); /* push function */
+	vector_append(ss, regs, fn);
 	while (!null_p(cdr(args))) {
 		vector_append(ss, regs, car(args));
 		args = cdr(args);
@@ -678,6 +706,7 @@ capply(Sly_State *ss, sly_value args)
 	}
 	return call_closure(ss, regs);
 }
+#endif
 
 static sly_value
 cclear_screen(Sly_State *ss, sly_value args)
@@ -809,6 +838,25 @@ cdis_dis(Sly_State *ss, sly_value args)
 	return SLY_VOID;
 }
 
+static sly_value
+cfile_readable(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	sly_value s = vector_ref(args, 0);
+	int die = booltoc(vector_ref(args, 1));
+	sly_assert(string_p(s), "Type Error expected <string>");
+	char *file_path = string_to_cstr(s);
+	if (access(file_path, R_OK) < 0) {
+		if (die) {
+			printf("%s\n", strerror(errno));
+			sly_assert(0, "File Access Error");
+		} else {
+			return SLY_FALSE;
+		}
+	}
+	return SLY_TRUE;
+}
+
 static void
 init_builtins(Sly_State *ss)
 {
@@ -834,6 +882,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("null?", cnull_p, 1, 0);
 	ADD_BUILTIN("pair?", cpair_p, 1, 0);
 	ADD_BUILTIN("list?", clist_p, 1, 0);
+	ADD_BUILTIN("list->vector", clist_to_vector, 1, 0);
 	ADD_BUILTIN("boolean?", cboolean_p, 1, 0);
 	ADD_BUILTIN("number?", cnumber_p, 1, 0);
 	ADD_BUILTIN("integer?", cinteger_p, 1, 0);
@@ -860,6 +909,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("gensym", cgensym, 0, 0);
 	ADD_BUILTIN("void", cvoid, 0, 0);
 	ADD_BUILTIN("make-string", cmake_string, 1, 1);
+	ADD_BUILTIN("string-length", cstring_length, 1, 0);
 	ADD_BUILTIN("string-ref", cstring_ref, 2, 0);
 	ADD_BUILTIN("string-set!", cstring_set, 3, 0);
 	ADD_BUILTIN("string-join", cstring_join, 1, 1);
@@ -871,11 +921,12 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("raw-syntax", craw_syntax, 1, 0);
 	ADD_BUILTIN("syntax", csyntax, 2, 0);
 	ADD_BUILTIN("syntax-scopes", csyntax_scopes, 1, 0);
-	ADD_BUILTIN("make-vector", cmake_vector, 1, 0);
+	ADD_BUILTIN("make-vector", cmake_vector, 1, 1);
 	ADD_BUILTIN("vector", cvector, 0, 1);
 	ADD_BUILTIN("vector-ref", cvector_ref, 2, 0);
 	ADD_BUILTIN("vector-set!", cvector_set, 3, 0);
 	ADD_BUILTIN("vector-length", cvector_length, 1, 0);
+	ADD_BUILTIN("vector->list", cvector_to_list, 1, 0);
 	ADD_BUILTIN("make-byte-vector", cmake_byte_vector, 0, 1);
 	ADD_BUILTIN("byte-vector-ref", cbyte_vector_ref, 2, 0);
 	ADD_BUILTIN("byte-vector-set!", cbyte_vector_set, 3, 0);
@@ -886,7 +937,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("dictionary-set!", cdictionary_set, 3, 0);
 	ADD_BUILTIN("dictionary-has-key?", cdictionary_has_key, 2, 0);
 	ADD_BUILTIN("list", clist, 0, 1);
-	ADD_BUILTIN("apply", capply, 1, 1);
+	//ADD_BUILTIN("apply", capply, 1, 1);
 	ADD_BUILTIN("console-clear-screen", cclear_screen, 0, 0);
 	ADD_BUILTIN("raise-macro-exception", craise_macro_exception, 1, 0);
 	ADD_BUILTIN("error", cerror, 0, 1);
@@ -900,6 +951,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("get-pattern-var-names", cget_pattern_var_names, 2, 0);
 	ADD_BUILTIN("construct-syntax", cconstruct_syntax, 3, 0);
 	ADD_BUILTIN("disassemble", cdis_dis, 1, 0);
+	ADD_BUILTIN("file-readable?", cfile_readable, 2, 0);
 	ADD_VARIABLE("*REQUIRED*", make_dictionary(ss));
 }
 

@@ -7,6 +7,9 @@
 #include "eval.h"
 #include "sly_vm.h"
 #include "sly_alloc.h"
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
 
 /* TODO: procedures cannot refer to variables defined
  * after they are.
@@ -37,6 +40,7 @@ enum kw {
 	kw_define_syntax,
 	kw_call_with_continuation,
 	kw_call_cc,
+	kw_apply,
 	KW_COUNT,
 };
 
@@ -80,6 +84,7 @@ keywords(int idx)
 	case kw_define_syntax: return "define-syntax";
 	case kw_call_with_continuation: return "call-with-continuation";
 	case kw_call_cc: return "call/cc";
+	case kw_apply: return "apply";
 	case KW_COUNT: break;
 	}
 	sly_assert(0, "Error, No such keyword");
@@ -335,6 +340,7 @@ resolve_upval(Sly_State *ss,
 			   || prop.p.type == sym_arg) {
 		upinfo.u.isup = 0;
 	} else {
+		sly_displayln(sym);
 		sly_raise_exception(ss, EXC_COMPILE, "Compile error");
 	}
 	upinfo.u.reg = prop.p.reg;
@@ -782,6 +788,17 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			if (!null_p(CDR(form))) {
 				sly_raise_exception(ss, EXC_COMPILE, "Error malformed display expression");
 			}
+		} break;
+		case kw_apply: {
+			form = CDR(form);
+			reg = comp_funcall(ss, form, reg);
+			prototype *proto = GET_PTR(cc->cscope->proto);
+			union instr instr;
+			instr.v = vector_pop(ss, proto->code);
+			sly_assert(instr.i.u.as_u8[0] == OP_CALL
+					   || instr.i.u.as_u8[0] == OP_TAILCALL, "Error somethings wrong :,(");
+			instr.i.u.as_u8[0] = OP_APPLY;
+			vector_append(ss, proto->code, instr.v);
 		} break;
 		case KW_COUNT: {
 			sly_raise_exception(ss, EXC_COMPILE, "(KW_COUNT) Not a real keyword");

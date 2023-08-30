@@ -9,6 +9,7 @@
 		 let
 		 let*
 		 letrec
+		 letrec*
 		 cond
 		 case
 		 do
@@ -44,29 +45,20 @@
 	 (let ([var val])
 	   (let* ([var* val*] ...) body ...))]))
 
-(define-syntax letrec*-helper
-  (syntax-rules ()
-	[(_ () body ...)
-	 (begin body ...)]
-	[(_ ([var val] rest ...) body ...)
-	 (begin
-	   (define var val)
-	   (letrec*-helper rest ...) body...)]))
-
 (define-syntax letrec*
   (syntax-rules ()
-	[(_ bindings body ...)
+	[(_ ([var val] ...) body ...)
 	 ((lambda ()
-		(letrec*-helper bindings body ...)))]))
+		(define var val) ...
+		body ...))]))
 
 (define-syntax letrec
   (lambda (x)
 	(syntax-case x ()
-	  [(letrec ([id val] ...) body ...)
+	  [(_ ([id val] ...) body ...)
 	   (with-syntax ([(tmp ...) (generate-temporaries #'(id ...))]
-					 [(id ...) #'(id ...)]
-					 [(val ...) #'(val ...)]
-					 [(body ...) #'(body ...)])
+					 [((id ...) (val ...) (body ...))
+					  #'((id ...) (val ...) (body ...))])
 		 #'(let ([id #f] ...)
 			 (let ([tmp val] ...)
 			   (set! id tmp) ...
@@ -103,13 +95,13 @@
 							  [(else e1 e2 ...)  #'(begin e1 e2 ...)]
 							  [((k ...) e1 e2 ...)
 							   #'(if (memv t '(k ...)) (begin e1 e2 ...) (void))])
-							(with-syntax ((rest (f (car cmore) (cdr cmore))))
+							(with-syntax ([rest (f (car cmore) (cdr cmore))])
 							  (syntax-case c1 ()
 								[((k ...) e1 e2 ...)
 								 #'(if (memv t '(k ...))
 									   (begin e1 e2 ...)
 									   rest)]))))])
-         #'(let ((t e)) body))])))
+         #'(let ([t e]) body))])))
 
 (define-syntax do
   (lambda (x)

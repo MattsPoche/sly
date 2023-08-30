@@ -8,7 +8,6 @@
 (require "sly-lib/kwargs.sly")
 
 (provide
- poop
  displayln
  display-syntax
  caar
@@ -36,6 +35,7 @@
  map
  for-each
  generate-temporaries
+ take
  assoc
  alist-cons
  alist-copy
@@ -55,6 +55,7 @@
  let
  let*
  letrec
+ letrec*
  cond
  case
  do
@@ -63,5 +64,3 @@
  syntax-case
  syntax-rules
  with-syntax)
-
-(define poop "hello")
