@@ -40,6 +40,7 @@ enum kw {
 	kw_define_syntax,
 	kw_call_with_continuation,
 	kw_call_cc,
+	kw_call_with_values,
 	kw_apply,
 	KW_COUNT,
 };
@@ -84,6 +85,7 @@ keywords(int idx)
 	case kw_define_syntax: return "define-syntax";
 	case kw_call_with_continuation: return "call-with-continuation";
 	case kw_call_cc: return "call/cc";
+	case kw_call_with_values: return "call-with-values";
 	case kw_apply: return "apply";
 	case KW_COUNT: break;
 	}
@@ -612,7 +614,7 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 	}
 	if (reg == -1) reg = tmp;
 	if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
-	vector_append(ss, proto->code, iA(OP_RETURN, reg, -1));
+	vector_append(ss, proto->code, iAB(OP_RETURN, reg, reg+1, -1));
 	cc->cscope = cc->cscope->parent;
 	reg = preg;
 	prototype *cproto = GET_PTR(cc->cscope->proto);
@@ -789,6 +791,25 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 				sly_raise_exception(ss, EXC_COMPILE, "Error malformed display expression");
 			}
 		} break;
+		case kw_call_with_values: {
+			prototype *proto = GET_PTR(cc->cscope->proto);
+			form = CDR(form);
+			int start = reg;
+			int reg2 = comp_expr(ss, CAR(form), reg);
+			if (reg2 != -1 && reg2 != reg) {
+				vector_append(ss, proto->code, iAB(OP_MOVE, reg, reg2, -1));
+			} else {
+				reg2 = reg;
+			}
+			reg++;
+			int reg3 = comp_expr(ss, CAR(CDR(form)), reg);
+			if (reg3 != -1 && reg3 != reg) {
+				vector_append(ss, proto->code, iAB(OP_MOVE, reg, reg3, -1));
+			}
+			reg3 = reg;
+			reg = start;
+			vector_append(ss, proto->code, iABC(OP_CALLWVALUES, reg, reg2, reg3, -1));
+		} break;
 		case kw_apply: {
 			form = CDR(form);
 			reg = comp_funcall(ss, form, reg);
@@ -894,7 +915,7 @@ sly_compile(Sly_State *ss, sly_value ast)
 	prototype *proto = GET_PTR(ss->cc->cscope->proto);
 	forward_scan_block(ss, ast);
 	int r = comp_expr(ss, ast, 0);
-	vector_append(ss, proto->code, iA(OP_RETURN, r, -1));
+	vector_append(ss, proto->code, iAB(OP_RETURN, r, r+1, -1));
 	END_HANDLE_EXCEPTION(ss);
 	sly_value cval = make_closure(ss, ss->cc->cscope->proto);
 	closure *clos = GET_PTR(cval);

@@ -1,5 +1,6 @@
 #include <time.h>
 #include <execinfo.h>
+#include <math.h>
 #include "sly_types.h"
 #include "sly_alloc.h"
 #include "opcodes.h"
@@ -375,7 +376,7 @@ make_byte(Sly_State *ss, i8 i)
 }
 
 sly_value
-make_float(Sly_State *ss, f64 f)
+make_big_float(Sly_State *ss, f64 f)
 {
 	number *n = gc_alloc(ss, sizeof(*n));
 	n->h.type = tt_float;
@@ -392,6 +393,16 @@ make_small_float(Sly_State *ss, f32 f)
 	v.i.val.as_float = f;
 	sly_value n = v.v;
 	return (n & ~TAG_MASK) | st_imm;
+}
+
+sly_value
+make_float(Sly_State *ss, f64 f)
+{
+	if ((f32)f == INFINITY) {
+		return make_big_float(ss, f);
+	} else {
+		return make_small_float(ss, (f32)f);
+	}
 }
 
 sly_value

@@ -8,8 +8,8 @@
 (define& (cat s1 s2 (delim " "))
   (string-join (list s1 s2) delim))
 
-(displayln (cat "foo" "bar"))
 (displayln (cat "hello" "world" 'delim " => "))
+(displayln (cat "foo" "bar"))
 
 (define (values . things)
   (call/cc  (lambda (cc) (apply cc things))))
@@ -52,3 +52,70 @@
   (displayln (apply + 1 2 '(3))))
 
 (displayln (list->vector '(a b c d)))
+
+(define-syntax decorate
+  (syntax-rules ()
+	[(_ fn decorator)
+	 (set! fn (decorator fn))]))
+
+(define-syntax define-with-decorator
+  (syntax-rules ()
+	[(_ decorator (name . formals) body ...)
+	 (define name (decorator (lambda formals body ...)))]))
+
+(define (do-twice fn)
+  (lambda args
+	(apply fn args)
+	(apply fn args)))
+
+(define-with-decorator do-twice
+  (say-hello)
+  (displayln "hello"))
+
+(say-hello)
+
+(define-syntax set-m!
+  (syntax-rules (dictionary-ref)
+	[(_ (dictionary-ref dict key) value)
+	 (dictionary-set! dict key value)]))
+
+(define dict (make-dictionary))
+(displayln dict)
+(set-m! dict#member 69)
+(set-m! dict#say-hello "i like turtles")
+(displayln dict)
+(displayln dict#member)
+(displayln dict#say-hello)
+
+(define <employee> (make-dictionary))
+(set-m! <employee>#__meta__ (make-dictionary))
+(set-m! <employee>#new
+		(lambda (name salary)
+		  (let ([employee (make-dictionary)])
+			(set-m! employee#__meta__ <employee>#__meta__)
+			(set-m! employee#name name)
+			(set-m! employee#salary salary)
+			employee)))
+
+(define (employee? thing)
+  (and (dictionary? thing)
+	   (eq? thing#__meta__ <employee>#__meta__)))
+
+(define bob (<employee>#new "bob" 69000))
+
+(displayln bob)
+
+(displayln (employee? (make-dictionary)))
+
+(define (cwv-test)
+  (letrec ([producer (lambda () (values 69))]
+		   [receiver (lambda (a)
+					   (displayln a)
+					   (* a 2 3))])
+	(disassemble producer)
+	(disassemble receiver)
+	(call-with-values producer
+	  receiver)))
+
+(disassemble cwv-test)
+(displayln (cwv-test))

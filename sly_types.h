@@ -232,6 +232,7 @@ i8 get_byte(sly_value v);
 sly_value make_int(Sly_State *ss, i64 i);
 sly_value make_byte(Sly_State *ss, i8 i);
 sly_value make_float(Sly_State *ss, f64 f);
+sly_value make_big_float(Sly_State *ss, f64 f);
 sly_value make_small_float(Sly_State *ss, f32  f);
 sly_value cons(Sly_State *ss, sly_value car, sly_value cdr);
 sly_value car(sly_value obj);

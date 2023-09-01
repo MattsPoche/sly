@@ -203,7 +203,7 @@
 			  '() alist))
 
 (define (plist-get plist prop)
-  (if (null? plist) #f
+  (if (null? plist) '()
 	  (if (if (eq? (car plist) prop) (pair? (cdr plist)) #f)
 		  (cadr plist)
 		  (plist-get (cdr plist) prop))))

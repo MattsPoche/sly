@@ -12,7 +12,7 @@ make_stack(Sly_State *ss, size_t nregs)
 	stack_frame *frame = gc_alloc(ss, sizeof(*frame));
 	frame->h.type = tt_stack_frame;
 	frame->parent = NULL;
-	frame->R = make_vector(ss, nregs, nregs);
+	frame->R = make_vector(ss, nregs*2, nregs*2);
 	for (size_t i = 0; i < nregs; ++i) {
 		vector_set(frame->R, i, SLY_VOID);
 	}
@@ -109,6 +109,12 @@ dis(INSTR ins, sly_value si)
 		u8 b = GET_B(instr);
 		printf("(CALL %d %d)%n", a, b, &pad);
 	} break;
+	case OP_CALLWVALUES: {
+		u8 a = GET_A(instr);
+		u8 b = GET_B(instr);
+		u8 c = GET_C(instr);
+		printf("(CALL/VALUES %d %d %d)%n", a, b, c, &pad);
+	} break;
 	case OP_APPLY: {
 		u8 a = GET_A(instr);
 		u8 b = GET_B(instr);
@@ -126,7 +132,8 @@ dis(INSTR ins, sly_value si)
 	} break;
 	case OP_RETURN: {
 		u8 a = GET_A(instr);
-		printf("(RETURN %d)%n", a, &pad);
+		u8 b = GET_B(instr);
+		printf("(RETURN %d %d)%n", a, b, &pad);
 	} break;
 	case OP_CLOSURE: {
 		u8 a = GET_A(instr);

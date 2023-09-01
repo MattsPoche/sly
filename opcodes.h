@@ -20,9 +20,10 @@ enum opcode {
 	OP_FJMP,		// iABx | if R[A] == #f then PC := Bx
 	OP_CALL,		// iAB  | R[A] := (R[A] R[A+1] ... R[A+B-1])
 	OP_CALLWCC,     // iAB  | R[A] := (R[B] (current-continuation)) ; call/cc
+	OP_CALLWVALUES, // iABC | R[A] := (RB[B] values ...) <- (R[C])
 	OP_TAILCALL,	// iAB  | R[A] := (R[A] R[A+1] ... R[A+B-1])
 	OP_APPLY,       // iAB  | R[A] := (apply R[A] R[A+1] ... R[A+B-1]) ; last argument is a list
-	OP_RETURN,		// iA   | return R[A]
+	OP_RETURN,		// iAB   | return R[A] ... R[A+B-1]
 	OP_CLOSURE,		// iABx | R[A] := make_closure(<prototype> K[Bx])
 	OP_COUNT,
 };

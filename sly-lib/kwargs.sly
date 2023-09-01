@@ -36,11 +36,8 @@
 					   [((kw val) ...) non-defs]
 					   [(body ...) #'(body ...)])
 		   #'(lambda (def ... . args)
-			   (let ([kw (let ([t (plist-get args 'kw)]) (if t t val))] ...)
+			   (let ([kw (let ([t (plist-get args 'kw)]) (if (not (null? t)) t val))] ...)
 				 body ...))))])))
-
-;; #'(lambda (formals ... . args)
-;; 		   )
 
 (define-syntax define&
   (syntax-rules ()

@@ -135,15 +135,14 @@ funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall)
 		}
 		ss->frame = nframe;
 	} else if (continuation_p(val)) {
-		/* TODO: continuations should take a vararg?
-		 */
-		sly_assert(nargs == 1,
-				   "Error Wrong number of arguments for continuation");
 		continuation *cc = GET_PTR(val);
-		sly_value arg = get_reg(a+1);
+		for (size_t i = 0; i < nargs; ++i) {
+			sly_value arg = get_reg(a + 1 + i);
+			vector_set(cc->frame->R, cc->ret_slot + i, arg);
+		}
+		close_upvalues(ss, ss->frame);
 		ss->frame = cc->frame;
 		ss->frame->pc = cc->pc;
-		vector_set(ss->frame->R, cc->ret_slot, arg);
 	} else {
 		printf("pc :: %zu\n", ss->frame->pc);
 		sly_display(val, 1);
@@ -308,6 +307,43 @@ vm_run(Sly_State *ss, int run_gc)
 				sly_assert(0, "CALL/CC Not implemented for procedure type");
 			}
 		} break;
+		case OP_CALLWVALUES: {
+			/* TODO: This doesn't work with `values' likely because the frame used
+			 * only returns one value. Its hard to detect how many values should be
+			 * returned during compile time.
+			 * The only good fix I can think of is to rewrite the vm using strictly
+			 * continuation passing style.
+			 */
+			u8 a = GET_A(instr);
+			u8 b = GET_B(instr);
+			u8 c = GET_C(instr);
+			sly_value producer = get_reg(b);
+			sly_value receiver = get_reg(c);
+			sly_assert(closure_p(receiver), "Type Error expected <closure>");
+			closure *clos = GET_PTR(receiver);
+			prototype *proto = GET_PTR(clos->proto);
+			stack_frame *rframe = make_stack(ss, proto->nregs);
+			rframe->clos = receiver;
+			rframe->U = clos->upvals;
+			rframe->K = proto->K;
+			rframe->code = proto->code;
+			rframe->pc = proto->entry;
+			rframe->level = ss->frame->level + 1;
+			rframe->ret_slot = a;
+			rframe->parent = ss->frame;
+			clos = GET_PTR(producer);
+			proto = GET_PTR(clos->proto);
+			stack_frame *pframe = make_stack(ss, proto->nregs);
+			pframe->clos = producer;
+			pframe->U = clos->upvals;
+			pframe->K = proto->K;
+			pframe->code = proto->code;
+			pframe->pc = proto->entry;
+			pframe->level = rframe->level + 1;
+			pframe->ret_slot = a;
+			pframe->parent = rframe;
+			ss->frame = pframe;
+		} break;
 		case OP_APPLY: {
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
@@ -323,8 +359,8 @@ vm_run(Sly_State *ss, int run_gc)
 			}
 			stack_frame *nframe = make_eval_stack(ss, args);
 			size_t len = vector_len(nframe->R);
-			vector_append(ss, nframe->code, iAB(OP_CALL, 0, len, -1));
-			vector_append(ss, nframe->code, iA(OP_RETURN, 0, -1));
+			vector_append(ss, nframe->code, iAB(OP_TAILCALL, 0, len, -1));
+			vector_append(ss, nframe->code, iAB(OP_RETURN, 0, 1, -1));
 			nframe->parent = ss->frame;
 			nframe->level = ss->frame->level + 1;
 			nframe->ret_slot = a;
@@ -332,15 +368,18 @@ vm_run(Sly_State *ss, int run_gc)
 		} break;
 		case OP_RETURN: {
 			u8 a = GET_A(instr);
+			u8 b = GET_B(instr);
 			if (TOP_LEVEL_P(ss->frame)) {
 				ret_val = get_reg(a);
 				vm_exit();
 			}
 			size_t ret_slot = ss->frame->ret_slot;
-			ret_val = get_reg(a);
 			close_upvalues(ss, ss->frame);
+			stack_frame *frame = ss->frame;
 			ss->frame = ss->frame->parent;
-			set_reg(ret_slot, ret_val);
+			for (int i = 0; i < b - a; ++i) {
+				set_reg(ret_slot + i, vector_ref(frame->R, a + i));
+			}
 		} break;
 		case OP_CLOSURE: {
 			u8 a = GET_A(instr);
