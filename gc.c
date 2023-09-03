@@ -65,9 +65,7 @@ traverse_frame(Sly_State *ss, stack_frame *frame)
 	mark_gray(ss, GET_PTR(frame->U));
 	mark_gray(ss, GET_PTR(frame->R));
 	mark_gray(ss, GET_PTR(frame->clos));
-	if (frame->parent) {
-		mark_gray(ss, (gc_object *)frame->parent);
-	}
+	mark_gray(ss, GET_PTR(frame->cont));
 }
 
 static void

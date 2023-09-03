@@ -1,8 +1,8 @@
 (require "sly-lib/base.sly")
 
 ;; TODO: This is broken
-;; (displayln "defining my-let ...")
-;; (define-syntax my-let
-;;   (syntax-rules ()
-;; 	((my-let ((var val) ...) body ...)
-;; 	 ((lambda (var ...) body ...) val ...))))
+(displayln "defining my-let ...")
+(define-syntax my-let
+  (syntax-rules ()
+	((my-let ((var val) ...) body ...)
+	 ((lambda (var ...) body ...) val ...))))

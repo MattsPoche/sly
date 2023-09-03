@@ -17,6 +17,7 @@
  caddr
  cdddr
  cadddr
+ list?
  zero?
  fold-left
  fold-right

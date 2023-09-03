@@ -383,28 +383,28 @@ comp_set(Sly_State *ss, sly_value form, int reg)
 		st_prop = resolve_upval(ss, cc->cscope, datum, st_prop, level);
 	}
 	form = CDR(form);
-	int preg = reg;
-	reg = comp_expr(ss, CAR(form), reg);
-	if ((size_t)reg + 1 >= proto->nregs) proto->nregs = reg + 2;
+	int val = comp_expr(ss, CAR(form), reg);
+	if ((size_t)val + 1 >= proto->nregs) proto->nregs = val + 2;
 	if (st_prop.p.type == sym_variable
 		|| st_prop.p.type == sym_arg) {
-		if (reg != -1 && st_prop.p.reg != reg) {
-			vector_append(ss, proto->code, iAB(OP_MOVE, st_prop.p.reg, reg, src_info));
+		if (val != -1 && st_prop.p.reg != val) {
+			vector_append(ss, proto->code, iAB(OP_MOVE, st_prop.p.reg, val, src_info));
 		}
 	} else if (st_prop.p.type == sym_global) {
 		st_prop.p.reg = intern_constant(ss, datum);
 		if (!IS_GLOBAL(cc->cscope)) {
 			dictionary_set(ss, cc->cscope->symtable, datum, st_prop.v);
 		}
-		if (reg == -1) reg = preg;
+		if (val == -1) val = reg++;
+		if (val == reg) reg++;
 		if ((size_t)reg + 1 >= proto->nregs) proto->nregs = reg + 2;
 		vector_append(ss, proto->code,
-					  iABx(OP_LOADK, reg + 1, st_prop.p.reg, src_info));
+					  iABx(OP_LOADK, reg, st_prop.p.reg, src_info));
 		vector_append(ss, proto->code,
-					  iABC(OP_SETUPDICT, 0, reg + 1, reg, src_info));
+					  iABC(OP_SETUPDICT, 0, reg, val, src_info));
 	} else if (st_prop.p.type == sym_upval) {
 		vector_append(ss, proto->code,
-					  iAB(OP_SETUPVAL, st_prop.p.reg, reg, src_info));
+					  iAB(OP_SETUPVAL, st_prop.p.reg, val, src_info));
 	}
 	if (!null_p(CDR(form))) {
 		sly_raise_exception(ss, EXC_COMPILE, "Error malformed set! expression");
@@ -546,11 +546,7 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 		form = CDR(form);
 	}
 	src_info = intern_syntax(ss, (sly_value)stx);
-	if (stx->context & ctx_tail_pos) {
-		vector_append(ss, proto->code, iAB(OP_TAILCALL, start, reg, src_info));
-	} else {
-		vector_append(ss, proto->code, iAB(OP_CALL, start, reg, src_info));
-	}
+	vector_append(ss, proto->code, iAB(OP_CALL, start, reg, src_info));
 	if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 	return start;
 }
@@ -610,11 +606,15 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 		}
 		syntax *stx = GET_PTR(CAR(form));
 		stx->context = FLAG_ON(stx->context, ctx_tail_pos);
-		reg = comp_expr(ss, CAR(form), proto->nvars);
+		vector_append(ss, proto->code, iA(OP_LOADCONT, proto->nvars, -1));
+		reg = comp_expr(ss, CAR(form), proto->nvars+1);
+		if (reg != -1 && (size_t)reg != proto->nvars+1) {
+			vector_append(ss, proto->code, iAB(OP_MOVE, proto->nvars+1, reg, -1));
+		}
 	}
 	if (reg == -1) reg = tmp;
 	if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
-	vector_append(ss, proto->code, iAB(OP_RETURN, reg, reg+1, -1));
+	vector_append(ss, proto->code, iAB(OP_CALL, proto->nvars, proto->nvars+2, -1));
 	cc->cscope = cc->cscope->parent;
 	reg = preg;
 	prototype *cproto = GET_PTR(cc->cscope->proto);
@@ -760,9 +760,9 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 		case kw_begin: {
 			syntax *s = GET_PTR(form);
 			form = CDR(form);
-			prototype *proto = GET_PTR(ss->cc->cscope->proto);
+			//prototype *proto = GET_PTR(ss->cc->cscope->proto);
 			while (!null_p(CDR(form))) {
-				comp_expr(ss, CAR(form), proto->nvars);
+				comp_expr(ss, CAR(form), reg);
 				form = CDR(form);
 			}
 			if (s->context & ctx_tail_pos) {
@@ -816,8 +816,7 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			prototype *proto = GET_PTR(cc->cscope->proto);
 			union instr instr;
 			instr.v = vector_pop(ss, proto->code);
-			sly_assert(instr.i.u.as_u8[0] == OP_CALL
-					   || instr.i.u.as_u8[0] == OP_TAILCALL, "Error somethings wrong :,(");
+			sly_assert(instr.i.u.as_u8[0] == OP_CALL, "Error somethings wrong :,(");
 			instr.i.u.as_u8[0] = OP_APPLY;
 			vector_append(ss, proto->code, instr.v);
 		} break;
@@ -915,7 +914,7 @@ sly_compile(Sly_State *ss, sly_value ast)
 	prototype *proto = GET_PTR(ss->cc->cscope->proto);
 	forward_scan_block(ss, ast);
 	int r = comp_expr(ss, ast, 0);
-	vector_append(ss, proto->code, iAB(OP_RETURN, r, r+1, -1));
+	vector_append(ss, proto->code, iAB(OP_EXIT, r, r+1, -1));
 	END_HANDLE_EXCEPTION(ss);
 	sly_value cval = make_closure(ss, ss->cc->cscope->proto);
 	closure *clos = GET_PTR(cval);

@@ -6,6 +6,7 @@
   (set! i (+ i 1))
   (display i)(display "\n"))
 
+(display "Running test\n")
 (test)
 (cc #f)
 (cc #f)

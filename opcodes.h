@@ -10,6 +10,7 @@ enum opcode {
 	OP_LOADTRUE,	// iA	| R[A] := #t
 	OP_LOADNULL,	// iA	| R[A] := '()
 	OP_LOADVOID,	// iA	| R[A] := #<void>
+	OP_LOADCONT,    // iA   | R[A] := CONTINUATION
 	OP_GETUPVAL,	// iAB  | R[A] := U[B]
 	OP_SETUPVAL,	// iAB  | U[A] := R[B]
 	OP_GETUPDICT,	// iABC | R[A] := <dictionary> U[B][R[C]]
@@ -19,25 +20,25 @@ enum opcode {
 	OP_JMP,			// iAx  | PC := <u64> Ax
 	OP_FJMP,		// iABx | if R[A] == #f then PC := Bx
 	OP_CALL,		// iAB  | R[A] := (R[A] R[A+1] ... R[A+B-1])
+//	OP_TAILCALL,	// iAB  | R[A] := (R[A] R[A+1] ... R[A+B-1])
 	OP_CALLWCC,     // iAB  | R[A] := (R[B] (current-continuation)) ; call/cc
 	OP_CALLWVALUES, // iABC | R[A] := (RB[B] values ...) <- (R[C])
-	OP_TAILCALL,	// iAB  | R[A] := (R[A] R[A+1] ... R[A+B-1])
 	OP_APPLY,       // iAB  | R[A] := (apply R[A] R[A+1] ... R[A+B-1]) ; last argument is a list
-	OP_RETURN,		// iAB   | return R[A] ... R[A+B-1]
+//	OP_RETURN,		// iAB  | return R[A] ... R[A+B-1]
+	OP_EXIT,        // iAB
 	OP_CLOSURE,		// iABx | R[A] := make_closure(<prototype> K[Bx])
 	OP_COUNT,
 };
 
 typedef struct _stack_frame {
 	OBJ_HEADER;
-	struct _stack_frame *parent;
+	sly_value cont; // <continuation>
 	sly_value K;    // <vector> constants
 	sly_value code; // <vector> byte code
 	sly_value U;	// <vector> upvalues
 	sly_value R;	// <vector> registers
 	sly_value clos; // closure
 	size_t pc;		// program counter
-	size_t ret_slot;
 	u32 level;
 } stack_frame;
 

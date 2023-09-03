@@ -163,18 +163,6 @@ cpair_p(Sly_State *ss, sly_value args)
 }
 
 static sly_value
-clist_p(Sly_State *ss, sly_value args)
-{
-	UNUSED(ss);
-	sly_value var = vector_ref(args, 0);
-	if (!pair_p(var)) {
-		return SLY_FALSE;
-	} else {
-		return ctobool(null_p(cdr(tail(var))));
-	}
-}
-
-static sly_value
 clist_to_vector(Sly_State *ss, sly_value args)
 {
 	sly_value list = vector_ref(args, 0);
@@ -403,20 +391,23 @@ ccons(Sly_State *ss, sly_value args)
 static sly_value
 ccar(Sly_State *ss, sly_value args)
 {
-	UNUSED(ss);
-	return car(vector_ref(args, 0));
+	sly_value p = vector_ref(args, 0);
+	if (!pair_p(p)) {
+		printf("Error not a pair\n");
+		vm_bt(ss->frame);
+	}
+	return car(p);
 }
 
 static sly_value
 ccdr(Sly_State *ss, sly_value args)
 {
-	UNUSED(ss);
-	sly_value obj = vector_ref(args, 0);
-	if (!pair_p(obj)) {
-		sly_display(obj, 1);
-		printf("\n");
+	sly_value p = vector_ref(args, 0);
+	if (!pair_p(p)) {
+		printf("Error not a pair\n");
+		vm_bt(ss->frame);
 	}
-	return cdr(vector_ref(args, 0));
+	return cdr(p);
 }
 
 static sly_value
@@ -630,6 +621,12 @@ cmake_dictionary(Sly_State *ss, sly_value args)
 }
 
 static sly_value
+cdictionary_to_alist(Sly_State *ss, sly_value args)
+{
+	return dictionary_to_alist(ss, vector_ref(args, 0));
+}
+
+static sly_value
 cdictionary_ref(Sly_State *ss, sly_value args)
 {
 	UNUSED(ss);
@@ -832,8 +829,14 @@ static sly_value
 cdis_dis(Sly_State *ss, sly_value args)
 {
 	UNUSED(ss);
-	sly_value clos = vector_ref(args, 0);
-	sly_value proto = get_prototype(clos);
+	sly_value v = vector_ref(args, 0);
+	sly_value proto;
+	if (continuation_p(v)) {
+		continuation *c = GET_PTR(v);
+		proto = get_prototype(c->frame->clos);
+	} else {
+		proto = get_prototype(v);
+	}
 	dis_prototype(proto, 1);
 	return SLY_VOID;
 }
@@ -881,7 +884,6 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("not", cnot, 1, 0);
 	ADD_BUILTIN("null?", cnull_p, 1, 0);
 	ADD_BUILTIN("pair?", cpair_p, 1, 0);
-	ADD_BUILTIN("list?", clist_p, 1, 0);
 	ADD_BUILTIN("list->vector", clist_to_vector, 1, 0);
 	ADD_BUILTIN("boolean?", cboolean_p, 1, 0);
 	ADD_BUILTIN("number?", cnumber_p, 1, 0);
@@ -933,11 +935,11 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("byte-vector-length", cbyte_vector_length, 1, 0);
 	ADD_BUILTIN("vector-length", cvector_length, 1, 0);
 	ADD_BUILTIN("make-dictionary", cmake_dictionary, 0, 1);
+	ADD_BUILTIN("dictionary->alist", cdictionary_to_alist, 1, 0);
 	ADD_BUILTIN("dictionary-ref", cdictionary_ref, 2, 1);
 	ADD_BUILTIN("dictionary-set!", cdictionary_set, 3, 0);
 	ADD_BUILTIN("dictionary-has-key?", cdictionary_has_key, 2, 0);
 	ADD_BUILTIN("list", clist, 0, 1);
-	//ADD_BUILTIN("apply", capply, 1, 1);
 	ADD_BUILTIN("console-clear-screen", cclear_screen, 0, 0);
 	ADD_BUILTIN("raise-macro-exception", craise_macro_exception, 1, 0);
 	ADD_BUILTIN("error", cerror, 0, 1);

@@ -23,6 +23,17 @@
 (displayln (values 69))
 (displayln (- (*)))
 
+
+(let ([str (call-with-values
+			   (lambda ()
+				 (values "This" "is" "Bob"))
+			 (lambda (x y z)
+			   (displayln x)
+			   (displayln y)
+			   (displayln z)
+			   (string-join (list x y z) " ")))])
+  (displayln str))
+
 (displayln
  (letrec ([even? (lambda (n)
 				   (if (zero? n)
@@ -107,15 +118,103 @@
 
 (displayln (employee? (make-dictionary)))
 
-(define (cwv-test)
-  (letrec ([producer (lambda () (values 69))]
-		   [receiver (lambda (a)
-					   (displayln a)
-					   (* a 2 3))])
-	(disassemble producer)
-	(disassemble receiver)
-	(call-with-values producer
-	  receiver)))
+;; (call-with-values (lambda () (values 69 420))
+;;   (lambda (a b)
+;; 	(displayln a)
+;; 	(displayln b)))
 
-(disassemble cwv-test)
-(displayln (cwv-test))
+(define <record-type> (make-dictionary))
+
+(define <promise> (make-dictionary))
+(set-m! <promise>#__meta__ <record-type>)
+(set-m! <promise>#new
+		(lambda (p)
+		  (let ([new-promise (make-dictionary)])
+			(set-m! new-promise#__meta__ <promise>)
+			(set-m! new-promise#p
+					(let ([val #f]
+						  [set? #f])
+					  (lambda ()
+						(unless set?
+						  (let ([x (p)])
+							(unless set?
+							  (begin (set! val x)
+									 (set! set? #t)))))
+						val)))
+			new-promise)))
+
+(define (record-type? thing)
+  (and (dictionary? thing)
+	   (eq? thing#__meta__ <record-type>)))
+
+(define (record? thing)
+  (and (dictionary? thing)
+	   (thing#__meta__)
+	   (eq? thing#__meta__#__meta__ <record-type>)))
+
+(define (promise? thing)
+  (and (dictionary? thing)
+	   (eq? thing#__meta__ <promise>)))
+
+(define (force p)
+  (if (promise? p) (p#p)
+	  (error "Type error expected <promise>")))
+
+(define-syntax delay
+  (syntax-rules ()
+	[(_ exp) (<promise>#new (lambda () exp))]))
+
+(let ([p (delay (+ 69 420))])
+  (displayln (force p))
+  (displayln (force p))
+  (displayln (force p))
+  (displayln (dictionary->alist p)))
+
+(define (stream-car s) (car (force s)))
+(define (stream-cdr s) (cdr (force s)))
+
+(define (make-stream proc initial-state)
+  (delay (proc initial-state)))
+
+(define counters
+  (let next ([n 1])
+	(delay (cons n (next (+ n 1))))))
+
+(displayln (stream-car counters))
+(displayln (stream-car (stream-cdr counters)))
+
+(define (string . chars)
+  (let ([s (make-string (length chars))])
+	(let loop ([i 0]
+			   [chars chars])
+	  (if (null? chars) s
+		  (begin
+			(string-set! s i (car chars))
+			(loop (+ i 1) (cdr chars)))))))
+
+(define (substring s1 m n)
+  (let ((s2 (make-string (- n m))))
+    (do ((j 0 (+ j 1)) (i m (+ i 1)))
+        ((= i n) s2)
+      (string-set! s2 j (string-ref s1 i)))))
+
+(define (string->list s)
+  (do ((i (- (string-length s) 1) (- i 1))
+       (ls '() (cons (string-ref s i) ls)))
+      ((< i 0) ls)))
+
+(define (list->string xs) (apply string xs))
+
+(let ([s "hi there"])
+  (displayln (substring s 0 1))
+  (displayln (substring s 3 6))
+  (displayln (substring s 5 5))
+  (displayln (substring s 0 (string-length s)))
+  (displayln (string->list s))
+  (displayln (list->string (string->list s))))
+
+(displayln (call-with-values
+			   (lambda ()
+				 (values 1 2 3 4 5))
+			 (lambda (a b c d e)
+			   (* a b c d e))))

@@ -389,7 +389,7 @@ make_small_float(Sly_State *ss, f32 f)
 {
 	(void)ss;
 	union imm_value v;
-	v.i.type = imm_int;
+	v.i.type = imm_float;
 	v.i.val.as_float = f;
 	sly_value n = v.v;
 	return (n & ~TAG_MASK) | st_imm;
@@ -431,7 +431,11 @@ car(sly_value obj)
 sly_value
 cdr(sly_value obj)
 {
-	sly_assert(pair_p(obj), "Type Error (cdr): Expected Pair");
+	if (!pair_p(obj)) {
+		sly_display(obj, 1);
+		printf("\n");
+		sly_assert(0, "Type Error (cdr): Expected Pair");
+	}
 	pair *p = GET_PTR(obj);
 	return p->cdr;
 }
@@ -687,11 +691,8 @@ vector_len(sly_value v)
 static void
 vector_grow(Sly_State *ss, sly_value v)
 {
-	/* Type check befor calling.
-	 * Object must be a <vector> or <dictionary>
-	 */
 	vector *vec = GET_PTR(v);
-	ss->gc->bytes += vec->cap;
+	ss->gc->bytes += vec->cap * sizeof(sly_value);
 	vec->cap *= 2;
 	vec->elems = realloc(vec->elems, vec->cap * sizeof(sly_value));
 	memset(&vec->elems[vec->len], 0, (vec->cap - vec->len) * sizeof(sly_value));
@@ -1002,6 +1003,7 @@ make_continuation(Sly_State *ss, struct _stack_frame *frame, size_t pc, size_t r
 	cc->frame = frame;
 	cc->pc = pc;
 	cc->ret_slot = ret_slot;
+	cc->no_overwrite = 0;
 	return (sly_value)cc;
 }
 
@@ -1627,6 +1629,22 @@ sly_value
 make_dictionary(Sly_State *ss)
 {
 	return make_dictionary_sz(ss, DICT_INIT_SIZE);
+}
+
+sly_value
+dictionary_to_alist(Sly_State *ss, sly_value d)
+{
+	sly_assert(dictionary_p(d), "Type error expected dictionary");
+	sly_value alist = SLY_NULL;
+	sly_value entry;
+	vector *dict = GET_PTR(d);
+	for (size_t i = 0; i < dict->cap; ++i) {
+		entry = dict->elems[i];
+		if (!slot_is_free(entry)) {
+			alist = cons(ss, cons(ss, car(entry), cdr(entry)), alist);
+		}
+	}
+	return alist;
 }
 
 int

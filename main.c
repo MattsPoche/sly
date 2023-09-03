@@ -2,12 +2,12 @@
 #include <ctype.h>
 #include "sly_types.h"
 #include "gc.h"
-#include "sly_vm.h"
 #include "sly_alloc.h"
 #include "parser.h"
 #include "sly_compile.h"
 #include "opcodes.h"
 #include "eval.h"
+#include "sly_vm.h"
 
 int allocations = 0;
 int net_allocations = 0;

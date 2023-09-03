@@ -56,8 +56,6 @@
 
 (displayln "Begin letrec")
 
-;; TODO: letrec is broken
-
 (displayln
  (letrec ((even? (lambda (n)
                    (if (zero? n)

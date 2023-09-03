@@ -82,6 +82,11 @@ macro_call(Sly_State *ss, sly_value macro, sly_value form)
 	}
 	sly_assert(closure_p(macro), "Type Error macro must be a procedure");
 	int arity = sly_arity(macro);
+	/* if (!(arity == 0 || arity == 1)) { */
+	/* 	sly_displayln(macro); */
+	/* 	closure *clos = GET_PTR(macro); */
+	/* 	dis_prototype(clos->proto, 1); */
+	/* } */
 	sly_assert(arity == 0 || arity == 1,
 			   "Value Error macros may have at most one argument");
 	closure *clos = GET_PTR(macro);

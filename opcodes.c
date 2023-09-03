@@ -11,7 +11,7 @@ make_stack(Sly_State *ss, size_t nregs)
 	}
 	stack_frame *frame = gc_alloc(ss, sizeof(*frame));
 	frame->h.type = tt_stack_frame;
-	frame->parent = NULL;
+	frame->cont = SLY_NULL;
 	frame->R = make_vector(ss, nregs*2, nregs*2);
 	for (size_t i = 0; i < nregs; ++i) {
 		vector_set(frame->R, i, SLY_VOID);
@@ -60,6 +60,10 @@ dis(INSTR ins, sly_value si)
 	case OP_LOADVOID: {
 		u8 a = GET_A(instr);
 		printf("(LOADVOID %d)%n", a, &pad);
+	} break;
+	case OP_LOADCONT: {
+		u8 a = GET_A(instr);
+		printf("(LOADCONT %d)%n", a, &pad);
 	} break;
 	case OP_GETUPVAL: {
 		u8 a = GET_A(instr);
@@ -125,15 +129,10 @@ dis(INSTR ins, sly_value si)
 		u8 b = GET_B(instr);
 		printf("(CALL/CC %d %d)%n", a, b, &pad);
 	} break;
-	case OP_TAILCALL: {
+	case OP_EXIT: {
 		u8 a = GET_A(instr);
 		u8 b = GET_B(instr);
-		printf("(TAILCALL %d %d)%n", a, b, &pad);
-	} break;
-	case OP_RETURN: {
-		u8 a = GET_A(instr);
-		u8 b = GET_B(instr);
-		printf("(RETURN %d %d)%n", a, b, &pad);
+		printf("(EXIT %d %d)%n", a, b, &pad);
 	} break;
 	case OP_CLOSURE: {
 		u8 a = GET_A(instr);
@@ -216,6 +215,8 @@ _dis_prototype(prototype *proto, int lstk)
 		size_t len = vector_len(proto->K);
 		size_t ulen = vector_len(proto->uplist);
 		printf("Regs: %zu\n", proto->nregs);
+		printf("Vars: %zu\n", proto->nvars);
+		printf("Args: %zu\n", proto->nargs);
 		printf("Upvalues: %zu\n", vector_len(proto->uplist));
 		printf("Upinfo\n");
 		union uplookup uv;

@@ -185,7 +185,8 @@ typedef struct _cont {
 	OBJ_HEADER;
 	struct _stack_frame *frame;
 	size_t pc;
-	size_t ret_slot;
+	int ret_slot;
+	int no_overwrite;
 } continuation;
 
 typedef sly_value (*cfunc)(Sly_State *ss, sly_value args);
@@ -312,6 +313,7 @@ char *symbol_to_cstr(sly_value sym);
 void symbol_set_alias(sly_value sym, sly_value alias);
 sly_value symbol_get_alias(sly_value sym);
 sly_value make_dictionary(Sly_State *ss);
+sly_value dictionary_to_alist(Sly_State *ss, sly_value d);
 sly_value copy_dictionary(Sly_State *ss, sly_value dict);
 int slot_is_free(sly_value slot);
 void dictionary_set(Sly_State *ss, sly_value d, sly_value key, sly_value value);

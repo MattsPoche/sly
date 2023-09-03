@@ -18,15 +18,18 @@
 
 (define-syntax and
   (syntax-rules ()
+	[(_) #t]
 	[(_ x) x]
-	[(_ x1 x2 ...)
-	 (if x1 (and x2 ...) #f)]))
+	[(_ x1 x2 x3 ...)
+	 (if x1 (and x2 x3 ...) #f)]))
 
 (define-syntax or
   (syntax-rules ()
+	[(_) #f]
 	[(_ x) x]
-	[(_ x1 x2 ...)
-	 (if x1 #t (or x2 ...))]))
+	[(_ x1 x2 x3 ...)
+	 (let ([t x1])
+	   (if t t (or x2 x3 ...)))]))
 
 (define-syntax let
   (syntax-rules ()

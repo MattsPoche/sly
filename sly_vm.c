@@ -13,7 +13,7 @@
 #define set_reg(i, v)   vector_set(ss->frame->R, (i), (v))
 #define get_upval(i)    upvalue_get(vector_ref(ss->frame->U, (i)))
 #define set_upval(i, v) upvalue_set(vector_ref(ss->frame->U, (i)), (v))
-#define TOP_LEVEL_P(frame) ((frame)->level == 0 || (frame)->parent == NULL)
+#define TOP_LEVEL_P(frame) ((frame)->level == 0 || (frame)->cont == SLY_NULL)
 #define vm_exit()								\
 	do {										\
 		if (run_gc) {							\
@@ -24,8 +24,22 @@
 
 
 static void close_upvalues(Sly_State *ss, stack_frame *frame);
-static int funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall);
+static int funcall(Sly_State *ss, u32 idx, u32 nargs);
 
+void
+vm_bt(stack_frame *frame)
+{
+	for (;;) {
+		closure *clos = GET_PTR(frame->clos);
+		printf("pc :: %zu\n", frame->pc);
+		dis_prototype(clos->proto, 1);
+		if (null_p(frame->cont)) {
+			return;
+		}
+		continuation *cont = GET_PTR(frame->cont);
+		frame = cont->frame;
+	}
+}
 
 sly_value
 form_closure(Sly_State *ss, sly_value _proto)
@@ -52,7 +66,40 @@ form_closure(Sly_State *ss, sly_value _proto)
 }
 
 static int
-funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall)
+is_tailpos(stack_frame *frame)
+{
+	size_t last_instr = vector_len(frame->code) - 1;
+	if (frame->pc >= last_instr) {
+		return 1;
+	} else {
+		union instr i;
+		i.v = vector_ref(frame->code, frame->pc);
+		switch (i.i.u.as_u8[0]) {
+		case OP_JMP: {
+			size_t loc = GET_Ax(i);
+			return loc >= last_instr;
+		} break;
+		case OP_FJMP: {
+			size_t loc = GET_Bx(i);
+			return loc >= last_instr;
+		} break;
+		default: return 0;
+		}
+	}
+}
+
+static void
+vector_force(Sly_State *ss, sly_value v, size_t idx, sly_value value)
+{
+	if (idx < vector_len(v)) {
+		vector_set(v, idx, value);
+	} else {
+		vector_append(ss, v, value);
+	}
+}
+
+static int
+funcall(Sly_State *ss, u32 idx, u32 nargs)
 {
 	int a = idx;
 	int b = idx + nargs + 1;
@@ -85,14 +132,7 @@ funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall)
 			vector_set(args, i, get_reg(a + 1 + i));
 		}
 		sly_value r = clos->fn(ss, args);
-		if (!TOP_LEVEL_P(ss->frame) && as_tailcall) {
-			size_t ret_slot = ss->frame->ret_slot;
-			close_upvalues(ss, ss->frame);
-			ss->frame = ss->frame->parent;
-			set_reg(ret_slot, r);
-		} else {
-			set_reg(a, r);
-		}
+		set_reg(a, r);
 	} else if (closure_p(val)) {
 		closure *clos = GET_PTR(val);
 		prototype *proto = GET_PTR(clos->proto);
@@ -110,9 +150,11 @@ funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall)
 			vector_set(nframe->R, proto->nargs, vargs);
 		} else {
 			if (nargs != proto->nargs) {
-				sly_display(ss->frame->clos, 1);
-				printf("\n");
-				sly_display(val, 1);
+				printf("nargs :: %u\n", nargs);
+				printf("expected :: %zu\n", proto->nargs);
+				closure *fc = GET_PTR(ss->frame->clos);
+				dis_prototype(fc->proto, 1);
+				dis_prototype(clos->proto, 1);
 				printf("\npc: %zu\n", ss->frame->pc);
 				sly_assert(0, "Error wrong number of arguments (188)");
 			}
@@ -123,14 +165,12 @@ funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall)
 		nframe->K = proto->K;
 		nframe->code = proto->code;
 		nframe->pc = proto->entry;
-		if (!TOP_LEVEL_P(ss->frame) && as_tailcall) {
-			nframe->ret_slot = ss->frame->ret_slot;
+		if (!TOP_LEVEL_P(ss->frame) && is_tailpos(ss->frame)) {
 			nframe->level = ss->frame->level;
-			nframe->parent = ss->frame->parent;
+			nframe->cont = ss->frame->cont;
 			close_upvalues(ss, ss->frame);
 		} else {
-			nframe->ret_slot = a;
-			nframe->parent = ss->frame;
+			nframe->cont = make_continuation(ss, ss->frame, ss->frame->pc, a);
 			nframe->level = ss->frame->level + 1;
 		}
 		ss->frame = nframe;
@@ -138,15 +178,20 @@ funcall(Sly_State *ss, u32 idx, u32 nargs, int as_tailcall)
 		continuation *cc = GET_PTR(val);
 		for (size_t i = 0; i < nargs; ++i) {
 			sly_value arg = get_reg(a + 1 + i);
-			vector_set(cc->frame->R, cc->ret_slot + i, arg);
+			vector_force(ss, cc->frame->R, cc->ret_slot + i, arg);
 		}
-		close_upvalues(ss, ss->frame);
+		if (!TOP_LEVEL_P(ss->frame) && is_tailpos(ss->frame)) {
+			close_upvalues(ss, ss->frame);
+		} else {
+			cc->frame->cont = make_continuation(ss, ss->frame, ss->frame->pc, a);
+		}
 		ss->frame = cc->frame;
 		ss->frame->pc = cc->pc;
 	} else {
 		printf("pc :: %zu\n", ss->frame->pc);
-		sly_display(val, 1);
-		printf("\n");
+		sly_displayln(val);
+		sly_displayln(ss->frame->clos);
+		vm_bt(ss->frame);
 		sly_assert(0, "Type Error expected procedure");
 	}
 	return TYPEOF(val);
@@ -224,6 +269,10 @@ vm_run(Sly_State *ss, int run_gc)
 			u8 a = GET_A(instr);
 			set_reg(a, SLY_VOID);
 		} break;
+		case OP_LOADCONT: {
+			u8 a = GET_A(instr);
+			set_reg(a, ss->frame->cont);
+		} break;
 		case OP_GETUPVAL: {
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
@@ -273,21 +322,19 @@ vm_run(Sly_State *ss, int run_gc)
 				ss->frame->pc = b;
 			}
 		} break;
-		case OP_TAILCALL: {
-			u8 a = GET_A(instr);
-			u8 b = GET_B(instr);
-			funcall(ss, a, b - a - 1, 1);
-		} break;
 		case OP_CALL: {
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
-			funcall(ss, a, b - a - 1, 0);
+			if (null_p(get_reg(a))) {
+				ret_val = get_reg(a+1);
+				vm_exit();
+			}
+			funcall(ss, a, b - a - 1);
 		} break;
 		case OP_CALLWCC: {
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
 			sly_value proc = get_reg(b);
-			sly_value cc = make_continuation(ss, ss->frame, ss->frame->pc, a);
 			if (closure_p(proc)) {
 				closure *clos = GET_PTR(proc);
 				prototype *proto = GET_PTR(clos->proto);
@@ -296,23 +343,27 @@ vm_run(Sly_State *ss, int run_gc)
 				nframe->clos = proc;
 				nframe->level = ss->frame->level + 1;
 				nframe->U = clos->upvals;
-				vector_set(nframe->R, 0, cc);
 				nframe->K = proto->K;
 				nframe->code = proto->code;
 				nframe->pc = proto->entry;
-				nframe->ret_slot = a;
-				nframe->parent = ss->frame;
+				sly_value cc;
+				if (!TOP_LEVEL_P(ss->frame) && is_tailpos(ss->frame)) {
+					nframe->level = ss->frame->level;
+					cc = ss->frame->cont;
+					close_upvalues(ss, ss->frame);
+				} else {
+					cc = make_continuation(ss, ss->frame, ss->frame->pc, a);
+					nframe->level = ss->frame->level + 1;
+				}
+				nframe->cont = cc;
+				vector_set(nframe->R, 0, cc);
 				ss->frame = nframe;
 			} else {
 				sly_assert(0, "CALL/CC Not implemented for procedure type");
 			}
 		} break;
 		case OP_CALLWVALUES: {
-			/* TODO: This doesn't work with `values' likely because the frame used
-			 * only returns one value. Its hard to detect how many values should be
-			 * returned during compile time.
-			 * The only good fix I can think of is to rewrite the vm using strictly
-			 * continuation passing style.
+			/* TODO: appears to be working. Needs more testing.
 			 */
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
@@ -328,9 +379,14 @@ vm_run(Sly_State *ss, int run_gc)
 			rframe->K = proto->K;
 			rframe->code = proto->code;
 			rframe->pc = proto->entry;
-			rframe->level = ss->frame->level + 1;
-			rframe->ret_slot = a;
-			rframe->parent = ss->frame;
+			if (!TOP_LEVEL_P(ss->frame) && is_tailpos(ss->frame)) {
+				rframe->level = ss->frame->level;
+				rframe->cont = ss->frame->cont;
+				close_upvalues(ss, ss->frame);
+			} else {
+				rframe->cont = make_continuation(ss, ss->frame, ss->frame->pc, a);
+				rframe->level = ss->frame->level + 1;
+			}
 			clos = GET_PTR(producer);
 			proto = GET_PTR(clos->proto);
 			stack_frame *pframe = make_stack(ss, proto->nregs);
@@ -340,45 +396,48 @@ vm_run(Sly_State *ss, int run_gc)
 			pframe->code = proto->code;
 			pframe->pc = proto->entry;
 			pframe->level = rframe->level + 1;
-			pframe->ret_slot = a;
-			pframe->parent = rframe;
+			pframe->cont = make_continuation(ss, rframe, rframe->pc, 0);
 			ss->frame = pframe;
 		} break;
 		case OP_APPLY: {
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
 			sly_value args = make_vector(ss, 0, 8);
+			vector_append(ss, args, SLY_NULL);
+			int nargs = 0;
 			for (int i = a; i < b - 1; ++i) {
 				vector_append(ss, args, vector_ref(ss->frame->R, i));
+				nargs++;
 			}
 			sly_value list = vector_ref(ss->frame->R, b - 1);
 			sly_assert(pair_p(list) || null_p(list), "Error Expected list");
 			while (!null_p(list)) {
 				vector_append(ss, args, car(list));
 				list = cdr(list);
+				nargs++;
 			}
 			stack_frame *nframe = make_eval_stack(ss, args);
-			size_t len = vector_len(nframe->R);
-			vector_append(ss, nframe->code, iAB(OP_TAILCALL, 0, len, -1));
-			vector_append(ss, nframe->code, iAB(OP_RETURN, 0, 1, -1));
-			nframe->parent = ss->frame;
-			nframe->level = ss->frame->level + 1;
-			nframe->ret_slot = a;
+			vector_append(ss, nframe->code, iA(OP_LOADCONT, 0, -1));
+			vector_append(ss, nframe->code, iAB(OP_CALL, 1, nargs + 1, -1));
+			vector_append(ss, nframe->code, iAB(OP_CALL, 0, 2, -1));
+			if (!TOP_LEVEL_P(ss->frame) && is_tailpos(ss->frame)) {
+				nframe->level = ss->frame->level;
+				nframe->cont = ss->frame->cont;
+				close_upvalues(ss, ss->frame);
+			} else {
+				nframe->cont = make_continuation(ss, ss->frame, ss->frame->pc, a);
+				nframe->level = ss->frame->level + 1;
+			}
 			ss->frame = nframe;
 		} break;
-		case OP_RETURN: {
+		case OP_EXIT: {
 			u8 a = GET_A(instr);
-			u8 b = GET_B(instr);
+			//u8 b = GET_B(instr);
 			if (TOP_LEVEL_P(ss->frame)) {
 				ret_val = get_reg(a);
 				vm_exit();
-			}
-			size_t ret_slot = ss->frame->ret_slot;
-			close_upvalues(ss, ss->frame);
-			stack_frame *frame = ss->frame;
-			ss->frame = ss->frame->parent;
-			for (int i = 0; i < b - a; ++i) {
-				set_reg(ret_slot + i, vector_ref(frame->R, a + i));
+			} else {
+				sly_assert(0, "Exit from non toplevel");
 			}
 		} break;
 		case OP_CLOSURE: {

@@ -9,6 +9,7 @@
 		 caddr
 		 cdddr
 		 cadddr
+		 list?
 		 zero?
 		 fold-left
 		 fold-right
@@ -61,6 +62,17 @@
 
 (define (cadddr p)
   (car (cdddr p)))
+
+(define (list? xs)
+  (define (race h t)
+	(if (pair? h)
+		(begin
+		  (set! h (cdr h))
+		  (if (pair? h)
+			  (if (not (eq? h t)) (race (cdr h) (cdr t)) #f)
+			  (null? h)))
+		(null? h)))
+  (race xs xs))
 
 (define (zero? n) (= n 0))
 
