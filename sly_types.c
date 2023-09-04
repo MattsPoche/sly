@@ -1003,7 +1003,8 @@ make_continuation(Sly_State *ss, struct _stack_frame *frame, size_t pc, size_t r
 	cc->frame = frame;
 	cc->pc = pc;
 	cc->ret_slot = ret_slot;
-	cc->no_overwrite = 0;
+	cc->nargs = 1;
+	cc->has_varg = 0;
 	return (sly_value)cc;
 }
 

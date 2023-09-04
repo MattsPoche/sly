@@ -164,11 +164,19 @@ funcall(Sly_State *ss, u32 idx, u32 nargs, int is_tailpos)
 		ss->frame = nframe;
 	} else if (continuation_p(val)) {
 		continuation *cc = GET_PTR(val);
-		for (size_t i = 0; i < nargs; ++i) {
-			sly_value arg = get_reg(a + 1 + i);
+		sly_value arg;
+		int i;
+		for (i = 0; i < cc->nargs; ++i) {
+			arg = get_reg(a + 1 + i);
 			vector_force(ss, cc->frame->R, cc->ret_slot + i, arg);
 		}
-		close_upvalues(ss, ss->frame);
+		if (cc->has_varg) {
+			sly_value list = SLY_NULL;
+			for (int j = nargs - 1; i <= j; --j) {
+				list = cons(ss, get_reg(a + 1 + j), list);
+			}
+			vector_force(ss, cc->frame->R, i, list);
+		}
 		if (ss->frame->cont == val) {
 			close_upvalues(ss, ss->frame);
 		} else if (!TOP_LEVEL_P(ss->frame) && is_tailpos) {
@@ -370,15 +378,17 @@ vm_run(Sly_State *ss, int run_gc)
 			u8 c = GET_C(instr);
 			sly_value producer = get_reg(b);
 			sly_value receiver = get_reg(c);
+			/* TODO: Make this work with builtins and continuations
+			 */
 			sly_assert(closure_p(receiver), "Type Error expected <closure>");
 			closure *clos = GET_PTR(receiver);
-			prototype *proto = GET_PTR(clos->proto);
-			stack_frame *rframe = make_stack(ss, proto->nregs);
+			prototype *rproto = GET_PTR(clos->proto);
+			stack_frame *rframe = make_stack(ss, rproto->nregs);
 			rframe->clos = receiver;
 			rframe->U = clos->upvals;
-			rframe->K = proto->K;
-			rframe->code = proto->code;
-			rframe->pc = proto->entry;
+			rframe->K = rproto->K;
+			rframe->code = rproto->code;
+			rframe->pc = rproto->entry;
 			if (!TOP_LEVEL_P(ss->frame) && is_tailpos(ss->frame, a)) {
 				rframe->level = ss->frame->level;
 				rframe->cont = ss->frame->cont;
@@ -388,15 +398,18 @@ vm_run(Sly_State *ss, int run_gc)
 				rframe->level = ss->frame->level + 1;
 			}
 			clos = GET_PTR(producer);
-			proto = GET_PTR(clos->proto);
-			stack_frame *pframe = make_stack(ss, proto->nregs);
+			prototype *pproto = GET_PTR(clos->proto);
+			stack_frame *pframe = make_stack(ss, pproto->nregs);
 			pframe->clos = producer;
 			pframe->U = clos->upvals;
-			pframe->K = proto->K;
-			pframe->code = proto->code;
-			pframe->pc = proto->entry;
+			pframe->K = pproto->K;
+			pframe->code = pproto->code;
+			pframe->pc = pproto->entry;
 			pframe->level = rframe->level + 1;
 			pframe->cont = make_continuation(ss, rframe, rframe->pc, 0);
+			continuation *cc = GET_PTR(pframe->cont);
+			cc->nargs = rproto->nargs;
+			cc->has_varg = rproto->has_varg;
 			ss->frame = pframe;
 		} break;
 		case OP_APPLY: {
@@ -418,8 +431,8 @@ vm_run(Sly_State *ss, int run_gc)
 			}
 			stack_frame *nframe = make_eval_stack(ss, args);
 			vector_append(ss, nframe->code, iA(OP_LOADCONT, 0, -1));
-			vector_append(ss, nframe->code, iAB(OP_CALL, 1, nargs + 1, -1));
-			vector_append(ss, nframe->code, iAB(OP_CALL, 0, 2, -1));
+			vector_append(ss, nframe->code, iAB(OP_TAILCALL, 1, nargs + 1, -1));
+			vector_append(ss, nframe->code, iAB(OP_TAILCALL, 0, 1, -1));
 			if (!TOP_LEVEL_P(ss->frame) && is_tailpos(ss->frame, a)) {
 				nframe->level = ss->frame->level;
 				nframe->cont = ss->frame->cont;

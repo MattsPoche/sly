@@ -186,7 +186,8 @@ typedef struct _cont {
 	struct _stack_frame *frame;
 	size_t pc;
 	int ret_slot;
-	int no_overwrite;
+	int nargs;
+	int has_varg;
 } continuation;
 
 typedef sly_value (*cfunc)(Sly_State *ss, sly_value args);

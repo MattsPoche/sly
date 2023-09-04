@@ -120,10 +120,10 @@
 
 (displayln (employee? (make-dictionary)))
 
-;; (call-with-values (lambda () (values 69 420))
-;;   (lambda (a b)
-;; 	(displayln a)
-;; 	(displayln b)))
+(call-with-values (lambda () (values 69 420))
+  (lambda (a b)
+	(displayln a)
+	(displayln b)))
 
 (define <record-type> (make-dictionary))
 
@@ -220,3 +220,18 @@
 				 (values 1 2 3 4 5))
 			 (lambda (a b c d e)
 			   (* a b c d e))))
+
+(define-syntax with-values
+  (syntax-rules ()
+	[(_ expr consumer)
+	 (call-with-values (lambda () expr) consumer)]))
+
+(set! list (lambda e e))
+
+(displayln (with-values (values 1 2 3 4 5) list))
+
+(displayln
+ (call-with-values
+	 (lambda ()
+       (call/cc (lambda (k) (k 2 3))))
+   (lambda (x y) (list x y))))
