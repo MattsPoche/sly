@@ -1,3 +1,6 @@
+;; TODO: add a promise/stream module
+;;
+
 (require "sly-lib/base.sly")
 
 (import test-module)
@@ -22,7 +25,6 @@
 (display "(values 69) => ")
 (displayln (values 69))
 (displayln (- (*)))
-
 
 (let ([str (call-with-values
 			   (lambda ()

@@ -24,13 +24,14 @@
 
 
 static void close_upvalues(Sly_State *ss, stack_frame *frame);
-static int funcall(Sly_State *ss, u32 idx, u32 nargs);
+static int funcall(Sly_State *ss, u32 idx, u32 nargs, int is_tailcall);
 
 void
 vm_bt(stack_frame *frame)
 {
 	for (;;) {
 		closure *clos = GET_PTR(frame->clos);
+		printf("Backtrace ...\n");
 		printf("pc :: %zu\n", frame->pc);
 		dis_prototype(clos->proto, 1);
 		if (null_p(frame->cont)) {
@@ -66,26 +67,13 @@ form_closure(Sly_State *ss, sly_value _proto)
 }
 
 static int
-is_tailpos(stack_frame *frame)
+is_tailpos(stack_frame *frame, size_t a)
 {
-	size_t last_instr = vector_len(frame->code) - 1;
-	if (frame->pc >= last_instr) {
-		return 1;
-	} else {
-		union instr i;
-		i.v = vector_ref(frame->code, frame->pc);
-		switch (i.i.u.as_u8[0]) {
-		case OP_JMP: {
-			size_t loc = GET_Ax(i);
-			return loc >= last_instr;
-		} break;
-		case OP_FJMP: {
-			size_t loc = GET_Bx(i);
-			return loc >= last_instr;
-		} break;
-		default: return 0;
-		}
-	}
+	if (TOP_LEVEL_P(frame)) return 0;
+	if (null_p(frame->clos)) return 0;
+	prototype *p = GET_PTR(get_prototype(frame->clos));
+	return a == p->nvars + 1
+		&& vector_ref(frame->R, p->nvars) == frame->cont;
 }
 
 static void
@@ -99,7 +87,7 @@ vector_force(Sly_State *ss, sly_value v, size_t idx, sly_value value)
 }
 
 static int
-funcall(Sly_State *ss, u32 idx, u32 nargs)
+funcall(Sly_State *ss, u32 idx, u32 nargs, int is_tailpos)
 {
 	int a = idx;
 	int b = idx + nargs + 1;
@@ -165,7 +153,7 @@ funcall(Sly_State *ss, u32 idx, u32 nargs)
 		nframe->K = proto->K;
 		nframe->code = proto->code;
 		nframe->pc = proto->entry;
-		if (!TOP_LEVEL_P(ss->frame) && is_tailpos(ss->frame)) {
+		if (!TOP_LEVEL_P(ss->frame) && is_tailpos) {
 			nframe->level = ss->frame->level;
 			nframe->cont = ss->frame->cont;
 			close_upvalues(ss, ss->frame);
@@ -180,7 +168,11 @@ funcall(Sly_State *ss, u32 idx, u32 nargs)
 			sly_value arg = get_reg(a + 1 + i);
 			vector_force(ss, cc->frame->R, cc->ret_slot + i, arg);
 		}
-		if (!TOP_LEVEL_P(ss->frame) && is_tailpos(ss->frame)) {
+		close_upvalues(ss, ss->frame);
+		if (ss->frame->cont == val) {
+			close_upvalues(ss, ss->frame);
+		} else if (!TOP_LEVEL_P(ss->frame) && is_tailpos) {
+			cc->frame->cont = ss->frame->cont;
 			close_upvalues(ss, ss->frame);
 		} else {
 			cc->frame->cont = make_continuation(ss, ss->frame, ss->frame->pc, a);
@@ -329,7 +321,16 @@ vm_run(Sly_State *ss, int run_gc)
 				ret_val = get_reg(a+1);
 				vm_exit();
 			}
-			funcall(ss, a, b - a - 1);
+			funcall(ss, a, b - a - 1, 0);
+		} break;
+		case OP_TAILCALL: {
+			u8 a = GET_A(instr);
+			u8 b = GET_B(instr);
+			if (null_p(get_reg(a))) {
+				ret_val = get_reg(a+1);
+				vm_exit();
+			}
+			funcall(ss, a, b - a - 1, 1);
 		} break;
 		case OP_CALLWCC: {
 			u8 a = GET_A(instr);
@@ -341,13 +342,12 @@ vm_run(Sly_State *ss, int run_gc)
 				sly_assert(proto->nargs = 1, "Error wrong number of argument");
 				stack_frame *nframe = make_stack(ss, proto->nregs);
 				nframe->clos = proc;
-				nframe->level = ss->frame->level + 1;
 				nframe->U = clos->upvals;
 				nframe->K = proto->K;
 				nframe->code = proto->code;
 				nframe->pc = proto->entry;
 				sly_value cc;
-				if (!TOP_LEVEL_P(ss->frame) && is_tailpos(ss->frame)) {
+				if (!TOP_LEVEL_P(ss->frame) && is_tailpos(ss->frame, a)) {
 					nframe->level = ss->frame->level;
 					cc = ss->frame->cont;
 					close_upvalues(ss, ss->frame);
@@ -379,7 +379,7 @@ vm_run(Sly_State *ss, int run_gc)
 			rframe->K = proto->K;
 			rframe->code = proto->code;
 			rframe->pc = proto->entry;
-			if (!TOP_LEVEL_P(ss->frame) && is_tailpos(ss->frame)) {
+			if (!TOP_LEVEL_P(ss->frame) && is_tailpos(ss->frame, a)) {
 				rframe->level = ss->frame->level;
 				rframe->cont = ss->frame->cont;
 				close_upvalues(ss, ss->frame);
@@ -420,7 +420,7 @@ vm_run(Sly_State *ss, int run_gc)
 			vector_append(ss, nframe->code, iA(OP_LOADCONT, 0, -1));
 			vector_append(ss, nframe->code, iAB(OP_CALL, 1, nargs + 1, -1));
 			vector_append(ss, nframe->code, iAB(OP_CALL, 0, 2, -1));
-			if (!TOP_LEVEL_P(ss->frame) && is_tailpos(ss->frame)) {
+			if (!TOP_LEVEL_P(ss->frame) && is_tailpos(ss->frame, a)) {
 				nframe->level = ss->frame->level;
 				nframe->cont = ss->frame->cont;
 				close_upvalues(ss, ss->frame);

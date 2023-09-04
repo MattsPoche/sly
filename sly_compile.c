@@ -546,7 +546,11 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 		form = CDR(form);
 	}
 	src_info = intern_syntax(ss, (sly_value)stx);
-	vector_append(ss, proto->code, iAB(OP_CALL, start, reg, src_info));
+	if (stx->context & ctx_tail_pos) {
+		vector_append(ss, proto->code, iAB(OP_TAILCALL, start, reg, src_info));
+	} else {
+		vector_append(ss, proto->code, iAB(OP_CALL, start, reg, src_info));
+	}
 	if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
 	return start;
 }
@@ -614,7 +618,7 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 	}
 	if (reg == -1) reg = tmp;
 	if ((size_t)reg >= proto->nregs) proto->nregs = reg + 1;
-	vector_append(ss, proto->code, iAB(OP_CALL, proto->nvars, proto->nvars+2, -1));
+	vector_append(ss, proto->code, iAB(OP_TAILCALL, proto->nvars, proto->nvars+2, -1));
 	cc->cscope = cc->cscope->parent;
 	reg = preg;
 	prototype *cproto = GET_PTR(cc->cscope->proto);
@@ -816,7 +820,8 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			prototype *proto = GET_PTR(cc->cscope->proto);
 			union instr instr;
 			instr.v = vector_pop(ss, proto->code);
-			sly_assert(instr.i.u.as_u8[0] == OP_CALL, "Error somethings wrong :,(");
+			sly_assert(instr.i.u.as_u8[0] == OP_CALL
+					   || instr.i.u.as_u8[0] == OP_TAILCALL, "Error somethings wrong :,(");
 			instr.i.u.as_u8[0] = OP_APPLY;
 			vector_append(ss, proto->code, instr.v);
 		} break;

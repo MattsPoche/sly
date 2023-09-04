@@ -4,7 +4,8 @@
 (require "sly-lib/syntax-rules.sly")
 (require "sly-lib/with-syntax.sly")
 
-(provide and
+(provide set-m!
+		 and
 		 or
 		 let
 		 let*
@@ -15,6 +16,11 @@
 		 do
 		 when
 		 unless)
+
+(define-syntax set-m!
+  (syntax-rules (dictionary-ref)
+	[(_ (dictionary-ref dict key) value)
+	 (dictionary-set! dict key value)]))
 
 (define-syntax and
   (syntax-rules ()

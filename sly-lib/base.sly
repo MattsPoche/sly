@@ -48,6 +48,7 @@
  define&)
 
 (provide
+ set-m!
  provide
  quasiquote
  syntax-quasiquote
