@@ -1,6 +1,4 @@
 ;; TODO: add a promise/stream module
-;;
-
 (require "sly-lib/base.sly")
 
 (import test-module)
@@ -66,7 +64,7 @@
 
 (displayln (list->vector '(a b c d)))
 
-(define-syntax decorate
+(define-syntax decorate!
   (syntax-rules ()
 	[(_ fn decorator)
 	 (set! fn (decorator fn))]))
@@ -235,3 +233,73 @@
 	 (lambda ()
        (call/cc (lambda (k) (k 2 3))))
    (lambda (x y) (list x y))))
+
+(define-syntax let*-values
+  (syntax-rules ()
+	[(_ () body ...)
+	 (let () body ...)]
+	[(_ ([formals expr] [formals* expr*] ...) body ...)
+	 (call-with-values (lambda () expr)
+	   (lambda formals
+		 (let*-values ([formals* expr*] ...)
+		   body ...)))]))
+
+#;(define-syntax let-values
+  (lambda (x)
+	(syntax-case x ()
+	  [(_ () body ...)
+	   #'(let () body ...)]
+	  [(_ ([(var vars ... . tail) expr] [formals* expr*] ...) body ...)
+	   (let ([temps (generate-temporaries
+					 (if (null? #'tail)
+						 #'(var vars ...)
+						 #'(var vars ... tail)))])
+		 (displayln temps)
+		 (with-syntax ([(temps ...) #'(temps ...)]
+					   [(expr ((formals* expr*) ...) (body ...))
+						#'(expr ((formals* expr*) ... (body ...)))])
+		   )
+		 #'(void))])))
+
+(define-syntax let-values
+  (syntax-rules ()
+    ((_ () f1 f2 ...) (let () f1 f2 ...))
+    ((_ ((fmls1 expr1) (fmls2 expr2) ...) f1 f2 ...)
+     (lvhelp fmls1 () () expr1 ((fmls2 expr2) ...) (f1 f2 ...)))))
+
+(define-syntax lvhelp
+  (lambda (x)
+	(syntax-case x ()
+      [(_ (x1 . fmls) (x ...) (t ...) e m b)
+	   (let ([form #'(lvhelp fmls (x ... x1) (t ... tmp) e m b)])
+		 (displayln "match 1")
+		 (displayln (syntax->datum form))
+		 form)]
+      [(_ () (x ...) (t ...) e m b)
+       (let ([ form #'(call-with-values
+						  (lambda () e)
+						(lambda (t ...)
+						  (let-values m (let ((x t) ...) . b))))])
+		 (displayln "match 2")
+		 (displayln (syntax->datum form))
+		 form)]
+      [(_ xr (x ...) (t ...) e m b)
+       (let ([form #'(call-with-values
+						 (lambda () e)
+					   (lambda (t ... . tmpr)
+						 (let-values m (let ((x t) ... (xr tmpr)) . b))))])
+		 (displayln "match 3")
+		 (displayln (syntax->datum form))
+		 form)])))
+
+(displayln
+ (let*-values ([(a b) (values 1 2)]
+			   [(a b) (values b a)])
+   (list a b)))
+
+(displayln
+ (let-values ([(a b c) (values 1 2 3)])
+   (displayln a)
+   (displayln b)
+   (displayln c)
+   (list a b c)))

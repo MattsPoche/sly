@@ -276,7 +276,13 @@ sly_hash(sly_value v)
 		return sym->hash;
 	} else if (string_p(v)) {
 		byte_vector *bv = GET_PTR(v);
-		return hash_str(bv->elems, bv->len);
+		size_t len;
+		if (bv->len > 32) {
+			len = 32;
+		} else {
+			len = bv->len;
+		}
+		return hash_str(bv->elems, len);
 	} else if (vector_p(v)) {
 		return hash_vector(v);
 	} else if (dictionary_p(v)) {
@@ -941,14 +947,14 @@ string_len(sly_value str)
 sly_value
 string_eq(sly_value s1, sly_value s2)
 {
-	sly_assert(string_p(s1) && string_p(s2), "Type error expected <string>");
-	if (string_len(s1) != string_len(s2)) return 0;
+	sly_assert((string_p(s1) && string_p(s2))
+			   || (byte_vector_p(s1) && byte_vector_p(s2)),
+			   "Type error expected <string>");
 	byte_vector *bv1 = GET_PTR(s1);
 	byte_vector *bv2 = GET_PTR(s2);
-	for (size_t i = 0; i < bv1->len; ++i) {
-		if (bv1->elems[i] != bv2->elems[i]) return 0;
-	}
-	return 1;
+	return bv1->len == bv2->len
+		&& bv1->elems[0] == bv2->elems[0]
+		&& memcmp(bv1->elems+1, bv2->elems+1, bv1->len-1) == 0;
 }
 
 sly_value
@@ -1067,7 +1073,12 @@ addix(Sly_State *ss, i64 x, sly_value y)
 {
 	sly_assert(number_p(y), "Type Error expected number");
 	if (int_p(y)) {
-		return make_int(ss, x + get_int(y));
+		i64 res;
+		if (__builtin_add_overflow(x, get_int(y), &res)) {
+			sly_assert(0, "Error overflow");
+		} else {
+			return make_int(ss, res);
+		}
 	} else if (float_p(y)) {
 		return make_float(ss, (f64)x + get_float(y));
 	}
@@ -1106,7 +1117,12 @@ subix(Sly_State *ss, i64 x, sly_value y)
 {
 	sly_assert(number_p(y), "Type Error expected number");
 	if (int_p(y)) {
-		return make_int(ss, x - get_int(y));
+		i64 res;
+		if (__builtin_sub_overflow(x, get_int(y), &res)) {
+			sly_assert(0, "Error overflow");
+		} else {
+			return make_int(ss, res);
+		}
 	} else if (float_p(y)) {
 		return make_float(ss, (f64)x - get_float(y));
 	}
@@ -1145,7 +1161,12 @@ mulix(Sly_State *ss, i64 x, sly_value y)
 {
 	sly_assert(number_p(y), "Type Error expected number");
 	if (int_p(y)) {
-		return make_int(ss, x * get_int(y));
+		i64 res;
+		if (__builtin_mul_overflow(x, get_int(y), &res)) {
+			sly_assert(0, "Error overflow");
+		} else {
+			return make_int(ss, res);
+		}
 	} else if (float_p(y)) {
 		return make_float(ss, (f64)x * get_float(y));
 	}
@@ -1434,6 +1455,9 @@ sly_equal(sly_value o1, sly_value o2)
 		return sly_num_eq(o1, o2);
 	}
 	if (string_p(o1) && string_p(o2)) {
+		return string_eq(o1, o2);
+	}
+	if (byte_vector_p(o1) && byte_vector_p(o2)) {
 		return string_eq(o1, o2);
 	}
 	if (vector_p(o1) && vector_p(o2)) {
@@ -2163,7 +2187,7 @@ construct_syntax(Sly_State *ss, sly_value template, sly_value pvars, sly_value n
 			sly_value f = SLY_NULL;
 			sly_value sub = pvar_value(ss, pvars, ELLIPSIS, idx);
 			if (void_p(sub) || match_id_symbol(sub, EXPANSION_END)) {
-				return SLY_NULL;
+				return construct_syntax(ss, cdr(t), pvars, names, idx);
 			}
 			sly_value expvars = make_dictionary(ss);
 			dictionary_import(ss, expvars, pvars);
