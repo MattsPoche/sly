@@ -1,40 +1,45 @@
 ;;; Basic list operations
 
-(provide displayln
-		 display-syntax
-		 caar
-		 cdar
-		 cadr
-		 cddr
-		 caddr
-		 cdddr
-		 cadddr
-		 list?
-		 zero?
-		 fold-left
-		 fold-right
-		 member
-		 memv
-		 memq
-		 remove
-		 append
-		 reverse
-		 last-pair
-		 list-copy
-		 length
-		 list-ref
-		 count
-		 argmax
-		 map
-		 for-each
-		 generate-temporaries
-		 take
-		 assoc
-		 alist-cons
-		 alist-copy
-		 plist-get
-		 plist-put
-		 provide)
+(provide
+ values
+ displayln
+ display-syntax
+ caar
+ cdar
+ cadr
+ cddr
+ caddr
+ cdddr
+ cadddr
+ list?
+ zero?
+ fold-left
+ fold-right
+ member
+ memv
+ memq
+ remove
+ append
+ reverse
+ last-pair
+ list-copy
+ length
+ list-ref
+ count
+ argmax
+ map
+ for-each
+ generate-temporaries
+ take
+ assoc
+ alist-cons
+ alist-copy
+ plist-get
+ plist-put
+ provide)
+
+(define (values . things)
+  (call/cc (lambda (cc) (apply cc things))))
 
 (define (displayln x) (display x)(display "\n"))
 
@@ -76,33 +81,21 @@
 
 (define (zero? n) (= n 0))
 
-(define (fold-left f z xs)
-  (if (null? xs)
-	  z
-	  ((lambda (x xs)
-		 (fold-left f (f x z) xs))
-	   (car xs) (cdr xs))))
-
-(define (fold-right f z xs)
-  (if (null? xs)
-	  z
-	  ((lambda (x xs)
-		 (f x (fold-right f z xs)))
-	   (car xs) (cdr xs))))
-
 (define (member x xs . compare)
   (if (null? compare)
 	  (set! compare equal?)
 	  (set! compare (car compare)))
-  (if (null? xs)
-	  #f
-	  (if (compare x (car xs))
-		  (car xs)
-		  (member x (cdr xs) compare))))
+  (define (loop xs)
+	(if (null? xs)
+		#f
+		(if (compare x (car xs))
+			(car xs)
+			(loop (cdr xs)))))
+  (loop xs))
 
 (define (memq x xs) (member x xs eq?))
 
-(define memv member) ;; TODO: emplement `eqv?'
+(define (memv x xs) (member x xs eqv?))
 
 (define (remove xs x)
   (if (null? xs)
@@ -171,6 +164,23 @@
 	  '()
 	  (cons (cdar xs) (*tails* (cdr xs)))))
 
+(define (fold-left f z . xs)
+  (if (null? (car xs))
+	  z
+	  ((lambda (heads tails)
+		 (apply fold-left f (apply f (append heads (list z))) tails))
+	   (*heads* xs) (*tails* xs))))
+
+(define (fold-right f z . xs)
+  (define (append xs ys)
+	(if (null? xs) ys
+		(cons (car xs) (append (cdr xs) ys))))
+  (if (null? (car xs))
+	  z
+	  ((lambda (heads tails)
+		 (apply f (append heads (list (apply fold-right f z tails)))))
+	   (*heads* xs) (*tails* xs))))
+
 (define (map f . xs)
   (if (null? (car xs))
 	  '()
@@ -218,7 +228,7 @@
   (if (null? plist) '()
 	  (if (if (eq? (car plist) prop) (pair? (cdr plist)) #f)
 		  (cadr plist)
-		  (plist-get (cdr plist) prop))))
+		  (plist-get (cddr plist) prop))))
 
 (define (plist-put plist prop val)
   (if (null? plist)

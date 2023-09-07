@@ -15,7 +15,9 @@
 		 case
 		 do
 		 when
-		 unless)
+		 unless
+		 let*-values
+		 let-values)
 
 (define-syntax set-m!
   (syntax-rules (dictionary-ref)
@@ -144,3 +146,34 @@
 	 (if condition
 		 (void)
 		 (begin body ...))]))
+
+(define-syntax let*-values
+  (syntax-rules ()
+	[(_ () body ...)
+	 (let () body ...)]
+	[(_ ([formals expr] [formals* expr*] ...) body ...)
+	 (call-with-values (lambda () expr)
+	   (lambda formals
+		 (let*-values ([formals* expr*] ...)
+		   body ...)))]))
+
+(define-syntax let-values
+  (syntax-rules ()
+    ((_ () f1 f2 ...) (let () f1 f2 ...))
+    ((_ ((fmls1 expr1) (fmls2 expr2) ...) f1 f2 ...)
+     (lvhelp fmls1 () () expr1 ((fmls2 expr2) ...) (f1 f2 ...)))))
+
+(define-syntax lvhelp
+  (syntax-rules ()
+    [(_ (x1 . fmls) (x ...) (t ...) e m b)
+	 (lvhelp fmls (x ... x1) (t ... tmp) e m b)]
+    [(_ () (x ...) (t ...) e m b)
+	 (call-with-values
+		 (lambda () e)
+	   (lambda (t ...)
+		 (let-values m (let ((x t) ...) . b))))]
+    [(_ xr (x ...) (t ...) e m b)
+	 (call-with-values
+		 (lambda () e)
+	   (lambda (t ... . tmpr)
+		 (let-values m (let ((x t) ... (xr tmpr)) . b))))]))

@@ -136,16 +136,14 @@ funcall(Sly_State *ss, u32 idx, u32 nargs, int is_tailpos)
 				vargs = cons(ss, get_reg(i), vargs);
 			}
 			vector_set(nframe->R, proto->nargs, vargs);
-		} else {
-			if (nargs != proto->nargs) {
-				printf("nargs :: %u\n", nargs);
-				printf("expected :: %zu\n", proto->nargs);
-				closure *fc = GET_PTR(ss->frame->clos);
-				dis_prototype(fc->proto, 1);
-				dis_prototype(clos->proto, 1);
-				printf("\npc: %zu\n", ss->frame->pc);
-				sly_assert(0, "Error wrong number of arguments (188)");
-			}
+		} else if (nargs != proto->nargs) {
+			printf("nargs :: %u\n", nargs);
+			printf("expected :: %zu\n", proto->nargs);
+			closure *fc = GET_PTR(ss->frame->clos);
+			dis_prototype(fc->proto, 1);
+			dis_prototype(clos->proto, 1);
+			printf("\npc: %zu\n", ss->frame->pc);
+			sly_assert(0, "Error wrong number of arguments (188)");
 		}
 		for (size_t i = 0; i < proto->nargs; ++i) {
 			vector_set(nframe->R, i, get_reg(a + 1 + i));

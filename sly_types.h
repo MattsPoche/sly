@@ -102,6 +102,7 @@ enum type_tag {
 	tt_syntax,			// 14
 	tt_scope,			// 15
 	tt_stack_frame,		// 16
+	tt_user_data,       // 17
 };
 
 typedef struct _gc_object {
@@ -153,16 +154,16 @@ typedef struct _vector {
 
 typedef struct _proto {
 	OBJ_HEADER;
-	sly_value uplist;   // <vector> list of upval locations
-	sly_value K;        // <vector> constants
-	sly_value code;     // <vector> Byte code segment
-	size_t entry;       // entry point
-	size_t nregs;       // count of registers needed
-	size_t nargs;       // count of arguments
-	size_t nvars;       // count of arguments + variables
-	int has_varg;       // has variable argument
-	sly_value syntax_info; // <vector> syntax
-	sly_value binding;  // symbol
+	sly_value uplist;		// <vector> list of upval locations
+	sly_value K;			// <vector> constants
+	sly_value code;			// <vector> Byte code segment
+	size_t entry;			// entry point
+	size_t nregs;			// count of registers needed
+	size_t nargs;			// count of arguments
+	size_t nvars;			// count of arguments + variables
+	int has_varg;			// has variable argument
+	sly_value syntax_info;	// <vector> syntax
+	sly_value binding;		// symbol
 } prototype;
 
 typedef struct _upvalue {
@@ -221,6 +222,13 @@ typedef struct _syntax {
 	u32 context;
 } syntax;
 
+typedef struct _user_data {
+	OBJ_HEADER;
+	sly_value properties; // plist
+	size_t size;
+	u8 data_bytes[];
+} user_data;
+
 void _sly_assert(int p, char *msg, int line_number, const char *func_name, char *file_name);
 void sly_raise_exception(Sly_State *ss, int excpt, char *msg);
 void sly_display(sly_value v, int lit);
@@ -245,6 +253,7 @@ sly_value tail(sly_value obj);
 int list_p(sly_value list);
 sly_value copy_list(Sly_State *ss, sly_value list);
 int list_eq(sly_value o1, sly_value o2);
+sly_value list_append(Sly_State *ss, sly_value p, sly_value v);
 void append(sly_value p, sly_value v);
 size_t list_len(sly_value list);
 sly_value list_ref(sly_value list, size_t idx);
@@ -280,7 +289,7 @@ void string_set(sly_value v, size_t idx, sly_value b);
 sly_value string_join(Sly_State *ss, sly_value ls, sly_value delim);
 char *string_to_cstr(sly_value s);
 size_t string_len(sly_value str);
-sly_value string_eq(sly_value s1, sly_value s2);
+int string_eq(sly_value s1, sly_value s2);
 sly_value make_prototype(Sly_State *ss, sly_value uplist, sly_value constants,
 						 sly_value code, size_t nregs, size_t nargs,
 						 size_t entry, int has_varg);
@@ -302,6 +311,7 @@ int sly_num_eq(sly_value x, sly_value y);
 int sly_num_lt(sly_value x, sly_value y);
 int sly_num_gt(sly_value x, sly_value y);
 int sly_eq(sly_value o1, sly_value o2);
+int sly_eqv(sly_value o1, sly_value o2);
 int sly_equal(sly_value o1, sly_value o2);
 sly_value make_syntax(Sly_State *ss, token tok, sly_value datum);
 sly_value copy_syntax(Sly_State *ss, sly_value s);
@@ -332,6 +342,13 @@ sly_value make_closed_upvalue(Sly_State *ss, sly_value val);
 int upvalue_isclosed(sly_value uv);
 sly_value upvalue_get(sly_value uv);
 void upvalue_set(sly_value uv, sly_value value);
+sly_value make_user_data(Sly_State *ss, size_t data_size);
+void *user_data_get(sly_value v);
+void user_data_set(sly_value v, void *ptr);
+sly_value user_data_get_properties(sly_value v);
+void user_data_set_properties(sly_value v, sly_value plist);
+sly_value plist_get(sly_value plist, sly_value prop);
+sly_value plist_put(Sly_State *ss, sly_value plist, sly_value prop, sly_value value);
 int match_syntax(Sly_State *ss, sly_value pattern, sly_value literals,
 				 sly_value form, sly_value pvars, int repeat);
 sly_value get_pattern_var_names(Sly_State *ss, sly_value pattern, sly_value literals);
@@ -363,6 +380,7 @@ sly_value construct_syntax(Sly_State *ss, sly_value template, sly_value pvars,
 #define upvalue_p(v)     (ptr_p(v) && TYPEOF(v) == tt_upvalue)
 #define continuation_p(v) (ptr_p(v) && TYPEOF(v) == tt_continuation)
 #define syntax_p(v)      (ptr_p(v) && TYPEOF(v) == tt_syntax)
+#define user_data_p(v)   (ptr_p(v) && TYPEOF(v) == tt_user_data)
 #define heap_obj_p(v)    (ptr_p(v) || pair_p(v))
 #define syntax_pair_p(v) (syntax_p(v) && pair_p(syntax_to_datum(v)))
 #define identifier_p(v)  (syntax_p(v) && symbol_p(syntax_to_datum(v)))

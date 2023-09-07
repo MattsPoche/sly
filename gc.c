@@ -77,6 +77,13 @@ traverse_scope(Sly_State *ss, struct scope *scope)
 }
 
 static void
+traverse_user_data(Sly_State *ss, user_data *ud)
+{
+	mark_gray(ss, GET_PTR(ud->properties));
+}
+
+
+static void
 traverse_pair(Sly_State *ss, pair *p)
 {
 	mark_gray_safe(ss, p->car);
@@ -189,6 +196,9 @@ traverse_object(Sly_State *ss, gc_object *obj)
 	case tt_stack_frame:
 		traverse_frame(ss, (stack_frame *)obj);
 		break;
+	case tt_user_data:
+		traverse_user_data(ss, (user_data *)obj);
+		break;
 	}
 }
 
@@ -282,6 +292,10 @@ free_object(Sly_State *ss, gc_object *obj)
 		size = sizeof(*vec);
 		ss->gc->bytes -= vec->cap * sizeof(sly_value);
 		FREE(vec->elems);
+	} break;
+	case tt_user_data: {
+		user_data *ud = (user_data *)obj;
+		size = sizeof(*ud) + ud->size;
 	} break;
 	}
 	memset(obj, -1, size);

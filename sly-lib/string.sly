@@ -1,0 +1,36 @@
+(require "sly-lib/list.sly")
+(require "sly-lib/quasiquote.sly")
+(require "sly-lib/syntax-case.sly")
+(require "sly-lib/syntax-rules.sly")
+(require "sly-lib/with-syntax.sly")
+(require "sly-lib/basic-special-forms.sly")
+(require "sly-lib/module.sly")
+(require "sly-lib/kwargs.sly")
+
+(provide
+ string
+ substring
+ string->list
+ list->string)
+
+(define (string . chars)
+  (let ([s (make-string (length chars))])
+	(let loop ([i 0]
+			   [chars chars])
+	  (if (null? chars) s
+		  (begin
+			(string-set! s i (car chars))
+			(loop (+ i 1) (cdr chars)))))))
+
+(define (substring s1 m n)
+  (let ((s2 (make-string (- n m))))
+    (do ((j 0 (+ j 1)) (i m (+ i 1)))
+        ((= i n) s2)
+      (string-set! s2 j (string-ref s1 i)))))
+
+(define (string->list s)
+  (do ((i (- (string-length s) 1) (- i 1))
+       (ls '() (cons (string-ref s i) ls)))
+      ((< i 0) ls)))
+
+(define (list->string xs) (apply string xs))

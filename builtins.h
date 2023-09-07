@@ -1,6 +1,8 @@
 #ifndef SLY_BUILTINS_H_
 #define SLY_BUILTINS_H_
 
+#include "sly_ports.h"
+
 /* Builtin function library.
  * Include once in sly_compile.c
  */
@@ -23,6 +25,7 @@
 		dictionary_set(ss, cc->globals, sym, value);	\
 		cc->builtins = cons(ss, entry, cc->builtins);	\
 	} while (0)
+
 
 static sly_value
 cadd(Sly_State *ss, sly_value args)
@@ -234,6 +237,25 @@ cstring_p(Sly_State *ss, sly_value args)
 }
 
 static sly_value
+cstring_eq(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	sly_value s1 = vector_ref(args, 0);
+	sly_value s2 = vector_ref(args, 1);
+	sly_value rest = vector_ref(args, 2);
+	if (!string_eq(s1, s2)) {
+		return SLY_FALSE;
+	}
+	while (!null_p(rest)) {
+		if (!string_eq(s1, car(rest))) {
+			return SLY_FALSE;
+		}
+		rest = cdr(rest);
+	}
+	return SLY_TRUE;
+}
+
+static sly_value
 cprocedure_p(Sly_State *ss, sly_value args)
 {
 	UNUSED(ss);
@@ -357,21 +379,30 @@ csymbol_to_string(Sly_State *ss, sly_value args)
 }
 
 static sly_value
-cequal_p(Sly_State *ss, sly_value args)
-{
-	UNUSED(ss);
-	sly_value v1 = vector_ref(args, 0);
-	sly_value v2 = vector_ref(args, 1);
-	return ctobool(sly_equal(v1, v2));
-}
-
-static sly_value
 ceq_p(Sly_State *ss, sly_value args)
 {
 	UNUSED(ss);
 	sly_value v1 = vector_ref(args, 0);
 	sly_value v2 = vector_ref(args, 1);
 	return ctobool(sly_eq(v1, v2));
+}
+
+static sly_value
+ceqv_p(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	sly_value v1 = vector_ref(args, 0);
+	sly_value v2 = vector_ref(args, 1);
+	return ctobool(sly_eqv(v1, v2));
+}
+
+static sly_value
+cequal_p(Sly_State *ss, sly_value args)
+{
+	UNUSED(ss);
+	sly_value v1 = vector_ref(args, 0);
+	sly_value v2 = vector_ref(args, 1);
+	return ctobool(sly_equal(v1, v2));
 }
 
 static sly_value
@@ -860,6 +891,217 @@ cfile_readable(Sly_State *ss, sly_value args)
 	return SLY_TRUE;
 }
 
+static sly_value
+cinput_port_p(Sly_State *ss, sly_value args)
+{
+	return ctobool(input_port_p(ss, vector_ref(args, 0)));
+}
+
+static sly_value
+coutput_port_p(Sly_State *ss, sly_value args)
+{
+	return ctobool(output_port_p(ss, vector_ref(args, 0)));
+}
+
+static sly_value
+ceof_object_p(Sly_State *ss, sly_value args)
+{
+	return ctobool(eof_object_p(ss, vector_ref(args, 0)));
+}
+
+static sly_value
+cstring_port_p(Sly_State *ss, sly_value args)
+{
+	return ctobool(string_port_p(ss, vector_ref(args, 0)));
+}
+
+static sly_value
+cport_p(Sly_State *ss, sly_value args)
+{
+	return ctobool(port_p(ss, vector_ref(args, 0)));
+}
+
+static sly_value
+cport_closed_p(Sly_State *ss, sly_value args)
+{
+	return ctobool(port_closed_p(ss, vector_ref(args, 0)));
+}
+
+static sly_value
+cfile_stream_port_p(Sly_State *ss, sly_value args)
+{
+	return ctobool(file_stream_port_p(ss, vector_ref(args, 0)));
+}
+
+static sly_value
+copen_input_file(Sly_State *ss, sly_value args)
+{
+	return open_input_file(ss, vector_ref(args, 0));
+}
+
+static sly_value
+copen_output_file(Sly_State *ss, sly_value args)
+{
+	return open_output_file(ss, vector_ref(args, 0), 0);
+}
+
+static sly_value
+cclose_input_port(Sly_State *ss, sly_value args)
+{
+	close_input_port(ss, vector_ref(args, 0));
+	return SLY_VOID;
+}
+
+static sly_value
+cclose_output_port(Sly_State *ss, sly_value args)
+{
+	close_output_port(ss, vector_ref(args, 0));
+	return SLY_VOID;
+}
+
+static sly_value
+copen_output_string(Sly_State *ss, sly_value args)
+{
+	UNUSED(args);
+	open_output_string(ss);
+	return SLY_VOID;
+}
+
+static sly_value
+cget_output_string(Sly_State *ss, sly_value args)
+{
+	return get_output_string(ss, vector_ref(args, 0));
+}
+
+static sly_value
+cflush_output(Sly_State *ss, sly_value args)
+{
+	flush_output(ss, vector_ref(args, 0));
+	return SLY_VOID;
+}
+
+static sly_value
+cfile_position(Sly_State *ss, sly_value args)
+{
+	sly_value port = vector_ref(args, 0);
+	sly_value v = vector_ref(args, 1);
+	i64 pos = -1;
+	if (!null_p(v) && int_p(v)) {
+		pos = get_int(v);
+	}
+	return make_int(ss, file_position(ss, port, pos));
+}
+
+static sly_value
+ccurrent_input_port(Sly_State *ss, sly_value args)
+{
+	UNUSED(args);
+	return dictionary_ref(ss->cc->globals, cstr_to_symbol("*STDIN*"));
+}
+
+static sly_value
+ccurrent_output_port(Sly_State *ss, sly_value args)
+{
+	UNUSED(args);
+	return dictionary_ref(ss->cc->globals, cstr_to_symbol("*STDOUT*"));
+}
+
+static sly_value
+ccurrent_error_port(Sly_State *ss, sly_value args)
+{
+	UNUSED(args);
+	return dictionary_ref(ss->cc->globals, cstr_to_symbol("*STDERR*"));
+}
+
+static sly_value
+cwrite_char(Sly_State *ss, sly_value args)
+{
+	sly_value ch = vector_ref(args, 0);
+	sly_value list = vector_ref(args, 1);
+	sly_value port;
+	if (null_p(list)) {
+		port = ccurrent_output_port(ss, SLY_NULL);
+	} else {
+		port = car(list);
+	}
+	write_char(ss, ch, port);
+	return SLY_VOID;
+}
+
+static sly_value
+cwrite_string(Sly_State *ss, sly_value args)
+{
+	sly_value str = vector_ref(args, 0);
+	sly_value list = vector_ref(args, 1);
+	sly_value port = ccurrent_output_port(ss, SLY_NULL);
+	i64 start = 0;
+	i64 end = string_len(str);
+	if (!null_p(list)) {
+		port = car(list);
+		list = cdr(list);
+		if (!null_p(list)) {
+			start = get_int(car(list));
+			list = cdr(list);
+			if (!null_p(list)) {
+				end = get_int(car(list));
+			}
+		}
+	}
+	return make_int(ss, write_string(ss, str, port, start, end));
+}
+
+static sly_value
+cread_char(Sly_State *ss, sly_value args)
+{
+	sly_value list = vector_ref(args, 0);
+	sly_value port;
+	if (null_p(list)) {
+		port = ccurrent_input_port(ss, SLY_NULL);
+	} else {
+		port = car(list);
+	}
+	return read_char(ss, port);
+}
+
+static sly_value
+cread_line(Sly_State *ss, sly_value args)
+{
+	sly_value list = vector_ref(args, 0);
+	sly_value port;
+	if (null_p(list)) {
+		port = ccurrent_input_port(ss, SLY_NULL);
+	} else {
+		port = car(list);
+	}
+	return read_line(ss, port);
+}
+
+static sly_value
+cport_to_string(Sly_State *ss, sly_value args)
+{
+	sly_value list = vector_ref(args, 0);
+	sly_value port;
+	if (null_p(list)) {
+		port = ccurrent_input_port(ss, SLY_NULL);
+	} else {
+		port = car(list);
+	}
+	return port_to_string(ss, port);
+}
+
+static sly_value
+cport_to_lines(Sly_State *ss, sly_value args)
+{
+	sly_value list = vector_ref(args, 0);
+	sly_value port;
+	if (null_p(list)) {
+		port = ccurrent_input_port(ss, SLY_NULL);
+	} else {
+		port = car(list);
+	}
+	return port_to_lines(ss, port);
+}
+
 static void
 init_builtins(Sly_State *ss)
 {
@@ -894,14 +1136,16 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("vector?", cvector_p, 1, 0);
 	ADD_BUILTIN("byte-vector?", cbyte_vector_p, 1, 0);
 	ADD_BUILTIN("string?", cstring_p, 1, 0);
+	ADD_BUILTIN("string=?", cstring_eq, 2, 1);
 	ADD_BUILTIN("dictionary?", cdictionary_p, 1, 0);
 	ADD_BUILTIN("procedure?", cprocedure_p, 1, 0);
 	ADD_BUILTIN("syntax?", csyntax_p, 1, 0);
 	ADD_BUILTIN("syntax-pair?", csyntax_pair_p, 1, 0);
 	ADD_BUILTIN("identifier?", cidentifier_p, 1, 0);
 	ADD_BUILTIN("identifier=?", cidentifier_eq, 2, 0);
-	ADD_BUILTIN("equal?", cequal_p, 2, 0);
 	ADD_BUILTIN("eq?", ceq_p, 2, 0);
+	ADD_BUILTIN("eqv?", ceqv_p, 2, 0);
+	ADD_BUILTIN("equal?", cequal_p, 2, 0);
 	ADD_BUILTIN("cons", ccons, 2, 0);
 	ADD_BUILTIN("car", ccar, 1, 0);
 	ADD_BUILTIN("cdr", ccdr, 1, 0);
@@ -953,8 +1197,42 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("get-pattern-var-names", cget_pattern_var_names, 2, 0);
 	ADD_BUILTIN("construct-syntax", cconstruct_syntax, 3, 0);
 	ADD_BUILTIN("disassemble", cdis_dis, 1, 0);
+	ADD_BUILTIN("input-port?", cinput_port_p, 1, 0);
+	ADD_BUILTIN("output-input-port?", coutput_port_p, 1, 0);
+	ADD_BUILTIN("port?", cport_p, 1, 0);
+	ADD_BUILTIN("file-stream-port?", cfile_stream_port_p, 1, 0);
+	ADD_BUILTIN("port-closed?", cport_closed_p, 1, 0);
+	ADD_BUILTIN("open-input-file", copen_input_file, 1, 0);
+	ADD_BUILTIN("open-output-file", copen_output_file, 1, 0);
+	ADD_BUILTIN("close-input-port", cclose_input_port, 1, 0);
+	ADD_BUILTIN("close-output-port", cclose_output_port, 1, 0);
+	ADD_BUILTIN("write-char", cwrite_char, 1, 1);
+	ADD_BUILTIN("write-string", cwrite_string, 1, 3);
+	ADD_BUILTIN("read-char", cread_char, 0, 1);
+	ADD_BUILTIN("read-line", cread_line, 0, 1);
+	ADD_BUILTIN("port->string", cport_to_string, 0, 1);
+	ADD_BUILTIN("port->lines", cport_to_lines, 0, 1);
+	ADD_BUILTIN("current-input-port", ccurrent_input_port, 0, 0);
+	ADD_BUILTIN("current-output-port", ccurrent_output_port, 0, 0);
+	ADD_BUILTIN("current-error-port", ccurrent_error_port, 0, 0);
+	ADD_BUILTIN("file-position", cfile_position, 1, 1);
+	ADD_BUILTIN("flush-output", cflush_output, 1, 0);
+	ADD_BUILTIN("get-output-string", cget_output_string, 1, 0);
+	ADD_BUILTIN("open-output-string", copen_output_string, 0, 0);
+	ADD_BUILTIN("string-port?", cstring_port_p, 1, 0);
+	ADD_BUILTIN("eof-object?", ceof_object_p, 1, 0);
 	ADD_BUILTIN("file-readable?", cfile_readable, 2, 0);
 	ADD_VARIABLE("*REQUIRED*", make_dictionary(ss));
+	sly_value port = make_input_port(ss);
+	port_set_stream(port, stdin);
+	ADD_VARIABLE("*STDIN*", port);
+	port = make_output_port(ss);
+	port_set_stream(port, stdout);
+	ADD_VARIABLE("*STDOUT*", port);
+	port = make_output_port(ss);
+	port_set_stream(port, stderr);
+	ADD_VARIABLE("*STDERR*", port);
+	ADD_VARIABLE("eof", gensym(ss));
 }
 
 #endif /* SLY_BUILTINS_H_ */

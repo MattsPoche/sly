@@ -1,0 +1,38 @@
+(require "sly-lib/list.sly")
+(require "sly-lib/quasiquote.sly")
+(require "sly-lib/syntax-case.sly")
+(require "sly-lib/syntax-rules.sly")
+(require "sly-lib/with-syntax.sly")
+(require "sly-lib/basic-special-forms.sly")
+(require "sly-lib/module.sly")
+(require "sly-lib/kwargs.sly")
+
+(provide
+ force
+ delay
+ stream-car
+ stream-cdr
+ make-stream)
+
+(define (make-promise p)
+  (let ([val #f]
+		[set? #f])
+	(lambda ()
+	  (unless set?
+		(let ([x (p)])
+		  (unless set?
+			(begin (set! val x)
+				   (set! set? #t)))))
+	  val)))
+
+(define (force p) (p))
+
+(define-syntax delay
+  (syntax-rules ()
+	[(_ exp) (make-promise (lambda () exp))]))
+
+(define (stream-car s) (car (force s)))
+(define (stream-cdr s) (cdr (force s)))
+
+(define (make-stream proc initial-state)
+  (delay (proc initial-state)))

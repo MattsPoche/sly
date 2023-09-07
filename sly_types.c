@@ -472,6 +472,19 @@ tail(sly_value obj)
 	return obj;
 }
 
+sly_value
+list_append(Sly_State *ss, sly_value p, sly_value v)
+{
+	if (null_p(p)) {
+		return v;
+	} else if (pair_p(p)){
+		return cons(ss, car(p), list_append(ss, cdr(p), v));
+	} else {
+		sly_assert(0, "Type Error expected list");
+	}
+	return SLY_NULL;
+}
+
 void
 append(sly_value p, sly_value v)
 {
@@ -944,7 +957,7 @@ string_len(sly_value str)
 	return bv->len;
 }
 
-sly_value
+int
 string_eq(sly_value s1, sly_value s2)
 {
 	sly_assert((string_p(s1) && string_p(s2))
@@ -1370,42 +1383,21 @@ sly_eq(sly_value o1, sly_value o2)
 	if (symbol_p(o1) && symbol_p(o2)) {
 		return symbol_eq(o1, o2);
 	}
-	if (number_p(o1) && number_p(o2)) {
-		return sly_num_eq(o1, o2);
-	}
 	return o1 == o2;
 }
 
-#if 0
-
-static int
-contains(sly_value xs, sly_value x)
+int
+sly_eqv(sly_value o1, sly_value o2)
 {
-	if (null_p(xs)) {
-		return 0;
+	if (number_p(o1) && number_p(o2)) {
+		return sly_num_eq(o1, o2);
 	}
-	if (sly_equal(car(xs), x)) {
-		return 1;
+	return sly_eq(o1, o2);
+	if (symbol_p(o1) && symbol_p(o2)) {
+		return symbol_eq(o1, o2);
 	}
-	return contains(cdr(xs), x);
+	return o1 == o2;
 }
-
-static int
-is_subset(sly_value xs, sly_value ys)
-{
-	if (null_p(xs)) {
-		return 1;
-	}
-	if (null_p(ys)) {
-		return 0;
-	}
-	if (contains(ys, car(xs))) {
-		return is_subset(cdr(xs), ys);
-	}
-	return 0;
-}
-
-#else
 
 static int
 set_contains(sly_value set, sly_value value)
@@ -1435,8 +1427,6 @@ is_subset(sly_value set1, sly_value set2)
 	}
 	return 1;
 }
-
-#endif
 
 int
 sly_equal(sly_value o1, sly_value o2)
@@ -1544,22 +1534,6 @@ datum_to_syntax(Sly_State *ss, sly_value id, sly_value datum)
 	}
 	return stx;
 }
-
-/* static sly_value */
-/* syntax_to_list_rec(Sly_State *ss, sly_value form) */
-/* { */
-/* 	if (syntax_pair_p(form)) { */
-/* 		syntax *s = GET_PTR(form); */
-/* 		sly_value p = s->datum; */
-/* 		return cons(ss, syntax_to_list_rec(ss, car(p)), */
-/* 					syntax_to_list_rec(ss, cdr(p))); */
-/* 	} */
-/* 	if (pair_p(form)) { */
-/* 		return cons(ss, syntax_to_list_rec(ss, car(form)), */
-/* 					syntax_to_list_rec(ss, cdr(form))); */
-/* 	} */
-/* 	return form; */
-/* } */
 
 sly_value
 syntax_to_list(Sly_State *ss, sly_value form)
@@ -1947,6 +1921,78 @@ upvalue_isclosed(sly_value uv)
 	return u->isclosed;
 }
 
+sly_value
+make_user_data(Sly_State *ss, size_t data_size)
+{
+	size_t size = sizeof(user_data) + data_size;
+	user_data *ud = MALLOC(size);
+	ud->h.type = tt_user_data;
+	ud->properties = SLY_NULL;
+	ud->size = data_size;
+	ss->gc->bytes += size;
+	return (sly_value)ud;
+}
+
+void *
+user_data_get(sly_value v)
+{
+	sly_assert(user_data_p(v), "Type Error expected <user-data>");
+	user_data *ud = GET_PTR(v);
+	return ud->data_bytes;
+}
+
+void
+user_data_set(sly_value v, void *ptr)
+{
+	sly_assert(user_data_p(v), "Type Error expected <user-data>");
+	user_data *ud = GET_PTR(v);
+	memcpy(ud->data_bytes, ptr, ud->size);
+}
+
+sly_value
+user_data_get_properties(sly_value v)
+{
+	sly_assert(user_data_p(v), "Type Error expected <user-data>");
+	user_data *ud = GET_PTR(v);
+	return ud->properties;
+}
+
+void
+user_data_set_properties(sly_value v, sly_value plist)
+{
+	sly_assert(user_data_p(v), "Type Error expected <user-data>");
+	user_data *ud = GET_PTR(v);
+	ud->properties = plist;
+}
+
+sly_value
+plist_get(sly_value plist, sly_value prop)
+{
+	if (null_p(plist)) {
+		return SLY_NULL;
+	} else if (sly_eq(car(plist), prop)
+			   && pair_p(cdr(plist))) {
+		return car(cdr(plist));
+	} else {
+		return plist_get(cdr(cdr(plist)), prop);
+	}
+}
+
+sly_value
+plist_put(Sly_State *ss, sly_value plist, sly_value prop, sly_value value)
+{
+	if (null_p(plist)) {
+		return cons(ss, prop, cons(ss, value, SLY_NULL));
+	} else if (sly_eq(car(plist), prop)
+			   && pair_p(cdr(plist))) {
+		return cons(ss, prop, cons(ss, value, cdr(cdr(plist))));
+	} else {
+		return cons(ss, car(plist),
+					cons(ss, car(cdr(plist)),
+						 plist_put(ss, cdr(cdr(plist)), prop, value)));
+	}
+}
+
 #define ELLIPSIS cstr_to_symbol("...")
 #define EMPTY_PATTERN cstr_to_symbol("_")
 #define EXPANSION_END cstr_to_symbol("* END OF EXPANSION *")
@@ -2077,7 +2123,6 @@ get_pattern_var_names(Sly_State *ss, sly_value pattern, sly_value literals)
 static int
 chk_ellipsis(Sly_State *ss, sly_value pattern)
 {
-
 	sly_value f = car(cdr(pattern));
 	return 	match_id_symbol(f, ELLIPSIS);
 }

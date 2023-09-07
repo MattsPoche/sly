@@ -6,8 +6,11 @@
 (require "sly-lib/basic-special-forms.sly")
 (require "sly-lib/module.sly")
 (require "sly-lib/kwargs.sly")
+(require "sly-lib/promise.sly")
+(require "sly-lib/string.sly")
 
 (provide
+ values
  displayln
  display-syntax
  caar
@@ -42,10 +45,17 @@
  alist-copy
  plist-get
  plist-put
+ force
+ delay
+ stream-car
+ stream-cdr
+ string
+ substring
+ string->list
+ list->string
+ make-stream
  define-module
- import
- lambda&
- define&)
+ import)
 
 (provide
  set-m!
@@ -65,4 +75,8 @@
  unless
  syntax-case
  syntax-rules
- with-syntax)
+ with-syntax
+ let*-values
+ let-values
+ lambda&
+ define&)
