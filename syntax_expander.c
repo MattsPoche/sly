@@ -13,7 +13,7 @@
 #define scope() gensym(ss)
 #define add_binding(id, binding)						\
 		dictionary_set(ss, all_bindings, id, binding);
-#define core_symbol(cf_i) \
+#define core_symbol(cf_i)						\
 	vector_ref(core_forms, cf_i)
 
 enum core_form {
@@ -59,7 +59,8 @@ static sly_value all_bindings = SLY_NULL;
 
 typedef sly_value (*set_op)(Sly_State *, sly_value, sly_value);
 
-static sly_value csyntax(Sly_State *ss, sly_value datum, sly_value scope_set);
+static sly_value csyntax(Sly_State *ss, sly_value datum,
+						 token tok, sly_value scope_set);
 static sly_value expand(Sly_State *ss, sly_value s, sly_value env);
 static sly_value expand_app(Sly_State *ss, sly_value s, sly_value env);
 static sly_value expand_id_application_form(Sly_State *ss, sly_value s, sly_value env);
@@ -82,11 +83,6 @@ macro_call(Sly_State *ss, sly_value macro, sly_value form)
 	}
 	sly_assert(closure_p(macro), "Type Error macro must be a procedure");
 	int arity = sly_arity(macro);
-	/* if (!(arity == 0 || arity == 1)) { */
-	/* 	sly_displayln(macro); */
-	/* 	closure *clos = GET_PTR(macro); */
-	/* 	dis_prototype(clos->proto, 1); */
-	/* } */
 	sly_assert(arity == 0 || arity == 1,
 			   "Value Error macros may have at most one argument");
 	closure *clos = GET_PTR(macro);
@@ -148,20 +144,22 @@ static sly_value
 adjust_scope(Sly_State *ss, sly_value s, sly_value sc, set_op op)
 {
 	if (syntax_pair_p(s)) {
+		syntax *stx = GET_PTR(s);
 		if (null_p(syntax_scopes(s))) {
-			syntax *stx = GET_PTR(s);
 			stx->scope_set = make_dictionary(ss);
 		}
 		return csyntax(ss,
 					   adjust_scope(ss, syntax_to_datum(s), sc, op),
+					   stx->tok,
 					   op(ss, syntax_scopes(s), sc));
-	} else if (syntax_p(s)) {
+	} else if (identifier_p(s)) {
+		syntax *stx = GET_PTR(s);
 		if (null_p(syntax_scopes(s))) {
-			syntax *stx = GET_PTR(s);
 			stx->scope_set = make_dictionary(ss);
 		}
 		return csyntax(ss,
-					   syntax_to_datum(s),
+					   stx->datum,
+					   stx->tok,
 					   op(ss, syntax_scopes(s), sc));
 	} else if (pair_p(s)) {
 		return cons(ss,
@@ -268,9 +266,9 @@ env_lookup(sly_value env, sly_value key)
 }
 
 static sly_value
-csyntax(Sly_State *ss, sly_value datum, sly_value scope_set)
+csyntax(Sly_State *ss, sly_value datum, token tok, sly_value scope_set)
 {
-	sly_value stx = make_syntax(ss, (token){0}, datum);
+	sly_value stx = make_syntax(ss, tok, datum);
 	syntax *s = GET_PTR(stx);
 	s->scope_set = scope_set;
 	return stx;
@@ -349,7 +347,10 @@ expand_define(Sly_State *ss, sly_value s, sly_value env)
 	if (pair_p(lhs)) { // define procedure
 		add_binding(car(lhs), binding);
 		env_extend(ss, env, binding, variable);
-		rhs = expand(ss, cons(ss, csyntax(ss, core_symbol(cf_lambda), scopes),
+		syntax *stx = GET_PTR(car(lhs));
+		rhs = expand(ss, cons(ss, csyntax(ss, core_symbol(cf_lambda),
+										  stx->tok,
+										  scopes),
 							  cons(ss, cdr(lhs), rest)), env);
 		lhs = car(lhs);
 	} else if (identifier_p(lhs)) {
@@ -376,7 +377,10 @@ expand_define_syntax(Sly_State *ss, sly_value s, sly_value env)
 	if (pair_p(lhs)) { // define procedure
 		add_binding(car(lhs), binding);
 		env_extend(ss, env, binding, variable);
-		rhs = expand(ss, cons(ss, csyntax(ss, core_symbol(cf_lambda), scopes),
+		syntax *stx = GET_PTR(car(lhs));
+		rhs = expand(ss, cons(ss, csyntax(ss, core_symbol(cf_lambda),
+										  stx->tok,
+										  scopes),
 							  cons(ss, cdr(lhs), rest)), env);
 		lhs = car(lhs);
 	} else if (identifier_p(lhs)) {
@@ -451,15 +455,21 @@ expand_require(Sly_State *ss, sly_value s, sly_value env)
 		provides = get_provides(ss, file_path);
 	}
 	sly_value scopes = syntax_scopes(car(s));
-	sly_value id_list = cons(ss, csyntax(ss, core_symbol(cf_lambda), scopes),
+	sly_value id_list = cons(ss, csyntax(ss, core_symbol(cf_lambda),
+										 (token){0},
+										 scopes),
 							 cons(ss, SLY_NULL,
-								  cons(ss, cons(ss, csyntax(ss, core_symbol(cf_quote), scopes),
+								  cons(ss, cons(ss, csyntax(ss, core_symbol(cf_quote),
+															(token){0},
+															scopes),
 												cons(ss, provides, SLY_NULL)),
 									   SLY_NULL)));
 	while (!null_p(provides)) {
 		sly_value id = car(provides);
 		sly_value binding = resolve(ss, id);
-		id = csyntax(ss, syntax_to_datum(id), scopes);
+		id = csyntax(ss, syntax_to_datum(id),
+					 (token){0},
+					 scopes);
 		add_binding(id, binding);
 		provides = cdr(provides);
 	}
@@ -625,13 +635,13 @@ sly_expand_init(Sly_State *ss, sly_value env)
 		vector_append(ss, core_forms, sym);
 		scope_set = make_dictionary(ss);
 		dictionary_set(ss, scope_set, core_scope, SLY_NULL);
-		add_binding(csyntax(ss, sym, scope_set), sym);
+		add_binding(csyntax(ss, sym, (token){0}, scope_set), sym);
 	}
 	while (!null_p(builtins)) {
 		sym = car(car(builtins));
 		scope_set = make_dictionary(ss);
 		dictionary_set(ss, scope_set, core_scope, SLY_NULL);
-		add_binding(csyntax(ss, sym, scope_set), sym);
+		add_binding(csyntax(ss, sym, (token){0}, scope_set), sym);
 		env_extend(ss, env, sym, variable);
 		builtins = cdr(builtins);
 	}

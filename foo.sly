@@ -1,3 +1,1 @@
 (require "sly-lib/base.sly")
-
-(write-string (read-line))

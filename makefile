@@ -4,7 +4,7 @@ CFLAGS=-ggdb -std=c11
 CFLAGS += $(WARNINGS)
 RELEASE=-O3 -Werror -Wextra -pedantic -Wall -Wswitch-enum -std=c11
 DEFS=-D USE_SLY_ALLOC -D _POSIX_C_SOURCE=200809L
-LFLAGS=-rdynamic
+LFLAGS=-lm
 TARGET=sly
 CSOURCE=$(shell find -name "*.c")
 OBJECTS=$(CSOURCE:%.c=%.o)

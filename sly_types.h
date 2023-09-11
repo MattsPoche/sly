@@ -229,7 +229,8 @@ typedef struct _user_data {
 	u8 data_bytes[];
 } user_data;
 
-void _sly_assert(int p, char *msg, int line_number, const char *func_name, char *file_name);
+void _sly_assert(int p, char *msg, int line_number,
+				 const char *func_name, char *file_name);
 void sly_raise_exception(Sly_State *ss, int excpt, char *msg);
 void sly_display(sly_value v, int lit);
 void sly_displayln(sly_value v);
@@ -305,8 +306,16 @@ sly_value sly_add(Sly_State *ss, sly_value x, sly_value y);
 sly_value sly_sub(Sly_State *ss, sly_value x, sly_value y);
 sly_value sly_mul(Sly_State *ss, sly_value x, sly_value y);
 sly_value sly_div(Sly_State *ss, sly_value x, sly_value y);
-sly_value sly_idiv(Sly_State *ss, sly_value x, sly_value y);
+sly_value sly_floor_div(Sly_State *ss, sly_value x, sly_value y);
 sly_value sly_mod(Sly_State *ss, sly_value x, sly_value y);
+sly_value sly_bitwise_and(Sly_State *ss, sly_value x, sly_value y);
+sly_value sly_bitwise_ior(Sly_State *ss, sly_value x, sly_value y);
+sly_value sly_bitwise_xor(Sly_State *ss, sly_value x, sly_value y);
+sly_value sly_bitwise_eqv(Sly_State *ss, sly_value x, sly_value y);
+sly_value sly_bitwise_nand(Sly_State *ss, sly_value x, sly_value y);
+sly_value sly_bitwise_nor(Sly_State *ss, sly_value x, sly_value y);
+sly_value sly_bitwise_not(Sly_State *ss, sly_value x);
+sly_value sly_arithmetic_shift(Sly_State *ss, sly_value v, sly_value count);
 int sly_num_eq(sly_value x, sly_value y);
 int sly_num_lt(sly_value x, sly_value y);
 int sly_num_gt(sly_value x, sly_value y);

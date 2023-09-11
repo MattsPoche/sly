@@ -118,6 +118,7 @@ dis(INSTR ins, sly_value si)
 		u8 b = GET_B(instr);
 		printf("(TAILCALL %d %d)%n", a, b, &pad);
 	} break;
+	case OP_CALLWVALUES0:
 	case OP_CALLWVALUES: {
 		u8 a = GET_A(instr);
 		u8 b = GET_B(instr);
@@ -260,16 +261,17 @@ dis_prototype(sly_value proto, int lstk)
 	_dis_prototype(GET_PTR(proto), lstk);
 }
 
-static void
-dis_prototype_rec(prototype *proto, int lstk)
+void
+dis_prototype_rec(sly_value p, int lstk)
 {
+	prototype *proto = GET_PTR(p);
 	_dis_prototype(proto, lstk);
 	printf("============================================\n");
 	size_t len = vector_len(proto->K);
 	for (size_t i = 0; i < len; ++i) {
 		sly_value value = vector_ref(proto->K, i);
 		if (prototype_p(value)) {
-			dis_prototype_rec(GET_PTR(value), lstk);
+			dis_prototype(value, lstk);
 		}
 	}
 }
@@ -300,7 +302,7 @@ dis_all(stack_frame *frame, int lstk)
 	for (size_t i = 0; i < len; ++i) {
 		sly_value value = vector_ref(frame->K, i);
 		if (prototype_p(value)) {
-			dis_prototype_rec(GET_PTR(value), lstk);
+			dis_prototype_rec(value, lstk);
 		}
 	}
 }

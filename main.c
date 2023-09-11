@@ -52,6 +52,14 @@ main(int argc, char *argv[])
 			arg = next_arg(&argc, &argv);
 			if (strcmp(arg, "-I") == 0) {
 				debug_info = 1;
+			} else if (strcmp(arg, "--expand") == 0) {
+				allocations = 0;
+				net_allocations = 0;
+				bytes_allocated = 0;
+				Sly_State ss = {0};
+				sly_value ast = sly_expand_only(&ss, next_arg(&argc, &argv));
+				sly_displayln(strip_syntax(&ss, ast));
+				sly_free_state(&ss);
 			} else {
 				allocations = 0;
 				net_allocations = 0;

@@ -12,7 +12,15 @@
  delay
  stream-car
  stream-cdr
- make-stream)
+ make-stream
+ in-range
+ in-list
+ in-vector
+ vector->stream
+ in-string
+ string->stream
+ for
+ for/list)
 
 (define (make-promise p)
   (let ([val #f]
@@ -36,3 +44,91 @@
 
 (define (make-stream proc initial-state)
   (delay (proc initial-state)))
+
+(define end-of-stream (gensym))
+
+(define-syntax for
+  (syntax-rules ()
+	[(_ (v stream) body ...)
+	 (let ([s stream])
+	   (let loop ([v (stream-car s)]
+				  [s (stream-cdr s)])
+		 (unless (eq? v end-of-stream)
+		   body ...
+		   (loop (stream-car s)
+				 (stream-cdr s)))))]))
+
+(define-syntax for/list
+  (syntax-rules ()
+	[(_ (v stream) body ...)
+	 (let ([s stream])
+	   (let loop ([v (stream-car s)]
+				  [s (stream-cdr s)])
+		 (if (eq? v end-of-stream)
+			 '()
+			 (cons (let () body ...)
+				   (loop (stream-car s)
+						 (stream-cdr s))))))]))
+
+(define (in-list xs)
+  (make-stream
+   (lambda (x)
+	 (if (null? x)
+		 (cons end-of-stream
+			   (in-list x))
+		 (cons (car x)
+			   (in-list (cdr x)))))
+   xs))
+
+(define (vector->stream vec start end)
+  (make-stream
+   (lambda (i)
+	 (if (< i end)
+		 (cons (vector-ref vec i)
+			   (vector->stream vec (+ i 1) end))
+		 (cons end-of-stream
+			   (vector->stream vec i end))))
+   start))
+
+(define (string->stream str start end)
+  (make-stream
+   (lambda (i)
+	 (if (< i end)
+		 (cons (string-ref str i)
+			   (string->stream str (+ i 1) end))
+		 (cons end-of-stream
+			   (string->stream str i end))))
+   start))
+
+(define (in-string str)
+  (string->stream str 0 (string-length str)))
+
+(define (in-vector vec)
+  (vector->stream vec 0 (vector-length vec)))
+
+(define-syntax in-range
+  (syntax-rules (.. :)
+	[(_ end)
+	 (in-range& 'end: end)]
+	[(_ end : step)
+	 (in-range& 'end: end 'step: step)]
+	[(_ start .. end)
+	 (in-range& 'start: start 'end: end)]
+	[(_ start .. end : step)
+	 (in-range& 'start: start 'end: end 'step: step)]))
+
+(define& (in-range& [start: 0] [end: 1] [step: 1])
+  (make-stream
+   (lambda (x)
+	 (if (< x end:)
+		 (cons x
+			   (in-range&
+				'start: (+ x step:)
+				'end: end:
+				'step: step:))
+		 (cons end-of-stream
+			   (in-range&
+				'start: x
+				'end: end:
+				'step: step:))))
+   start:))

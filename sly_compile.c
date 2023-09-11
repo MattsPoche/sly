@@ -433,33 +433,7 @@ comp_atom(Sly_State *ss, sly_value form, int reg)
 		st_prop.v = symbol_lookup_props(ss, datum, &level, &uplist);
 		if (void_p(st_prop.v)) {
 			st_prop.p.type = sym_global;
-			/* syntax *s = GET_PTR(form); */
-			/* if (s->env) { */
-			/* 	closure *clos = GET_PTR(s->env); */
-			/* 	sly_value g = upvalue_get(vector_ref(clos->upvals, 0)); */
-			/* 	sly_value entry = dictionary_entry_ref(g, datum); */
-			/* 	sly_assert(!slot_is_free(entry), "Error undefined symbol"); */
-			/* 	int env = intern_constant(ss, g); */
-			/* 	int id  = intern_constant(ss, datum); */
-			/* 	vector_append(ss, proto->code, iABx(OP_LOADK, reg, env, src_info)); */
-			/* 	vector_append(ss, proto->code, iABx(OP_LOADK, reg+1, id, src_info)); */
-			/* 	vector_append(ss, proto->code, iABC(OP_DICTREF, reg, reg, reg+1, src_info)); */
-			/* 	return reg; */
-			/* } else { */
-			/* 	printf("Undefined symbol (atom) '"); */
-			/* 	sly_display(datum, 1); */
-			/* 	printf("\n"); */
-			/* 	printf("%s:%d:%d\n", ss->file_path, s->tok.ln, s->tok.cn); */
-			/* 	sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol (479)"); */
-			/* } */
 		}
-/* TODO: Fix this
-		if (cc->cscope->level == level && st_prop.p.isundefined) {
-			sly_display(datum, 1);
-			printf("\n");
-			sly_raise_exception(ss, EXC_COMPILE, "Error undefined symbol (493)");
-		}
-*/
 		if (cc->cscope->level != level && st_prop.p.type != sym_global) { /* is non local */
 			st_prop = resolve_upval(ss, cc->cscope, datum, st_prop, level);
 		}
@@ -525,8 +499,8 @@ comp_funcall(Sly_State *ss, sly_value form, int reg)
 	struct compile *cc = ss->cc;
 	prototype *proto = GET_PTR(cc->cscope->proto);
 	int src_info = -1;
-	syntax *stx = GET_PTR(form);
 	sly_value head = CAR(form);
+	syntax *stx = GET_PTR(head);
 	form = CDR(form);
 	int start = reg;
 	int reg2 = comp_expr(ss, head, reg);
@@ -788,15 +762,18 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 		case kw_call_cc: {
 			prototype *proto = GET_PTR(cc->cscope->proto);
 			int src_info = intern_syntax(ss, stx);
+			syntax *s = GET_PTR(form);
 			form = CDR(form);
 			int reg2 = comp_expr(ss, CAR(form), reg);
-			vector_append(ss, proto->code, iAB(OP_CALLWCC, reg, reg2, src_info));
+			int tc = s->context & ctx_tail_pos;
+			vector_append(ss, proto->code, iABC(OP_CALLWCC, reg, reg2, tc, src_info));
 			if (!null_p(CDR(form))) {
 				sly_raise_exception(ss, EXC_COMPILE, "Error malformed display expression");
 			}
 		} break;
 		case kw_call_with_values: {
 			prototype *proto = GET_PTR(cc->cscope->proto);
+			syntax *s = GET_PTR(form);
 			form = CDR(form);
 			int start = reg;
 			int reg2 = comp_expr(ss, CAR(form), reg);
@@ -812,16 +789,25 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 			}
 			reg3 = reg;
 			reg = start;
-			vector_append(ss, proto->code, iABC(OP_CALLWVALUES, reg, reg2, reg3, -1));
+			if (s->context & ctx_tail_pos) {
+				vector_append(ss, proto->code, iABC(OP_CALLWVALUES0, reg, reg2, reg3, -1));
+			} else {
+				vector_append(ss, proto->code, iABC(OP_CALLWVALUES, reg, reg2, reg3, -1));
+			}
+
 		} break;
 		case kw_apply: {
+			syntax *s = GET_PTR(form);
 			form = CDR(form);
 			reg = comp_funcall(ss, form, reg);
 			prototype *proto = GET_PTR(cc->cscope->proto);
 			union instr instr;
 			instr.v = vector_pop(ss, proto->code);
-			sly_assert(instr.i.u.as_u8[0] == OP_CALL
-					   || instr.i.u.as_u8[0] == OP_TAILCALL, "Error somethings wrong :,(");
+			if (s->context & ctx_tail_pos) {
+				instr.i.u.as_u8[3] = 1;
+			} else {
+				instr.i.u.as_u8[3] = 0;
+			}
 			instr.i.u.as_u8[0] = OP_APPLY;
 			vector_append(ss, proto->code, instr.v);
 		} break;
@@ -861,6 +847,25 @@ sly_free_state(Sly_State *ss)
 		FREE(ss->source_code);
 		ss->source_code = NULL;
 	}
+}
+
+sly_value
+sly_expand_only(Sly_State *ss, char *file_path)
+{
+	gc_init(ss);
+	ss->interned = make_dictionary(ss);
+	sly_init_state(ss);
+	sly_value env = make_dictionary(ss);
+	sly_expand_init(ss, env);
+	ss->file_path = file_path;
+	ss->cc->cscope->proto = make_prototype(ss,
+										   make_vector(ss, 0, 8),
+										   make_vector(ss, 0, 8),
+										   make_vector(ss, 0, 8),
+										   0, 0, 0, 0);
+	sly_value ast = parse_file(ss, file_path, &ss->source_code);
+	ast = sly_expand(ss, env, ast);
+	return ast;
 }
 
 void

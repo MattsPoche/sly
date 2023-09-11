@@ -690,12 +690,7 @@ vector_set(sly_value v, size_t idx, sly_value value)
 {
 	sly_assert(vector_p(v), "Type Error: Expected vector");
 	vector *vec = GET_PTR(v);
-	if (idx >= vec->len) {
-		printf("idx :: %zu\n", idx);
-		printf("vec->len :: %zu\n", vec->len);
-		printf("vec->cap :: %zu\n", vec->cap);
-		sly_assert(0, "Error: Index out of bounds");
-	}
+	sly_assert(idx < vec->len, "Error: Index out of bounds");
 	vec->elems[idx] = value;
 }
 
@@ -1240,19 +1235,72 @@ sly_div(Sly_State *ss, sly_value x, sly_value y)
 }
 
 sly_value
-sly_idiv(Sly_State *ss, sly_value x, sly_value y)
+sly_floor_div(Sly_State *ss, sly_value x, sly_value y)
 {
-	sly_assert(int_p(x), "Type Error expected integer");
-	sly_assert(int_p(y), "Type Error expected integer");
-	return make_int(ss, get_int(x) / get_int(y));
+	f64 d = get_float(sly_div(ss, x, y));
+	return make_int(ss, (i64)floor(d));
 }
 
 sly_value
 sly_mod(Sly_State *ss, sly_value x, sly_value y)
 {
-	sly_assert(int_p(x), "Type Error expected integer");
-	sly_assert(int_p(y), "Type Error expected integer");
 	return make_int(ss, get_int(x) % get_int(y));
+}
+
+sly_value
+sly_bitwise_and(Sly_State *ss, sly_value x, sly_value y)
+{
+	return make_int(ss, get_int(x) & get_int(y));
+}
+
+sly_value
+sly_bitwise_ior(Sly_State *ss, sly_value x, sly_value y)
+{
+	return make_int(ss, get_int(x) | get_int(y));
+}
+
+sly_value
+sly_bitwise_xor(Sly_State *ss, sly_value x, sly_value y)
+{
+	return make_int(ss, get_int(x) ^ get_int(y));
+}
+
+sly_value
+sly_bitwise_eqv(Sly_State *ss, sly_value x, sly_value y)
+{
+	return make_int(ss, ~(get_int(x) ^ get_int(y)));
+}
+
+sly_value
+sly_bitwise_nand(Sly_State *ss, sly_value x, sly_value y)
+{
+	return make_int(ss, ~(get_int(x) & get_int(y)));
+}
+
+sly_value
+sly_bitwise_nor(Sly_State *ss, sly_value x, sly_value y)
+{
+	return make_int(ss, ~(get_int(x) | get_int(y)));
+}
+
+sly_value
+sly_bitwise_not(Sly_State *ss, sly_value x)
+{
+	return make_int(ss, ~get_int(x));
+}
+
+sly_value
+sly_arithmetic_shift(Sly_State *ss, sly_value v, sly_value count)
+{
+	i64 i = get_int(v);
+	i64 c = get_int(count);
+	if (c == 0) {
+		return v;
+	} else if (c > 0) {
+		return make_int(ss, i << c);
+	} else {
+		return make_int(ss, i >> -c);
+	}
 }
 
 static int
@@ -1393,10 +1441,6 @@ sly_eqv(sly_value o1, sly_value o2)
 		return sly_num_eq(o1, o2);
 	}
 	return sly_eq(o1, o2);
-	if (symbol_p(o1) && symbol_p(o2)) {
-		return symbol_eq(o1, o2);
-	}
-	return o1 == o2;
 }
 
 static int
@@ -1925,7 +1969,7 @@ sly_value
 make_user_data(Sly_State *ss, size_t data_size)
 {
 	size_t size = sizeof(user_data) + data_size;
-	user_data *ud = MALLOC(size);
+	user_data *ud = gc_alloc(ss, size);
 	ud->h.type = tt_user_data;
 	ud->properties = SLY_NULL;
 	ud->size = data_size;

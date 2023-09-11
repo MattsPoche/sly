@@ -20,10 +20,11 @@ enum opcode {
 	OP_JMP,			// iAx  | PC := <u64> Ax
 	OP_FJMP,		// iABx | if R[A] == #f then PC := Bx
 	OP_CALL,		// iAB  | R[A] := (R[A] R[A+1] ... R[A+B-1])
-	OP_TAILCALL,	// iAB  | R[A] := (R[A] R[A+1] ... R[A+B-1])
-	OP_CALLWCC,     // iAB  | R[A] := (R[B] (current-continuation)) ; call/cc
+	OP_TAILCALL,	// iABC | R[A] := (R[A] R[A+1] ... R[A+B-1])
+	OP_CALLWCC,     // iABC | R[A] := (R[B] (current-continuation)) ; call/cc
 	OP_CALLWVALUES, // iABC | R[A] := (RB[B] values ...) <- (R[C])
-	OP_APPLY,       // iAB  | R[A] := (apply R[A] R[A+1] ... R[A+B-1]) ; last argument is a list
+	OP_CALLWVALUES0,// iABC | R[A] := (RB[B] values ...) <- (R[C])
+	OP_APPLY,       // iABC | R[A] := (apply R[A] R[A+1] ... R[A+B-1]) if C tailpos
 //	OP_RETURN,		// iAB  | return R[A] ... R[A+B-1]
 	OP_EXIT,        // iAB
 	OP_CLOSURE,		// iABx | R[A] := make_closure(<prototype> K[Bx])
@@ -82,6 +83,7 @@ void dis(INSTR instr, sly_value si);
 void dis_code(sly_value code, sly_value si);
 void dis_all(stack_frame *frame, int lstk);
 void dis_prototype(sly_value proto, int lstk);
+void dis_prototype_rec(sly_value p, int lstk);
 
 
 #ifdef OPCODES_INCLUDE_INLINE

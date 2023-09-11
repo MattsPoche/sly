@@ -17,6 +17,7 @@ struct compile {
 
 void sly_init_state(Sly_State *ss);
 void sly_free_state(Sly_State *ss);
+sly_value sly_expand_only(Sly_State *ss, char *file_path);
 void sly_do_file(char *file_path, int debug_info);
 int comp_expr(Sly_State *ss, sly_value form, int reg);
 sly_value sly_compile_lambda(Sly_State *ss, sly_value ast);

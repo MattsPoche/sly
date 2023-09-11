@@ -124,11 +124,10 @@ open_input_file(Sly_State *ss, sly_value file_path)
 {
 	sly_value port = make_input_port(ss);
 	sly_value plist = user_data_get_properties(port);
-	sly_displayln(plist);
 	plist = plist_put(ss, plist,
 					  cstr_to_symbol("file-path:"),
 					  file_path);
-		plist = plist_put(ss, plist,
+	plist = plist_put(ss, plist,
 					  cstr_to_symbol("port-type:"),
 					  cstr_to_symbol("file-stream-port"));
 	user_data_set_properties(port, plist);
@@ -168,7 +167,6 @@ open_output_file(Sly_State *ss, sly_value file_path, int append)
 					  cstr_to_symbol("port-type:"),
 					  cstr_to_symbol("file-stream-port"));
 	user_data_set_properties(port, plist);
-	sly_displayln(plist);
 	char *str = string_to_cstr(file_path);
 	FILE *f;
 	if (append) {
@@ -277,23 +275,9 @@ read_line(Sly_State *ss, sly_value port)
 	if (str == NULL) {
 		return EOF_OBJECT(ss);
 	}
-	return make_string(ss, str, strlen(str));
-}
-
-sly_value
-port_to_string(Sly_State *ss, sly_value port)
-{
-	sly_assert(input_port_p(ss, port), "Type Error expected input-port");
-	FILE *f = port_get_stream(port);
-	fseek(f, 0, SEEK_END);
-	size_t len = ftell(f);
-	rewind(f);
-	sly_value str = make_byte_vector(ss, len, len);
-	byte_vector *s = GET_PTR(str);
-	s->h.type = tt_string;
-	fread(s->elems, 1, len, f);
-	close_input_port(ss, port);
-	return str;
+	size_t len = strlen(str);
+	if (len > 0 && str[len-1] == '\n') len--;
+	return make_string(ss, str, len);
 }
 
 sly_value
@@ -315,4 +299,20 @@ port_to_lines(Sly_State *ss, sly_value port)
 	}
 	close_input_port(ss, port);
 	return list;
+}
+
+sly_value
+port_to_string(Sly_State *ss, sly_value port)
+{
+	sly_assert(input_port_p(ss, port), "Type Error expected input-port");
+	FILE *f = port_get_stream(port);
+	fseek(f, 0, SEEK_END);
+	size_t len = ftell(f);
+	rewind(f);
+	sly_value str = make_byte_vector(ss, len, len);
+	byte_vector *s = GET_PTR(str);
+	s->h.type = tt_string;
+	fread(s->elems, 1, len, f);
+	close_input_port(ss, port);
+	return str;
 }

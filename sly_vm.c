@@ -66,6 +66,7 @@ form_closure(Sly_State *ss, sly_value _proto)
 	return _clos;
 }
 
+#if 0
 static int
 is_tailpos(stack_frame *frame, size_t a)
 {
@@ -75,6 +76,7 @@ is_tailpos(stack_frame *frame, size_t a)
 	return a == p->nvars + 1
 		&& vector_ref(frame->R, p->nvars) == frame->cont;
 }
+#endif
 
 static void
 vector_force(Sly_State *ss, sly_value v, size_t idx, sly_value value)
@@ -179,10 +181,10 @@ funcall(Sly_State *ss, u32 idx, u32 nargs, int is_tailpos)
 			close_upvalues(ss, ss->frame);
 		} else if (!TOP_LEVEL_P(ss->frame) && is_tailpos) {
 			cc->frame->cont = ss->frame->cont;
-			close_upvalues(ss, ss->frame);
 		} else {
 			cc->frame->cont = make_continuation(ss, ss->frame, ss->frame->pc, a);
 		}
+		close_upvalues(ss, ss->frame);
 		ss->frame = cc->frame;
 		ss->frame->pc = cc->pc;
 	} else {
@@ -223,6 +225,7 @@ vm_run(Sly_State *ss, int run_gc)
 {
 	sly_value ret_val = SLY_VOID;
 	union instr instr;
+	int is_tailpos = 0;
 	if (vector_len(ss->frame->code) == 0) {
 		return ret_val;
 	}
@@ -341,6 +344,7 @@ vm_run(Sly_State *ss, int run_gc)
 		case OP_CALLWCC: {
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
+			u8 c = GET_C(instr);
 			sly_value proc = get_reg(b);
 			if (closure_p(proc)) {
 				closure *clos = GET_PTR(proc);
@@ -353,7 +357,7 @@ vm_run(Sly_State *ss, int run_gc)
 				nframe->code = proto->code;
 				nframe->pc = proto->entry;
 				sly_value cc;
-				if (!TOP_LEVEL_P(ss->frame) && is_tailpos(ss->frame, a)) {
+				if (!TOP_LEVEL_P(ss->frame) && c) {
 					nframe->level = ss->frame->level;
 					cc = ss->frame->cont;
 					close_upvalues(ss, ss->frame);
@@ -368,6 +372,9 @@ vm_run(Sly_State *ss, int run_gc)
 				sly_assert(0, "CALL/CC Not implemented for procedure type");
 			}
 		} break;
+		case OP_CALLWVALUES0:
+			is_tailpos = 1;
+			__attribute__((fallthrough));
 		case OP_CALLWVALUES: {
 			/* TODO: appears to be working. Needs more testing.
 			 */
@@ -387,7 +394,7 @@ vm_run(Sly_State *ss, int run_gc)
 			rframe->K = rproto->K;
 			rframe->code = rproto->code;
 			rframe->pc = rproto->entry;
-			if (!TOP_LEVEL_P(ss->frame) && is_tailpos(ss->frame, a)) {
+			if (!TOP_LEVEL_P(ss->frame) && is_tailpos) {
 				rframe->level = ss->frame->level;
 				rframe->cont = ss->frame->cont;
 				close_upvalues(ss, ss->frame);
@@ -395,6 +402,7 @@ vm_run(Sly_State *ss, int run_gc)
 				rframe->cont = make_continuation(ss, ss->frame, ss->frame->pc, a);
 				rframe->level = ss->frame->level + 1;
 			}
+			is_tailpos = 0;
 			clos = GET_PTR(producer);
 			prototype *pproto = GET_PTR(clos->proto);
 			stack_frame *pframe = make_stack(ss, pproto->nregs);
@@ -413,6 +421,7 @@ vm_run(Sly_State *ss, int run_gc)
 		case OP_APPLY: {
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
+			u8 c = GET_C(instr);
 			sly_value args = make_vector(ss, 0, 8);
 			vector_append(ss, args, SLY_NULL);
 			int nargs = 0;
@@ -431,7 +440,7 @@ vm_run(Sly_State *ss, int run_gc)
 			vector_append(ss, nframe->code, iA(OP_LOADCONT, 0, -1));
 			vector_append(ss, nframe->code, iAB(OP_TAILCALL, 1, nargs + 1, -1));
 			vector_append(ss, nframe->code, iAB(OP_TAILCALL, 0, 1, -1));
-			if (!TOP_LEVEL_P(ss->frame) && is_tailpos(ss->frame, a)) {
+			if (!TOP_LEVEL_P(ss->frame) && c) {
 				nframe->level = ss->frame->level;
 				nframe->cont = ss->frame->cont;
 				close_upvalues(ss, ss->frame);

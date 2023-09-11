@@ -11,7 +11,8 @@
  string
  substring
  string->list
- list->string)
+ list->string
+ char-at)
 
 (define (string . chars)
   (let ([s (make-string (length chars))])
@@ -34,3 +35,11 @@
       ((< i 0) ls)))
 
 (define (list->string xs) (apply string xs))
+
+(define (do-nothing) #f)
+
+(define (char-at s ch)
+  (let loop ([i 0])
+	(cond [(>= i (string-length s)) #f]
+		  [(equal? (string-ref s i) ch) i]
+		  [else (loop (+ i 1))])))

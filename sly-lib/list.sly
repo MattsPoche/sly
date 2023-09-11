@@ -31,6 +31,7 @@
  for-each
  generate-temporaries
  take
+ drop
  assoc
  alist-cons
  alist-copy
@@ -189,7 +190,7 @@
 
 (define (for-each f . xs)
   (if (null? (car xs))
-	  '()
+	  (void)
 	  (begin
 		(apply f (*heads* xs))
 		(apply for-each f (*tails* xs)))))
@@ -206,7 +207,14 @@
 	  '()
 	  (if (null? ls)
 		  (error "List out-of-bounds")
-		  (cons (car ls) (take (- n 1) (cdr ls))))))
+		  (cons (car ls) (take (cdr ls) (- n 1))))))
+
+(define (drop ls n)
+  (if (<= n 0)
+	  ls
+	  (if (null? ls)
+		  (error "List out-of-bounds")
+		  (drop (cdr ls) (- n 1)))))
 
 (define (assoc key alist)
   (define x '())

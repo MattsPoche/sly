@@ -92,6 +92,14 @@ cdiv(Sly_State *ss, sly_value args)
 }
 
 static sly_value
+cfloor_div(Sly_State *ss, sly_value args)
+{
+	sly_value x = vector_ref(args, 0);
+	sly_value y = vector_ref(args, 1);
+	return sly_floor_div(ss, x, y);
+}
+
+static sly_value
 cmod(Sly_State *ss, sly_value args)
 {
 	sly_value total = sly_mod(ss, vector_ref(args, 0), vector_ref(args, 1));
@@ -101,6 +109,68 @@ cmod(Sly_State *ss, sly_value args)
 		vargs = cdr(vargs);
 	}
 	return total;
+}
+
+static sly_value
+cbitwise_and(Sly_State *ss, sly_value args)
+{
+	return sly_bitwise_and(ss,
+						   vector_ref(args, 0),
+						   vector_ref(args, 1));
+}
+
+static sly_value
+cbitwise_ior(Sly_State *ss, sly_value args)
+{
+	return sly_bitwise_ior(ss,
+						   vector_ref(args, 0),
+						   vector_ref(args, 1));
+}
+
+static sly_value
+cbitwise_xor(Sly_State *ss, sly_value args)
+{
+	return sly_bitwise_xor(ss,
+						   vector_ref(args, 0),
+						   vector_ref(args, 1));
+}
+
+static sly_value
+cbitwise_eqv(Sly_State *ss, sly_value args)
+{
+	return sly_bitwise_eqv(ss,
+						   vector_ref(args, 0),
+						   vector_ref(args, 1));
+}
+
+static sly_value
+cbitwise_nand(Sly_State *ss, sly_value args)
+{
+	return sly_bitwise_nand(ss,
+							vector_ref(args, 0),
+							vector_ref(args, 1));
+}
+
+static sly_value
+cbitwise_nor(Sly_State *ss, sly_value args)
+{
+	return sly_bitwise_nor(ss,
+						   vector_ref(args, 0),
+						   vector_ref(args, 1));
+}
+
+static sly_value
+cbitwise_not(Sly_State *ss, sly_value args)
+{
+	return sly_bitwise_not(ss, vector_ref(args, 0));
+}
+
+static sly_value
+carithmetic_shift(Sly_State *ss, sly_value args)
+{
+	return sly_arithmetic_shift(ss,
+								vector_ref(args, 0),
+								vector_ref(args, 1));
 }
 
 static sly_value
@@ -138,6 +208,20 @@ cnum_geq(Sly_State *ss, sly_value args)
 	UNUSED(ss);
 	return ctobool(sly_num_gt(vector_ref(args, 0), vector_ref(args, 1))
 				   || sly_num_eq(vector_ref(args, 0), vector_ref(args, 1)));
+}
+
+static sly_value
+cint_to_char(Sly_State *ss, sly_value args)
+{
+	sly_value i = vector_ref(args, 0);
+	return make_byte(ss, get_int(i));
+}
+
+static sly_value
+cchar_to_int(Sly_State *ss, sly_value args)
+{
+	sly_value i = vector_ref(args, 0);
+	return make_int(ss, get_byte(i));
 }
 
 static sly_value
@@ -364,6 +448,20 @@ cstring_to_symbol(Sly_State *ss, sly_value args)
 	}
 	byte_vector *bv = GET_PTR(arg);
 	return make_symbol(ss, (char *)bv->elems, bv->len);
+}
+
+static sly_value
+cstring_to_number(Sly_State *ss, sly_value args)
+{
+	sly_value str = vector_ref(args, 0);
+	sly_assert(string_p(str), "Type Error expected string");
+	byte_vector *ptr = GET_PTR(str);
+	for (size_t i = 0; i < ptr->len; ++i) {
+		if (ptr->elems[i] == '.') {
+			return make_float(ss, strtod((char *)ptr->elems, NULL));
+		}
+	}
+	return make_int(ss, strtol((char *)ptr->elems, NULL, 0));
 }
 
 static sly_value
@@ -861,6 +959,11 @@ cdis_dis(Sly_State *ss, sly_value args)
 {
 	UNUSED(ss);
 	sly_value v = vector_ref(args, 0);
+	sly_value v2 = vector_ref(args, 1);
+	int b = 0;
+	if (!null_p(v2)) {
+		b = booltoc(car(v2));
+	}
 	sly_value proto;
 	if (continuation_p(v)) {
 		continuation *c = GET_PTR(v);
@@ -868,7 +971,11 @@ cdis_dis(Sly_State *ss, sly_value args)
 	} else {
 		proto = get_prototype(v);
 	}
-	dis_prototype(proto, 1);
+	if (b) {
+		dis_prototype_rec(proto, 1);
+	} else {
+		dis_prototype(proto, 1);
+	}
 	return SLY_VOID;
 }
 
@@ -1116,6 +1223,15 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("-", csub, 0, 1);
 	ADD_BUILTIN("*", cmul, 0, 1);
 	ADD_BUILTIN("/", cdiv, 0, 1);
+	ADD_BUILTIN("div", cfloor_div, 2, 0);
+	ADD_BUILTIN("bitwise-and", cbitwise_and, 2, 0);
+	ADD_BUILTIN("bitwise-ior", cbitwise_ior, 2, 0);
+	ADD_BUILTIN("bitwise-xor", cbitwise_xor, 2, 0);
+	ADD_BUILTIN("bitwise-eqv", cbitwise_eqv, 2, 0);
+	ADD_BUILTIN("bitwise-nor", cbitwise_nor, 2, 0);
+	ADD_BUILTIN("bitwise-nand", cbitwise_nand, 2, 0);
+	ADD_BUILTIN("bitwise-not", cbitwise_not, 1, 0);
+	ADD_BUILTIN("arithmetic-shift", carithmetic_shift, 2, 0);
 	ADD_BUILTIN("%", cmod, 2, 1);
 	ADD_BUILTIN("=", cnum_eq, 2, 0);
 	ADD_BUILTIN("<", cnum_lt, 2, 0);
@@ -1124,6 +1240,8 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN(">=", cnum_geq, 2, 0);
 	ADD_BUILTIN("/=", cnum_noteq, 2, 0);
 	ADD_BUILTIN("not", cnot, 1, 0);
+	ADD_BUILTIN("integer->char", cint_to_char, 1, 0);
+	ADD_BUILTIN("char->integer", cchar_to_int, 1, 0);
 	ADD_BUILTIN("null?", cnull_p, 1, 0);
 	ADD_BUILTIN("pair?", cpair_p, 1, 0);
 	ADD_BUILTIN("list->vector", clist_to_vector, 1, 0);
@@ -1160,6 +1278,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("string-set!", cstring_set, 3, 0);
 	ADD_BUILTIN("string-join", cstring_join, 1, 1);
 	ADD_BUILTIN("string->symbol", cstring_to_symbol, 1, 0);
+	ADD_BUILTIN("string->number", cstring_to_number, 1, 0);
 	ADD_BUILTIN("symbol->string", csymbol_to_string, 1, 0);
 	ADD_BUILTIN("syntax->datum", csyntax_to_datum, 1, 0);
 	ADD_BUILTIN("syntax->list", csyntax_to_list, 1, 0);
@@ -1196,7 +1315,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("match-syntax", cmatch_syntax, 4, 0);
 	ADD_BUILTIN("get-pattern-var-names", cget_pattern_var_names, 2, 0);
 	ADD_BUILTIN("construct-syntax", cconstruct_syntax, 3, 0);
-	ADD_BUILTIN("disassemble", cdis_dis, 1, 0);
+	ADD_BUILTIN("disassemble", cdis_dis, 1, 1);
 	ADD_BUILTIN("input-port?", cinput_port_p, 1, 0);
 	ADD_BUILTIN("output-input-port?", coutput_port_p, 1, 0);
 	ADD_BUILTIN("port?", cport_p, 1, 0);

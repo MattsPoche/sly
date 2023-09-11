@@ -40,6 +40,7 @@
  for-each
  generate-temporaries
  take
+ drop
  assoc
  alist-cons
  alist-copy
@@ -53,8 +54,17 @@
  substring
  string->list
  list->string
+ char-at
  make-stream
  define-module
+ in-range
+ in-list
+ in-vector
+ vector->stream
+ in-string
+ string->stream
+ for
+ for/list
  import)
 
 (provide
