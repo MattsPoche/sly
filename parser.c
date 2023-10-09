@@ -5,7 +5,6 @@
 #include "sly_types.h"
 #include "lexer.h"
 #include "parser.h"
-#include "sly_alloc.h"
 
 #define syntax_cons(car, cdr) make_syntax(ss, t, cons(ss, car, cdr))
 #define peek() PEEK_TOKEN(tokens)
@@ -65,7 +64,7 @@ parse_char(Sly_State *ss, char *str, size_t len)
 static char *
 escape_string(Sly_State *ss, char *str, size_t len)
 {
-	char *buf = MALLOC(len+1);
+	char *buf = GC_MALLOC(len+1);
 	assert(buf != NULL);
 	size_t i, j;
 	for (i = 0, j = 0; i < len; ++i, ++j) {
@@ -266,8 +265,7 @@ build_list:
 	} break;
 	case tok_string: {
 		char *s = escape_string(ss, &cstr[t.so+1], t.eo - t.so - 2);
-		sly_value stx = make_syntax(ss, t, make_string(ss, s, strlen(s)));
-		FREE(s);
+		sly_value stx = make_syntax(ss, t, string_from_managed_buffer(ss, s, strlen(s)));
 		return stx;
 	} break;
 	case tok_bool: {
@@ -320,7 +318,6 @@ parse(Sly_State *ss, char *cstr)
 		if (null_p(val = parse_value(ss, cstr))) break;
 		append(code, cons(ss, val, SLY_NULL));
 	}
-	free(tokens.ts);
 	return make_syntax(ss, (token){0}, code);
 }
 
@@ -367,7 +364,7 @@ parse_file(Sly_State *ss, char *file_path, char **contents)
 		sly_raise_exception(ss, EXC_COMPILE, "Error unable to open source file");
 	}
 	size_t size = get_file_size(file);
-	char *str = MALLOC(size+1);
+	char *str = GC_MALLOC(size+1);
 	assert(str != NULL);
 	fread(str, 1, size, file);
 	str[size] = '\0';

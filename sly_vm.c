@@ -1,8 +1,8 @@
 #define OPCODES_INCLUDE_INLINE 1
+#include <gc.h>
 #include "sly_types.h"
 #include "opcodes.h"
 #include "sly_compile.h"
-#include "sly_gc.h"
 #include "sly_vm.h"
 #include "eval.h"
 #include "opcodes.h"
@@ -14,14 +14,6 @@
 #define get_upval(i)    upvalue_get(vector_ref(ss->frame->U, (i)))
 #define set_upval(i, v) upvalue_set(vector_ref(ss->frame->U, (i)), (v))
 #define TOP_LEVEL_P(frame) ((frame)->level == 0 || (frame)->cont == SLY_NULL)
-#define vm_exit()								\
-	do {										\
-		if (run_gc) {							\
-			GARBAGE_COLLECT(ss);				\
-		}										\
-		return ret_val;							\
-	} while (0)
-
 
 static void close_upvalues(Sly_State *ss, stack_frame *frame);
 static int funcall(Sly_State *ss, u32 idx, u32 nargs, int is_tailcall);
@@ -221,7 +213,7 @@ close_upvalues(Sly_State *ss, stack_frame *frame)
 }
 
 sly_value
-vm_run(Sly_State *ss, int run_gc)
+vm_run(Sly_State *ss)
 {
 	sly_value ret_val = SLY_VOID;
 	union instr instr;
@@ -327,8 +319,7 @@ vm_run(Sly_State *ss, int run_gc)
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
 			if (null_p(get_reg(a))) {
-				ret_val = get_reg(a+1);
-				vm_exit();
+				return get_reg(a+1);
 			}
 			funcall(ss, a, b - a - 1, 0);
 		} break;
@@ -336,8 +327,7 @@ vm_run(Sly_State *ss, int run_gc)
 			u8 a = GET_A(instr);
 			u8 b = GET_B(instr);
 			if (null_p(get_reg(a))) {
-				ret_val = get_reg(a+1);
-				vm_exit();
+				return get_reg(a+1);
 			}
 			funcall(ss, a, b - a - 1, 1);
 		} break;
@@ -454,8 +444,7 @@ vm_run(Sly_State *ss, int run_gc)
 			u8 a = GET_A(instr);
 			//u8 b = GET_B(instr);
 			if (TOP_LEVEL_P(ss->frame)) {
-				ret_val = get_reg(a);
-				vm_exit();
+				return get_reg(a);
 			} else {
 				sly_assert(0, "Exit from non toplevel");
 			}
@@ -472,9 +461,6 @@ vm_run(Sly_State *ss, int run_gc)
 			sly_assert(0, "Error invalid opcode");
 		} break;
 		}
-		if (run_gc) {
-			GARBAGE_COLLECT(ss);
-		}
 	}
-	vm_exit();
+	return ret_val;
 }

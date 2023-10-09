@@ -9,7 +9,7 @@
 stack_frame *
 make_eval_stack(Sly_State *ss, sly_value regs)
 {
-	stack_frame *frame = gc_alloc(ss, sizeof(*frame));
+	stack_frame *frame = GC_MALLOC(sizeof(*frame));
 	frame->h.type = tt_stack_frame;
 	frame->cont = SLY_NULL;
 	frame->R = regs;
@@ -32,16 +32,16 @@ call_closure(Sly_State *ss, sly_value call_list)
 	ss->frame->clos = vector_ref(call_list, 0);
 	closure *clos = GET_PTR(ss->frame->clos);
 	ss->frame->U = clos->upvals;
-	sly_value val = vm_run(ss, 0);
+	sly_value val = vm_run(ss);
 	ss->frame = tmp;
 	return val;
 }
 
 sly_value
-eval_closure(Sly_State *ss, sly_value _clos, sly_value args, int gc_flag)
+eval_closure(Sly_State *ss, sly_value _clos, sly_value args)
 {
 	stack_frame *tmp = ss->frame;
-	ss->frame = gc_alloc(ss, sizeof(stack_frame));
+	ss->frame = GC_MALLOC(sizeof(stack_frame));
 	ss->frame->h.type = tt_stack_frame;
 	ss->frame->cont = SLY_NULL;
 	closure *clos = GET_PTR(_clos);
@@ -61,7 +61,7 @@ eval_closure(Sly_State *ss, sly_value _clos, sly_value args, int gc_flag)
 	ss->frame->level = 0;
 	ss->frame->clos = _clos;
 	ss->frame->cont = SLY_NULL;
-	sly_value rv = vm_run(ss, gc_flag);
+	sly_value rv = vm_run(ss);
 	ss->frame = tmp;
 	return rv;
 }

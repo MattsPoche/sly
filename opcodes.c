@@ -1,7 +1,6 @@
 #include <ctype.h>
 #include "sly_types.h"
 #include "opcodes.h"
-#include "sly_alloc.h"
 
 stack_frame *
 make_stack(Sly_State *ss, size_t nregs)
@@ -9,7 +8,7 @@ make_stack(Sly_State *ss, size_t nregs)
 	if (nregs >= REG_MAX) {
 		sly_raise_exception(ss, EXC_ALLOC, "Stack too big");
 	}
-	stack_frame *frame = gc_alloc(ss, sizeof(*frame));
+	stack_frame *frame = GC_MALLOC(sizeof(*frame));
 	frame->h.type = tt_stack_frame;
 	frame->cont = SLY_NULL;
 	frame->R = make_vector(ss, nregs*2, nregs*2);

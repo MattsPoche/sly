@@ -4,9 +4,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <setjmp.h>
+#include <gc.h>
 #include "common_def.h"
 #include "lexer.h"
-#include "sly_gc.h"
+
 
 typedef u64 sly_value;
 
@@ -54,7 +55,6 @@ enum exc_code { /* exception code */
 };
 
 typedef struct _sly_state {
-	GC *gc;
 	char *file_path;
 	char *source_code;
 	struct compile *cc;
@@ -286,6 +286,7 @@ void intern_symbol(Sly_State *ss, sly_value sym_v);
 char *char_name_cstr(char c);
 sly_value char_name(Sly_State *ss, sly_value c);
 sly_value make_string(Sly_State *ss, char *cstr, size_t len);
+sly_value string_from_managed_buffer(Sly_State *ss, char *buf, size_t len);
 sly_value make_uninitialized_string(Sly_State *ss, size_t len);
 sly_value string_ref(Sly_State *ss, sly_value v, size_t idx);
 void string_set(sly_value v, size_t idx, sly_value b);

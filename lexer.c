@@ -6,9 +6,9 @@
 #include <ctype.h>
 #include <sys/types.h>
 #include <regex.h>
+#include <gc.h>
 #include "common_def.h"
 #include "lexer.h"
-#include "sly_alloc.h"
 
 #define LINE_SIZE 1024
 
@@ -164,7 +164,7 @@ grow_token_buff(token_buff *tokens)
 	} else {
 		tokens->max *= 2;
 	}
-	tokens->ts = realloc(tokens->ts, sizeof(token) * tokens->max);
+	tokens->ts = GC_REALLOC(tokens->ts, sizeof(token) * tokens->max);
 }
 
 void

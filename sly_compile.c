@@ -1,3 +1,6 @@
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
 #include "sly_types.h"
 #include "parser.h"
 #define OPCODES_INCLUDE_INLINE 1
@@ -6,10 +9,6 @@
 #include "syntax_expander.h"
 #include "eval.h"
 #include "sly_vm.h"
-#include "sly_alloc.h"
-#include <unistd.h>
-#include <errno.h>
-#include <string.h>
 
 /* TODO: procedures cannot refer to variables defined
  * after they are.
@@ -169,7 +168,7 @@ intern_syntax(Sly_State *ss, sly_value value)
 static struct scope *
 make_scope(Sly_State *ss)
 {
-	struct scope *scope = gc_alloc(ss, sizeof(*scope));
+	struct scope *scope = GC_MALLOC(sizeof(*scope));
 	scope->h.type = tt_scope;
 	scope->parent = NULL;
 	scope->symtable = make_dictionary(ss);
@@ -826,7 +825,7 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 void
 sly_init_state(Sly_State *ss)
 {
-	ss->cc = MALLOC(sizeof(*ss->cc));
+	ss->cc = GC_MALLOC(sizeof(*ss->cc));
 	ss->cc->globals = make_dictionary(ss);
 	ss->cc->cscope = make_scope(ss);
 	ss->cc->cscope->symtable = make_dictionary(ss);
@@ -835,24 +834,9 @@ sly_init_state(Sly_State *ss)
 	init_builtins(ss);
 }
 
-void
-sly_free_state(Sly_State *ss)
-{
-	gc_free_all(ss);
-	if (ss->cc) {
-		FREE(ss->cc);
-		ss->cc = NULL;
-	}
-	if (ss->source_code) {
-		FREE(ss->source_code);
-		ss->source_code = NULL;
-	}
-}
-
 sly_value
 sly_expand_only(Sly_State *ss, char *file_path)
 {
-	gc_init(ss);
 	ss->interned = make_dictionary(ss);
 	sly_init_state(ss);
 	sly_value env = make_dictionary(ss);
@@ -872,7 +856,6 @@ void
 sly_do_file(char *file_path, int debug_info)
 {
 	Sly_State ss = {0};
-	gc_init(&ss);
 	ss.interned = make_dictionary(&ss);
 	sly_init_state(&ss);
 	sly_value env = make_dictionary(&ss);
@@ -887,17 +870,9 @@ sly_do_file(char *file_path, int debug_info)
 		sly_value ast = parse_file(&ss, file_path, &ss.source_code);
 		ast = sly_expand(&ss, env, ast);
 		ss.entry_point = sly_compile(&ss, ast);
-		gc_collect(&ss);
-		eval_closure(&ss, ss.entry_point, SLY_NULL, 1);
+		eval_closure(&ss, ss.entry_point, SLY_NULL);
 	}
 	if (debug_info) dis_all(ss.frame, 1);
-	if (debug_info) {
-		printf("** Allocations: %d **\n", allocations);
-		printf("** Net allocations: %d **\n", net_allocations);
-		printf("** Total bytes allocated: %zu **\n", bytes_allocated);
-		printf("** GC Total Collections: %d **\n", ss.gc->collections);
-	}
-	sly_free_state(&ss);
 }
 
 sly_value

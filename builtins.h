@@ -600,10 +600,11 @@ cdatum_to_syntax(Sly_State *ss, sly_value args)
 static sly_value
 craw_syntax(Sly_State *ss, sly_value args)
 {
+	UNUSED(ss);
 	sly_value stx = vector_ref(args, 0);
 	sly_assert(syntax_p(stx), "Type Error expected syntax");
 	syntax *s1 = GET_PTR(stx);
-	syntax *s2 = gc_alloc(ss, sizeof(*s2));
+	syntax *s2 = GC_MALLOC(sizeof(*s2));
 	s2->h.type = tt_syntax;
 	s2->tok = s1->tok;
 	s2->datum = SLY_VOID;
@@ -848,7 +849,7 @@ craise_macro_exception(Sly_State *ss, sly_value args)
 {
 	sly_value str = vector_ref(args, 0);
 	byte_vector *bv = GET_PTR(str);
-	char *msg = malloc(bv->len+1);
+	char *msg = GC_MALLOC(bv->len+1);
 	memcpy(msg, bv->elems, bv->len);
 	msg[bv->len] = '\0';
 	sly_raise_exception(ss, EXC_MACRO, msg);
@@ -888,7 +889,7 @@ ceval(Sly_State *ss, sly_value args)
 	prototype *proto = GET_PTR(ss->cc->cscope->proto);
 	proto->code = make_vector(ss, 0, 16);
 	sly_value clos = sly_compile(ss, ast);
-	sly_value rval = eval_closure(ss, clos, SLY_NULL, 0);
+	sly_value rval = eval_closure(ss, clos, SLY_NULL);
 	return rval;
 }
 
@@ -897,7 +898,6 @@ cread(Sly_State *ss, sly_value args)
 {
 	char *cstr = string_to_cstr(vector_ref(args, 0));
 	sly_value ast = parse(ss, cstr);
-	free(cstr);
 	return ast;
 }
 
@@ -908,7 +908,6 @@ cread_file(Sly_State *ss, sly_value args)
 	char *contents;
 	sly_value ast = parse_file(ss, cstr, &contents);
 	printf("%s\n", cstr);
-	sly_free(cstr);
 	return ast;
 }
 

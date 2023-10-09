@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <string.h>
-#include "sly_alloc.h"
 #include "sly_types.h"
 #include "sly_ports.h"
 
@@ -133,7 +132,6 @@ open_input_file(Sly_State *ss, sly_value file_path)
 	user_data_set_properties(port, plist);
 	char *str = string_to_cstr(file_path);
 	FILE *f = fopen(str, "r");
-	FREE(str);
 	port_set_stream(port, f);
 	return port;
 }
@@ -174,7 +172,6 @@ open_output_file(Sly_State *ss, sly_value file_path, int append)
 	} else {
 		f = fopen(str, "w");
 	}
-	FREE(str);
 	port_set_stream(port, f);
 	return port;
 }

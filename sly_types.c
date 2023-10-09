@@ -2,7 +2,6 @@
 #include <execinfo.h>
 #include <math.h>
 #include "sly_types.h"
-#include "sly_alloc.h"
 #include "opcodes.h"
 
 #define DICT_INIT_SIZE 32
@@ -358,6 +357,7 @@ get_float(sly_value v)
 sly_value
 make_int(Sly_State *ss, i64 i)
 {
+	UNUSED(ss);
 	if (i >= INT32_MIN && i <= INT32_MAX) {
 		/* small int */
 		union imm_value v;
@@ -365,7 +365,7 @@ make_int(Sly_State *ss, i64 i)
 		v.i.val.as_int = i;
 		return (v.v & ~TAG_MASK) | st_imm;
 	}
-	number *n = gc_alloc(ss, sizeof(*n));
+	number *n = GC_MALLOC(sizeof(*n));
 	n->h.type = tt_int;
 	n->val.as_int = i;
 	return (sly_value)n;
@@ -384,7 +384,8 @@ make_byte(Sly_State *ss, i8 i)
 sly_value
 make_big_float(Sly_State *ss, f64 f)
 {
-	number *n = gc_alloc(ss, sizeof(*n));
+	UNUSED(ss);
+	number *n = GC_MALLOC(sizeof(*n));
 	n->h.type = tt_float;
 	n->val.as_float = f;
 	return (sly_value)n;
@@ -414,7 +415,8 @@ make_float(Sly_State *ss, f64 f)
 sly_value
 cons(Sly_State *ss, sly_value car, sly_value cdr)
 {
-	pair *p = gc_alloc(ss, sizeof(*p));
+	UNUSED(ss);
+	pair *p = GC_MALLOC(sizeof(*p));
 	p->h.type = tt_pair;
 	p->car = car;
 	p->cdr = cdr;
@@ -590,13 +592,13 @@ vector_to_list(Sly_State *ss, sly_value vec)
 sly_value
 make_byte_vector(Sly_State *ss, size_t len, size_t cap)
 {
+	UNUSED(ss);
 	sly_assert(len <= cap, "Error vector length may not exceed its capacity");
-	byte_vector *vec = gc_alloc(ss, sizeof(*vec));
-	vec->elems = MALLOC(cap);
+	byte_vector *vec = GC_MALLOC(sizeof(*vec));
+	vec->elems = GC_MALLOC(cap);
 	vec->h.type = tt_byte_vector;
 	vec->cap = cap;
 	vec->len = len;
-	ss->gc->bytes += cap;
 	return (sly_value)vec;
 }
 
@@ -633,14 +635,13 @@ byte_vector_len(sly_value v)
 sly_value
 make_vector(Sly_State *ss, size_t len, size_t cap)
 {
+	UNUSED(ss);
 	sly_assert(len <= cap, "Error vector length may not exceed its capacity");
-	vector *vec = gc_alloc(ss, sizeof(*vec));
-	size_t bytes = sizeof(sly_value) * cap;
-	vec->elems = MALLOC(bytes);
+	vector *vec = GC_MALLOC(sizeof(*vec));
+	vec->elems = GC_MALLOC(sizeof(sly_value) * cap);
 	vec->h.type = tt_vector;
 	vec->cap = cap;
 	vec->len = len;
-	ss->gc->bytes += bytes;
 	return (sly_value)vec;
 }
 
@@ -704,11 +705,10 @@ vector_len(sly_value v)
 static void
 vector_grow(Sly_State *ss, sly_value v)
 {
+	UNUSED(ss);
 	vector *vec = GET_PTR(v);
-	ss->gc->bytes += vec->cap * sizeof(sly_value);
 	vec->cap *= 2;
-	vec->elems = realloc(vec->elems, vec->cap * sizeof(sly_value));
-	memset(&vec->elems[vec->len], 0, (vec->cap - vec->len) * sizeof(sly_value));
+	vec->elems = GC_REALLOC(vec->elems, vec->cap * sizeof(sly_value));
 	sly_assert(vec->elems != NULL, "Realloc failed (vector_grow)");
 }
 
@@ -777,16 +777,16 @@ vector_contains(Sly_State *ss, sly_value vec, sly_value value)
 sly_value
 make_uninterned_symbol(Sly_State *ss, char *cstr, size_t len)
 {
+	UNUSED(ss);
 	sly_assert(len <= UCHAR_MAX,
 			   "Value Error: name exceeds maximum for symbol");
-	symbol *sym = gc_alloc(ss, sizeof(*sym));
-	sym->name = MALLOC(len);
+	symbol *sym = GC_MALLOC(sizeof(*sym));
+	sym->name = GC_MALLOC(len);
 	sym->h.type = tt_symbol;
 	sym->len = len;
 	memcpy(sym->name, cstr, len);
 	sym->hash = hash_symbol(cstr, len);
 	sym->alias = SLY_NULL;
-	ss->gc->bytes += len;
 	return (sly_value)sym;
 }
 
@@ -870,6 +870,18 @@ make_string(Sly_State *ss, char *cstr, size_t len)
 }
 
 sly_value
+string_from_managed_buffer(Sly_State *ss, char *buf, size_t len)
+{
+	UNUSED(ss);
+	byte_vector *vec = GC_MALLOC(sizeof(*vec));
+	vec->len = len;
+	vec->cap = len;
+	vec->elems = (u8 *)buf;
+	vec->h.type = tt_string;
+	return (sly_value)vec;
+}
+
+sly_value
 make_uninitialized_string(Sly_State *ss, size_t len)
 {
 	sly_value val = make_byte_vector(ss, len, len);
@@ -937,7 +949,7 @@ string_to_cstr(sly_value s)
 {
 	sly_assert(string_p(s), "Type error expected <string>");
 	byte_vector *v = GET_PTR(s);
-	char *cstr = MALLOC(v->len + 1);
+	char *cstr = GC_MALLOC(v->len + 1);
 	memcpy(cstr, v->elems, v->len);
 	cstr[v->len] = '\0';
 	return cstr;
@@ -968,7 +980,7 @@ sly_value
 make_prototype(Sly_State *ss, sly_value uplist, sly_value constants, sly_value code,
 			   size_t nregs, size_t nargs, size_t entry, int has_varg)
 {
-	prototype *proto = gc_alloc(ss, sizeof(*proto));
+	prototype *proto = GC_MALLOC(sizeof(*proto));
 	proto->h.type = tt_prototype;
 	proto->uplist = uplist;
 	proto->K = constants;
@@ -987,7 +999,7 @@ sly_value
 make_closure(Sly_State *ss, sly_value _proto)
 {
 	sly_assert(prototype_p(_proto), "Type Error expected prototype");
-	closure *clos = gc_alloc(ss, sizeof(*clos));
+	closure *clos = GC_MALLOC(sizeof(*clos));
 	clos->h.type = tt_closure;
 	prototype *proto = GET_PTR(_proto);
 	size_t cap = 1 + vector_len(proto->uplist); /* + 1 for globals */
@@ -1000,7 +1012,8 @@ make_closure(Sly_State *ss, sly_value _proto)
 sly_value
 make_cclosure(Sly_State *ss, cfunc fn, size_t nargs, int has_varg)
 {
-	cclosure *clos = gc_alloc(ss, sizeof(*clos));
+	UNUSED(ss);
+	cclosure *clos = GC_MALLOC(sizeof(*clos));
 	clos->h.type = tt_cclosure;
 	clos->fn = fn;
 	clos->nargs = nargs;
@@ -1011,7 +1024,8 @@ make_cclosure(Sly_State *ss, cfunc fn, size_t nargs, int has_varg)
 sly_value
 make_continuation(Sly_State *ss, struct _stack_frame *frame, size_t pc, size_t ret_slot)
 {
-	continuation *cc = gc_alloc(ss, sizeof(*cc));
+	UNUSED(ss);
+	continuation *cc = GC_MALLOC(sizeof(*cc));
 	cc->h.type = tt_continuation;
 	cc->frame = frame;
 	cc->pc = pc;
@@ -1533,7 +1547,8 @@ copy_syntax(Sly_State *ss, sly_value s)
 sly_value
 make_syntax(Sly_State *ss, token tok, sly_value datum)
 {
-	syntax *stx = gc_alloc(ss, sizeof(*stx));
+	UNUSED(ss);
+	syntax *stx = GC_MALLOC(sizeof(*stx));
 	stx->h.type = tt_syntax;
 	stx->tok = tok;
 	stx->datum = datum;
@@ -1618,7 +1633,7 @@ symbol_to_cstr(sly_value sym)
 {
 	sly_assert(symbol_p(sym), "Type error expected <string>");
 	symbol *s = GET_PTR(sym);
-	char *cstr = MALLOC(s->len + 1);
+	char *cstr = GC_MALLOC(s->len + 1);
 	memcpy(cstr, s->name, s->len);
 	cstr[s->len] = '\0';
 	return cstr;
@@ -1910,7 +1925,8 @@ find_open_upvalue(Sly_State *ss, sly_value *ptr, upvalue **parent)
 sly_value
 make_closed_upvalue(Sly_State *ss, sly_value val)
 {
-	upvalue *uv = gc_alloc(ss, sizeof(*uv));
+	UNUSED(ss);
+	upvalue *uv = GC_MALLOC(sizeof(*uv));
 	uv->h.type = tt_upvalue;
 	uv->isclosed = 1;
 	uv->u.val = val;
@@ -1923,7 +1939,7 @@ make_open_upvalue(Sly_State *ss, sly_value *ptr)
 {
 	upvalue *uv = find_open_upvalue(ss, ptr, NULL);
 	if (uv == NULL) {
-		uv = gc_alloc(ss, sizeof(*uv));
+		uv = GC_MALLOC(sizeof(*uv));
 		uv->h.type = tt_upvalue;
 		uv->isclosed = 0;
 		uv->u.ptr = ptr;
@@ -1967,12 +1983,12 @@ upvalue_isclosed(sly_value uv)
 sly_value
 make_user_data(Sly_State *ss, size_t data_size)
 {
+	UNUSED(ss);
 	size_t size = sizeof(user_data) + data_size;
-	user_data *ud = gc_alloc(ss, size);
+	user_data *ud = GC_MALLOC(size);
 	ud->h.type = tt_user_data;
 	ud->properties = SLY_NULL;
 	ud->size = data_size;
-	ss->gc->bytes += size;
 	return (sly_value)ud;
 }
 

@@ -1,8 +1,7 @@
 #include <stdio.h>
-#include <ctype.h>
+//#include <ctype.h>
+#include <gc.h>
 #include "sly_types.h"
-#include "sly_gc.h"
-#include "sly_alloc.h"
 #include "parser.h"
 #include "sly_compile.h"
 #include "opcodes.h"
@@ -12,23 +11,6 @@
 int allocations = 0;
 int net_allocations = 0;
 size_t bytes_allocated = 0;
-
-void *
-sly_alloc(size_t size)
-{
-	void *ptr = calloc(size, 1);
-	bytes_allocated += size;
-	allocations++;
-	net_allocations++;
-	return ptr;
-}
-
-void
-sly_free(void *ptr)
-{
-	free(ptr);
-	net_allocations--;
-}
 
 static char *
 next_arg(int *argc, char **argv[])
@@ -59,7 +41,6 @@ main(int argc, char *argv[])
 				Sly_State ss = {0};
 				sly_value ast = sly_expand_only(&ss, next_arg(&argc, &argv));
 				sly_displayln(strip_syntax(&ss, ast));
-				sly_free_state(&ss);
 			} else {
 				allocations = 0;
 				net_allocations = 0;

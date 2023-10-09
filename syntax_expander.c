@@ -6,7 +6,6 @@
 #include "syntax_expander.h"
 #include "eval.h"
 #include "sly_vm.h"
-#include "sly_alloc.h"
 
 /* TODO: Implement module system */
 
@@ -88,7 +87,7 @@ macro_call(Sly_State *ss, sly_value macro, sly_value form)
 	closure *clos = GET_PTR(macro);
 	vector_set(clos->upvals, 0,
 			   make_closed_upvalue(ss, ss->cc->globals));
-	return eval_closure(ss, macro, args, 0);
+	return eval_closure(ss, macro, args);
 }
 
 static int
@@ -448,7 +447,7 @@ expand_require(Sly_State *ss, sly_value s, sly_value env)
 		sly_value ast = parse_file(ss, ss->file_path, &ss->source_code);
 		ast = sly_expand(ss, env, ast);
 		ss->entry_point = sly_compile(ss, ast);
-		eval_closure(ss, ss->entry_point, SLY_NULL, 0);
+		eval_closure(ss, ss->entry_point, SLY_NULL);
 		ss->file_path = old_file_path;
 		ss->cc->cscope->proto = old_proto;
 		ss->entry_point = old_entry_point;
