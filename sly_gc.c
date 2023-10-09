@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "common_def.h"
-#include "gc.h"
+#include "sly_gc.h"
 #include "sly_types.h"
 #include "sly_alloc.h"
 #include "opcodes.h"

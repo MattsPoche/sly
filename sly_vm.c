@@ -2,7 +2,7 @@
 #include "sly_types.h"
 #include "opcodes.h"
 #include "sly_compile.h"
-#include "gc.h"
+#include "sly_gc.h"
 #include "sly_vm.h"
 #include "eval.h"
 #include "opcodes.h"

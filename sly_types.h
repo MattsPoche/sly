@@ -6,25 +6,27 @@
 #include <setjmp.h>
 #include "common_def.h"
 #include "lexer.h"
-#include "gc.h"
+#include "sly_gc.h"
 
 typedef u64 sly_value;
 
 #define st_ptr   0x0
-#define st_pair  0x1
+#define st_null  0x1
 #define st_imm   0x2
-// #define st_ref   0x3
-#define st_bool  0x4
+#define st_false 0x3
+#define st_true  0x4
 #define TAG_MASK 0x7
 
-#define imm_int   0
-#define imm_byte  1
-#define imm_float 2
+enum imm_type {
+	imm_int = 0,
+	imm_byte,
+	imm_float,
+};
 
-#define SLY_NULL  ((sly_value)st_pair)
+#define SLY_NULL  ((sly_value)st_null)
 #define SLY_VOID  ((sly_value)0)
-#define SLY_FALSE ((sly_value)st_bool)
-#define SLY_TRUE  ((sly_value)((UINT64_MAX & ~TAG_MASK)|st_bool))
+#define SLY_FALSE ((sly_value)st_false)
+#define SLY_TRUE  ((sly_value)st_true)
 #define ctobool(b) ((b) ? SLY_TRUE : SLY_FALSE)
 #define booltoc(b) ((b) == SLY_FALSE ? 0 : 1)
 #define HANDLE_EXCEPTION(ss, code)				\
@@ -374,10 +376,12 @@ sly_value construct_syntax(Sly_State *ss, sly_value template, sly_value pvars,
 #define open_p(v)        ref_p(v)
 #define GET_PTR(v)       ((void *)((v) & ~TAG_MASK))
 #define TYPEOF(v)        (((gc_object *)GET_PTR(v))->type)
-#define pair_p(v)        (!null_p(v) && ((v) & TAG_MASK) == st_pair)
 #define imm_p(v)         (((v) & TAG_MASK) == st_imm)
-#define bool_p(v)        (((v) & TAG_MASK) == st_bool)
+#define true_p(v)        (((v) & TAG_MASK) == st_true)
+#define false_p(v)       (((v) & TAG_MASK) == st_false)
+#define bool_p(v)        (true_p(v) || false_p(v))
 #define number_p(v)      (int_p(v) || float_p(v) || byte_p(v))
+#define pair_p(v)        (ptr_p(v) && TYPEOF(v) == tt_pair)
 #define symbol_p(v)      (ptr_p(v) && TYPEOF(v) == tt_symbol)
 #define vector_p(v)      (ptr_p(v) && TYPEOF(v) == tt_vector)
 #define byte_vector_p(v) (ptr_p(v) && TYPEOF(v) == tt_byte_vector)

@@ -418,8 +418,7 @@ cons(Sly_State *ss, sly_value car, sly_value cdr)
 	p->h.type = tt_pair;
 	p->car = car;
 	p->cdr = cdr;
-	sly_value v = (sly_value)p;
-	return (v & ~TAG_MASK) | st_pair;
+	return (sly_value)p;
 }
 
 sly_value

@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include "sly_types.h"
-#include "gc.h"
+#include "sly_gc.h"
 #include "sly_alloc.h"
 #include "parser.h"
 #include "sly_compile.h"
