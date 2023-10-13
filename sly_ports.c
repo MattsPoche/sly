@@ -257,7 +257,7 @@ read_string(Sly_State *ss, sly_value port, size_t len)
 	sly_assert(input_port_p(ss, port), "Type Error expected input-port");
 	sly_value s = make_byte_vector(ss, len, len);
 	byte_vector *ptr = GET_PTR(s);
-	ptr->h.type = tt_string;
+	ptr->type = tt_string;
 	ptr->len = fread(ptr->elems, 1, len, port_get_stream(port));
 	return s;
 }
@@ -308,7 +308,7 @@ port_to_string(Sly_State *ss, sly_value port)
 	rewind(f);
 	sly_value str = make_byte_vector(ss, len, len);
 	byte_vector *s = GET_PTR(str);
-	s->h.type = tt_string;
+	s->type = tt_string;
 	fread(s->elems, 1, len, f);
 	close_input_port(ss, port);
 	return str;

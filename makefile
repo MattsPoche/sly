@@ -1,6 +1,6 @@
 CC=gcc
 WARNINGS=-Wmissing-prototypes -Werror -Wextra -pedantic -Wall -Wswitch-enum
-CFLAGS=-ggdb -std=c11
+CFLAGS=-ggdb
 CFLAGS += $(WARNINGS)
 RELEASE=-O3 -Werror -Wextra -pedantic -Wall -Wswitch-enum -std=c11
 DEFS=-D _POSIX_C_SOURCE=200809L

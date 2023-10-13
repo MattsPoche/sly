@@ -1,0 +1,189 @@
+(require "sly-lib/base.sly")
+(require "expanded-prg.sly")
+
+;; NOTE: helpful article on how to write cps transforms
+;;       https://matt.might.net/articles/cps-conversion/
+
+(define (repeat val count)
+  (let loop ([count count]
+			 [ls '()])
+	(if (> count 0)
+		(loop (- count 1) (cons val ls))
+		ls)))
+
+(define (aexpr? expr)
+  (or (and (pair? expr)
+		   (or (and (eq? (car expr) 'lambda)
+					(= (length expr) 3))
+			   (eq? (car expr) 'quote)))
+	  (symbol? expr)
+	  (number? expr)
+	  (string? expr)
+	  (boolean? expr)))
+
+(define (M expr)
+  (if (pair? expr)
+	  (let ([fst (car expr)]
+			[rest (cdr expr)])
+		(if (eq? fst 'lambda)
+			(let ([args (car rest)]
+				  [body (cadr rest)]
+				  [$k (gensym '$k)])
+			  `(,fst ,(cons $k args) ,(T-c body $k)))
+			(if (or (eq? (car expr) 'quote)
+					(eq? (car expr) 'void))
+				expr
+				(error "Not an aexpr!"))))
+	  (if (or (eq? expr 'call/cc)
+			  (eq? expr 'call-with-current-continuation))
+		  '(lambda (f cc) (f (lambda (x _) (cc x)) cc))
+		  expr)))
+
+(define (T*-k exprs k)
+  (if (pair? exprs)
+	  (T-k (car exprs)
+		   (lambda (hd)
+			 (T*-k (cdr exprs)
+				   (lambda (t1)
+					 (k (cons hd t1))))))
+	  (if (null? exprs)
+		  (k '())
+		  (error "expected a sequence of expressions"))))
+
+(define (T-k expr k)
+  (if (aexpr? expr)
+	  (k (M expr))
+	  (if (pair? expr)
+		  (let ([f (car expr)]
+				[e (cdr expr)])
+			(if (eq? f 'begin)
+				(let ([len (length e)])
+				  (if (> len 1)
+					  (T-k (car e) (lambda (_)
+									 (T-k `(begin ,@(cdr e)) k)))
+					  (T-k (car e) k)))
+				(if (eq? f 'if)
+					(let ([exprc (car e)]
+						  [exprt (cadr e)]
+						  [exprf (caddr e)]
+						  [cont (gensym '$k)])
+					  (T-k exprc
+						   (lambda (aexp)
+							 `(if ,aexp
+								  ,(T-c exprt cont)
+								  ,(T-c exprf cont)))))
+					(if (eq? f 'set!)
+						(let ([var (car e)]
+							  [expr (cadr e)])
+						  (T-k expr (lambda (aexp)
+									  `(core/set-then! ,var ,aexp
+												  ,(k 'core/void)))))
+						(let* ([$rv (gensym '$rv)]
+							   [cont `(lambda (,$rv) ,(k $rv))])
+						  (T-c expr cont))))))
+		  (if (null? expr)
+			  expr
+			  (k (M expr))))))
+
+(define (T-c expr c)
+  (if (aexpr? expr)
+	  `(,c ,(M expr))
+	  (if (pair? expr)
+		  (let ([f (car expr)]
+				[e (cdr expr)])
+			(if (eq? f 'begin)
+				(let ([len (length e)])
+				  (if (> len 1)
+					  (T-k (car e) (lambda (_)
+									 (T-c `(begin ,@(cdr e)) c)))
+					  (T-c (car e) c)))
+				(if (eq? f 'if)
+					(let ([exprc (car e)]
+						  [exprt (cadr e)]
+						  [exprf (caddr e)]
+						  [$k (gensym '$k)])
+					  `((lambda (,$k)
+						  ,(T-k exprc
+								(lambda (aexp)
+								  `(if ,aexp
+									   ,(T-c exprt $k)
+									   ,(T-c exprf $k)))))
+						,c))
+					(if (eq? f 'set!)
+						(let ([var (car e)]
+							  [expr (cadr e)])
+						  (T-k expr (lambda (aexp)
+									  `(core/set-then! ,var ,aexp (,c core/void)))))
+						(T-k f (lambda ($f)
+								 (T*-k e (lambda ($e)
+										   `(,$f ,c ,@$e)))))))))
+		  (if (null? expr)
+			  expr
+			  `(,c ,(M expr))))))
+
+(define (hoist-defines form)
+  ;; NOTE: this function modifies form
+  ;; Replaces all `define' forms with `set!' forms.
+  ;; Collects all defined ids in a body into `core/declare-vars'.
+  ;; This helps the compiler allocate enough space for defined variables
+  ;; at the begining of blocks.
+  ;; The cps transformers expect lambdas to have one expression in their body.
+  ;; This will collect all expressions in a lambda body into a begin form to
+  ;; statisfy this constraint.
+  (define vars '())
+  (let loop ([form form])
+	(if (null? form)
+		vars
+		(let ([expr (car form)]
+			  [form (cdr form)])
+		  (if (pair? expr)
+			  (let ([fst (car expr)])
+				(if (eq? fst 'define)
+					(begin
+					  (set! vars (cons (cadr expr) vars))
+					  (set-car! expr 'set!)
+					  (loop form))
+					(if (eq? fst 'begin)
+						(begin
+						  (loop (cdr expr))
+						  (loop form))
+						(loop form))))
+			  (loop form)))))
+  (if (null? vars)
+	  `(begin ,@form)
+	  `((lambda ,vars ,@form) ,@(repeat 'core/void (length vars)))))
+
+(define (canonicalize form)
+  (define (helper form)
+	(if (pair? form)
+		(if (eq? (car form) 'lambda)
+			(let ([args (cadr form)]
+				  [body (helper (hoist-defines (cddr form)))])
+			  `(lambda ,args ,body))
+			(cons (helper (car form))
+				  (helper (cdr form))))
+		form))
+  (let ([form (hoist-defines form)])
+	(helper form)))
+
+(define prg
+  '(begin
+	 (display "The sum of 32 and 10 is: ")
+	 (display 42)
+	 (newline)))
+
+(define (copy-list ls)
+  (if (pair? ls)
+	  (cons (copy-list (car ls)) (copy-list (cdr ls)))
+	  ls))
+
+
+(define (cps prg)
+  (displayln prg)
+  (display "\n")
+  (let* ([canon (canonicalize (copy-list prg))]
+		 [cps-form (T-c canon 'core/halt)])
+	(displayln cps-form)
+	cps-form))
+
+(cps prg)

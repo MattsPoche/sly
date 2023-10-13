@@ -366,7 +366,7 @@ make_int(Sly_State *ss, i64 i)
 		return (v.v & ~TAG_MASK) | st_imm;
 	}
 	number *n = GC_MALLOC(sizeof(*n));
-	n->h.type = tt_int;
+	n->type = tt_int;
 	n->val.as_int = i;
 	return (sly_value)n;
 }
@@ -386,7 +386,7 @@ make_big_float(Sly_State *ss, f64 f)
 {
 	UNUSED(ss);
 	number *n = GC_MALLOC(sizeof(*n));
-	n->h.type = tt_float;
+	n->type = tt_float;
 	n->val.as_float = f;
 	return (sly_value)n;
 }
@@ -417,7 +417,7 @@ cons(Sly_State *ss, sly_value car, sly_value cdr)
 {
 	UNUSED(ss);
 	pair *p = GC_MALLOC(sizeof(*p));
-	p->h.type = tt_pair;
+	p->type = tt_pair;
 	p->car = car;
 	p->cdr = cdr;
 	return (sly_value)p;
@@ -510,7 +510,9 @@ sly_value
 copy_list(Sly_State *ss, sly_value list)
 {
 	if (pair_p(list)) {
-		cons(ss, car(list), cdr(list));
+		return cons(ss,
+					copy_list(ss, car(list)),
+					copy_list(ss, cdr(list)));
 	}
 	return list;
 }
@@ -596,7 +598,7 @@ make_byte_vector(Sly_State *ss, size_t len, size_t cap)
 	sly_assert(len <= cap, "Error vector length may not exceed its capacity");
 	byte_vector *vec = GC_MALLOC(sizeof(*vec));
 	vec->elems = GC_MALLOC(cap);
-	vec->h.type = tt_byte_vector;
+	vec->type = tt_byte_vector;
 	vec->cap = cap;
 	vec->len = len;
 	return (sly_value)vec;
@@ -639,7 +641,7 @@ make_vector(Sly_State *ss, size_t len, size_t cap)
 	sly_assert(len <= cap, "Error vector length may not exceed its capacity");
 	vector *vec = GC_MALLOC(sizeof(*vec));
 	vec->elems = GC_MALLOC(sizeof(sly_value) * cap);
-	vec->h.type = tt_vector;
+	vec->type = tt_vector;
 	vec->cap = cap;
 	vec->len = len;
 	return (sly_value)vec;
@@ -782,7 +784,7 @@ make_uninterned_symbol(Sly_State *ss, char *cstr, size_t len)
 			   "Value Error: name exceeds maximum for symbol");
 	symbol *sym = GC_MALLOC(sizeof(*sym));
 	sym->name = GC_MALLOC(len);
-	sym->h.type = tt_symbol;
+	sym->type = tt_symbol;
 	sym->len = len;
 	memcpy(sym->name, cstr, len);
 	sym->hash = hash_symbol(cstr, len);
@@ -806,14 +808,32 @@ make_symbol(Sly_State *ss, char *cstr, size_t len)
 	return sym;
 }
 
+static size_t gensym_counter = 0;
+
 sly_value
-gensym(Sly_State *ss)
+gensym(Sly_State *ss, sly_value base)
 {
-	static int sym_num = 0;
 	char buf[255] = {0};
-	snprintf(buf, sizeof(buf), "__gensym%d__", sym_num++);
+	symbol *s;
+	if (identifier_p(base)) {
+		s = GET_PTR(syntax_to_datum(base));
+	} else if (symbol_p(base)) {
+		s = GET_PTR(base);
+	} else {
+		sly_assert(0, "Type error expected symbol");
+	}
+	snprintf(buf, sizeof(buf), "%.*s%zu", (int)s->len, s->name, gensym_counter++);
 	return make_uninterned_symbol(ss, buf, strlen(buf));
 }
+
+sly_value
+gensym_from_cstr(Sly_State *ss, char *base)
+{
+	char buf[255] = {0};
+	snprintf(buf, sizeof(buf), "%s%zu", base, gensym_counter++);
+	return make_uninterned_symbol(ss, buf, strlen(buf));
+}
+
 
 void
 intern_symbol(Sly_State *ss, sly_value sym)
@@ -864,7 +884,7 @@ make_string(Sly_State *ss, char *cstr, size_t len)
 {
 	sly_value val = make_byte_vector(ss, len, len);
 	byte_vector *vec = GET_PTR(val);
-	vec->h.type = tt_string;
+	vec->type = tt_string;
 	memcpy(vec->elems, cstr, len);
 	return val;
 }
@@ -877,7 +897,7 @@ string_from_managed_buffer(Sly_State *ss, char *buf, size_t len)
 	vec->len = len;
 	vec->cap = len;
 	vec->elems = (u8 *)buf;
-	vec->h.type = tt_string;
+	vec->type = tt_string;
 	return (sly_value)vec;
 }
 
@@ -886,7 +906,7 @@ make_uninitialized_string(Sly_State *ss, size_t len)
 {
 	sly_value val = make_byte_vector(ss, len, len);
 	byte_vector *vec = GET_PTR(val);
-	vec->h.type = tt_string;
+	vec->type = tt_string;
 	return val;
 }
 
@@ -981,7 +1001,7 @@ make_prototype(Sly_State *ss, sly_value uplist, sly_value constants, sly_value c
 			   size_t nregs, size_t nargs, size_t entry, int has_varg)
 {
 	prototype *proto = GC_MALLOC(sizeof(*proto));
-	proto->h.type = tt_prototype;
+	proto->type = tt_prototype;
 	proto->uplist = uplist;
 	proto->K = constants;
 	proto->code = code;
@@ -1000,7 +1020,7 @@ make_closure(Sly_State *ss, sly_value _proto)
 {
 	sly_assert(prototype_p(_proto), "Type Error expected prototype");
 	closure *clos = GC_MALLOC(sizeof(*clos));
-	clos->h.type = tt_closure;
+	clos->type = tt_closure;
 	prototype *proto = GET_PTR(_proto);
 	size_t cap = 1 + vector_len(proto->uplist); /* + 1 for globals */
 	if (proto->has_varg) cap++;
@@ -1014,7 +1034,7 @@ make_cclosure(Sly_State *ss, cfunc fn, size_t nargs, int has_varg)
 {
 	UNUSED(ss);
 	cclosure *clos = GC_MALLOC(sizeof(*clos));
-	clos->h.type = tt_cclosure;
+	clos->type = tt_cclosure;
 	clos->fn = fn;
 	clos->nargs = nargs;
 	clos->has_varg = has_varg;
@@ -1026,7 +1046,7 @@ make_continuation(Sly_State *ss, struct _stack_frame *frame, size_t pc, size_t r
 {
 	UNUSED(ss);
 	continuation *cc = GC_MALLOC(sizeof(*cc));
-	cc->h.type = tt_continuation;
+	cc->type = tt_continuation;
 	cc->frame = frame;
 	cc->pc = pc;
 	cc->ret_slot = ret_slot;
@@ -1549,7 +1569,7 @@ make_syntax(Sly_State *ss, token tok, sly_value datum)
 {
 	UNUSED(ss);
 	syntax *stx = GC_MALLOC(sizeof(*stx));
-	stx->h.type = tt_syntax;
+	stx->type = tt_syntax;
 	stx->tok = tok;
 	stx->datum = datum;
 	stx->context = 0;
@@ -1675,7 +1695,7 @@ make_dictionary_sz(Sly_State *ss, size_t size)
 {
 	sly_value v = make_vector(ss, 0, size);
 	vector *dict = GET_PTR(v);
-	dict->h.type = tt_dictionary;
+	dict->type = tt_dictionary;
 	for (size_t i = 0; i < dict->cap; ++i) {
 		dict->elems[i] = SLY_NULL;
 	}
@@ -1927,7 +1947,7 @@ make_closed_upvalue(Sly_State *ss, sly_value val)
 {
 	UNUSED(ss);
 	upvalue *uv = GC_MALLOC(sizeof(*uv));
-	uv->h.type = tt_upvalue;
+	uv->type = tt_upvalue;
 	uv->isclosed = 1;
 	uv->u.val = val;
 	uv->next = NULL;
@@ -1940,7 +1960,7 @@ make_open_upvalue(Sly_State *ss, sly_value *ptr)
 	upvalue *uv = find_open_upvalue(ss, ptr, NULL);
 	if (uv == NULL) {
 		uv = GC_MALLOC(sizeof(*uv));
-		uv->h.type = tt_upvalue;
+		uv->type = tt_upvalue;
 		uv->isclosed = 0;
 		uv->u.ptr = ptr;
 		uv->next = ss->open_upvals;
@@ -1986,7 +2006,7 @@ make_user_data(Sly_State *ss, size_t data_size)
 	UNUSED(ss);
 	size_t size = sizeof(user_data) + data_size;
 	user_data *ud = GC_MALLOC(size);
-	ud->h.type = tt_user_data;
+	ud->type = tt_user_data;
 	ud->properties = SLY_NULL;
 	ud->size = data_size;
 	return (sly_value)ud;

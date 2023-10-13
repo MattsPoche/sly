@@ -9,7 +9,7 @@ make_stack(Sly_State *ss, size_t nregs)
 		sly_raise_exception(ss, EXC_ALLOC, "Stack too big");
 	}
 	stack_frame *frame = GC_MALLOC(sizeof(*frame));
-	frame->h.type = tt_stack_frame;
+	frame->type = tt_stack_frame;
 	frame->cont = SLY_NULL;
 	frame->R = make_vector(ss, nregs*2, nregs*2);
 	for (size_t i = 0; i < nregs; ++i) {

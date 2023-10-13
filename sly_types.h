@@ -107,14 +107,7 @@ enum type_tag {
 	tt_user_data,       // 17
 };
 
-typedef struct _gc_object {
-	struct _gc_object *next;
-	struct _gc_object *ngray;
-	u8 color;
-	u8 type;  // enum type_tag
-} gc_object;
-
-#define OBJ_HEADER gc_object h
+#define OBJ_HEADER int type
 
 typedef struct _pair {
 	OBJ_HEADER;
@@ -280,7 +273,8 @@ sly_value vector_discard_values(Sly_State *ss, sly_value v);
 int vector_contains(Sly_State *ss, sly_value vec, sly_value value);
 sly_value make_uninterned_symbol(Sly_State *ss, char *cstr, size_t len);
 sly_value make_symbol(Sly_State *ss, char *cstr, size_t len);
-sly_value gensym(Sly_State *ss);
+sly_value gensym(Sly_State *ss, sly_value base);
+sly_value gensym_from_cstr(Sly_State *ss, char *base);
 sly_value get_interned_symbol(sly_value alist, char *name, size_t len);
 void intern_symbol(Sly_State *ss, sly_value sym_v);
 char *char_name_cstr(char c);
@@ -376,7 +370,7 @@ sly_value construct_syntax(Sly_State *ss, sly_value template, sly_value pvars,
 #define ptr_p(v)         (!void_p(v) && ((v) & TAG_MASK) == st_ptr)
 #define open_p(v)        ref_p(v)
 #define GET_PTR(v)       ((void *)((v) & ~TAG_MASK))
-#define TYPEOF(v)        (((gc_object *)GET_PTR(v))->type)
+#define TYPEOF(v)        (*((int *)GET_PTR(v)))
 #define imm_p(v)         (((v) & TAG_MASK) == st_imm)
 #define true_p(v)        (((v) & TAG_MASK) == st_true)
 #define false_p(v)       (((v) & TAG_MASK) == st_false)

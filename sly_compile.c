@@ -18,9 +18,6 @@
 /* TODO: properly implement vector literals
  */
 
-/* TODO: Implement module system
- */
-
 /*
  * Idea: named-lambda
  */
@@ -169,7 +166,7 @@ static struct scope *
 make_scope(Sly_State *ss)
 {
 	struct scope *scope = GC_MALLOC(sizeof(*scope));
-	scope->h.type = tt_scope;
+	scope->type = tt_scope;
 	scope->parent = NULL;
 	scope->symtable = make_dictionary(ss);
 	scope->proto = make_prototype(ss,
@@ -886,6 +883,8 @@ sly_compile_lambda(Sly_State *ss, sly_value ast)
 										   0, 0, 0, 0);
 	return last_compiled_prototype;
 }
+
+
 
 sly_value
 sly_compile(Sly_State *ss, sly_value ast)

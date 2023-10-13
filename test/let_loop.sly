@@ -1,0 +1,6 @@
+(require "sly-lib/base.sly")
+
+(let loop ([i 0])
+  (when (< i 10)
+	(displayln i)
+	(loop (+ i 1))))

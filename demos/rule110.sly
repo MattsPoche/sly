@@ -99,6 +99,9 @@
 					 #f #f #f #f #f #f #f #f #f #f
 					 #f #f #f #f #f #f #f #f #f #f))
 
+(displayln "state0 -- rule110")
 (simulate state0 rule110 50)
+(displayln "state30 -- rule30")
 (simulate state30 rule30 50)
+(displayln "state30 -- rule90")
 (simulate state30 rule90 50)

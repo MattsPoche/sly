@@ -9,7 +9,7 @@
 
 /* TODO: Implement module system */
 
-#define scope() gensym(ss)
+#define scope() gensym_from_cstr(ss, "scope")
 #define add_binding(id, binding)						\
 		dictionary_set(ss, all_bindings, id, binding);
 #define core_symbol(cf_i)						\
@@ -311,10 +311,11 @@ add_arg_bindings(Sly_State *ss, sly_value args, sly_value env)
 		add_arg_bindings(ss, car(args), env);
 		add_arg_bindings(ss, cdr(args), env);
 	} else if (identifier_p(args)) {
-		sly_value binding = gensym(ss);
+		sly_value binding = gensym(ss, args);
 		add_binding(args, binding);
 		env_extend(ss, env, binding, variable);
 	} else {
+		sly_displayln(args);
 		sly_assert(0, "Error invalid syntax");
 	}
 }
@@ -341,9 +342,10 @@ expand_define(Sly_State *ss, sly_value s, sly_value env)
 	sly_value lhs = car(cdr(s));
 	sly_value rest = cdr(cdr(s));
 	sly_value rhs = SLY_NULL;
-	sly_value binding = gensym(ss);
+	sly_value binding;
 	sly_value scopes = syntax_scopes(define_id);
 	if (pair_p(lhs)) { // define procedure
+		binding = gensym(ss, car(lhs));
 		add_binding(car(lhs), binding);
 		env_extend(ss, env, binding, variable);
 		syntax *stx = GET_PTR(car(lhs));
@@ -353,6 +355,7 @@ expand_define(Sly_State *ss, sly_value s, sly_value env)
 							  cons(ss, cdr(lhs), rest)), env);
 		lhs = car(lhs);
 	} else if (identifier_p(lhs)) {
+		binding = gensym(ss, lhs);
 		add_binding(lhs, binding);
 		env_extend(ss, env, binding, variable);
 		rhs = expand(ss, car(rest), env);
@@ -371,9 +374,10 @@ expand_define_syntax(Sly_State *ss, sly_value s, sly_value env)
 	sly_value lhs = car(cdr(s));
 	sly_value rest = cdr(cdr(s));
 	sly_value rhs = SLY_NULL;
-	sly_value binding = gensym(ss);
+	sly_value binding;
 	sly_value scopes = syntax_scopes(define_id);
 	if (pair_p(lhs)) { // define procedure
+		binding = gensym(ss, car(lhs));
 		add_binding(car(lhs), binding);
 		env_extend(ss, env, binding, variable);
 		syntax *stx = GET_PTR(car(lhs));
@@ -383,6 +387,7 @@ expand_define_syntax(Sly_State *ss, sly_value s, sly_value env)
 							  cons(ss, cdr(lhs), rest)), env);
 		lhs = car(lhs);
 	} else if (identifier_p(lhs)) {
+		binding = gensym(ss, lhs);
 		add_binding(lhs, binding);
 		env_extend(ss, env, binding, variable);
 		rhs = expand(ss, car(rest), env);
@@ -625,8 +630,8 @@ sly_expand_init(Sly_State *ss, sly_value env)
 	all_bindings = make_dictionary(ss);
 	core_forms = make_vector(ss, 0, CORE_FORM_COUNT);
 	core_scope = scope();
-	variable = gensym(ss);
-	undefined = gensym(ss);
+	variable = gensym_from_cstr(ss, "var");
+	undefined = gensym_from_cstr(ss, "undefined");
 	sly_value builtins = ss->cc->builtins;
 	sly_value sym, scope_set;
 	for (size_t i = 0; i < CORE_FORM_COUNT; ++i) {

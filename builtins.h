@@ -522,7 +522,8 @@ ccar(Sly_State *ss, sly_value args)
 {
 	sly_value p = vector_ref(args, 0);
 	if (!pair_p(p)) {
-		printf("Error not a pair\n");
+		printf("Error (ccar) not a pair\n");
+		sly_displayln(p);
 		vm_bt(ss->frame);
 	}
 	return car(p);
@@ -533,7 +534,7 @@ ccdr(Sly_State *ss, sly_value args)
 {
 	sly_value p = vector_ref(args, 0);
 	if (!pair_p(p)) {
-		printf("Error not a pair\n");
+		printf("Error (ccdr) not a pair\n");
 		vm_bt(ss->frame);
 	}
 	return cdr(p);
@@ -568,8 +569,12 @@ cdisplay(Sly_State *ss, sly_value args)
 static sly_value
 cgensym(Sly_State *ss, sly_value args)
 {
-	UNUSED(args);
-	return gensym(ss);
+	sly_value vargs = vector_ref(args, 0);
+	if (null_p(vargs)) {
+		return gensym_from_cstr(ss, "g");
+	}
+	sly_value base = car(vargs);
+	return gensym(ss, base);
 }
 
 static sly_value
@@ -605,7 +610,7 @@ craw_syntax(Sly_State *ss, sly_value args)
 	sly_assert(syntax_p(stx), "Type Error expected syntax");
 	syntax *s1 = GET_PTR(stx);
 	syntax *s2 = GC_MALLOC(sizeof(*s2));
-	s2->h.type = tt_syntax;
+	s2->type = tt_syntax;
 	s2->tok = s1->tok;
 	s2->datum = SLY_VOID;
 	s2->context = s2->context;
@@ -783,6 +788,16 @@ cdictionary_set(Sly_State *ss, sly_value args)
 	dictionary_set(ss, dict, key, val);
 	return val;
 }
+
+static sly_value
+cdictionary_length(Sly_State *ss, sly_value args)
+{
+	sly_value dict = vector_ref(args, 0);
+	sly_assert(dictionary_p(dict), "Type Error expected dictionary");
+	vector *v = GET_PTR(dict);
+	return make_int(ss, v->len);
+}
+
 
 static sly_value
 cdictionary_has_key(Sly_State *ss, sly_value args)
@@ -1269,7 +1284,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("set-car!", cset_car, 2, 0);
 	ADD_BUILTIN("set-cdr!", cset_cdr, 2, 0);
 	ADD_BUILTIN("display", cdisplay, 1, 0);
-	ADD_BUILTIN("gensym", cgensym, 0, 0);
+	ADD_BUILTIN("gensym", cgensym, 0, 1);
 	ADD_BUILTIN("void", cvoid, 0, 0);
 	ADD_BUILTIN("make-string", cmake_string, 1, 1);
 	ADD_BUILTIN("string-length", cstring_length, 1, 0);
@@ -1300,6 +1315,7 @@ init_builtins(Sly_State *ss)
 	ADD_BUILTIN("dictionary->alist", cdictionary_to_alist, 1, 0);
 	ADD_BUILTIN("dictionary-ref", cdictionary_ref, 2, 1);
 	ADD_BUILTIN("dictionary-set!", cdictionary_set, 3, 0);
+	ADD_BUILTIN("dictionary-length", cdictionary_length, 1, 0);
 	ADD_BUILTIN("dictionary-has-key?", cdictionary_has_key, 2, 0);
 	ADD_BUILTIN("list", clist, 0, 1);
 	ADD_BUILTIN("console-clear-screen", cclear_screen, 0, 0);
@@ -1350,7 +1366,7 @@ init_builtins(Sly_State *ss)
 	port = make_output_port(ss);
 	port_set_stream(port, stderr);
 	ADD_VARIABLE("*STDERR*", port);
-	ADD_VARIABLE("eof", gensym(ss));
+	ADD_VARIABLE("eof", gensym_from_cstr(ss, "eof"));
 }
 
 #endif /* SLY_BUILTINS_H_ */

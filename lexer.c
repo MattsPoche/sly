@@ -12,10 +12,6 @@
 
 #define LINE_SIZE 1024
 
-/* Old identifier regex
- *
- */
-
 static char retok[] =
 	"^(')"													// 1  quote
 	"|^(`)"													// 2  quasiquote

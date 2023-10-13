@@ -10,7 +10,7 @@ stack_frame *
 make_eval_stack(Sly_State *ss, sly_value regs)
 {
 	stack_frame *frame = GC_MALLOC(sizeof(*frame));
-	frame->h.type = tt_stack_frame;
+	frame->type = tt_stack_frame;
 	frame->cont = SLY_NULL;
 	frame->R = regs;
 	frame->code = make_vector(ss, 0, 4);
@@ -42,7 +42,7 @@ eval_closure(Sly_State *ss, sly_value _clos, sly_value args)
 {
 	stack_frame *tmp = ss->frame;
 	ss->frame = GC_MALLOC(sizeof(stack_frame));
-	ss->frame->h.type = tt_stack_frame;
+	ss->frame->type = tt_stack_frame;
 	ss->frame->cont = SLY_NULL;
 	closure *clos = GET_PTR(_clos);
 	prototype *proto = GET_PTR(clos->proto);
