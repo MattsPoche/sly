@@ -168,9 +168,8 @@
 
 (define prg
   '(begin
-	 (display "The sum of 32 and 10 is: ")
-	 (display 42)
-	 (newline)))
+	 (+ (f (+ 2 3) 1))
+	 (displayln "hello")))
 
 (define (copy-list ls)
   (if (pair? ls)
