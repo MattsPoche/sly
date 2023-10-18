@@ -79,7 +79,6 @@ intmap_set(intmap *map, u32 key, void *value)
 		cmap = cmap->nodes[i];
 	}
 	if (cmap->value) {
-		sly_assert(0, "Error key already set");
 		return NULL;
 	}
 	cmap->value = value;
@@ -134,6 +133,7 @@ int
 intmap_eqv(intmap *m1, intmap *m2)
 {
 	if (m1 == m2) return 1;
+	if (m1 == NULL || m2 == NULL) return 0;
 	for (size_t i = 0; i < INTMAP_NODEC; ++i) {
 		if (!intmap_eqv(m1->nodes[i], m2->nodes[i])) {
 			return 0;
@@ -146,8 +146,8 @@ intmap_list *
 intmap_list_node(u32 key, void *value)
 {
 	intmap_list *node = GC_MALLOC(sizeof(*node));
-	node->key = key;
-	node->value = value;
+	node->p.key = key;
+	node->p.value = value;
 	node->next = NULL;
 	return node;
 }
@@ -169,8 +169,24 @@ intmap_list_append(intmap_list *xs, intmap_list *ys)
 	return xs;
 }
 
+void
+intmap_foreach(intmap *imap, u32 key, intmap_iter_cb cb, void *ud)
+{
+	struct intmap_kv_pair p;
+	if (imap->value) {
+		p.value = imap->value;
+		p.key = key;
+		cb(p, ud);
+	}
+	for (int i = 0; i < INTMAP_NODEC; ++i) {
+		if (imap->nodes[i]) {
+			intmap_foreach(imap, key | (U32_LMB >> i), cb, ud);
+		}
+	}
+}
+
 static intmap_list *
-intmap_iter(intmap *imap, u32 key)
+build_list(intmap *imap, u32 key)
 {
 	intmap_list *list = NULL;
 	if (imap->value) {
@@ -178,7 +194,7 @@ intmap_iter(intmap *imap, u32 key)
 	}
 	for (int i = 0; i < INTMAP_NODEC; ++i) {
 		if (imap->nodes[i]) {
-			list = intmap_list_append(list, intmap_iter(imap->nodes[i], key | (U32_LMB >> i)));
+			list = intmap_list_append(list, build_list(imap->nodes[i], key | (U32_LMB >> i)));
 		}
 	}
 	return list;
@@ -187,7 +203,7 @@ intmap_iter(intmap *imap, u32 key)
 intmap_list *
 intmap_to_list(intmap *imap)
 {
-	return intmap_iter(imap, 0);
+	return build_list(imap, 0);
 }
 
 intmap *
@@ -199,7 +215,7 @@ intmap_union(intmap *m1, intmap *m2)
 	intmap *new_map = intmap_copy(m1);
 	intmap_list *list = intmap_to_list(m2);
 	while (list) {
-		intmap_set_inplace(new_map, list->key, list->value);
+		intmap_set_inplace(new_map, list->p.key, list->p.value);
 		list = list->next;
 	}
 	return new_map;
@@ -212,9 +228,9 @@ intmap_intersect(intmap *m1, intmap *m2)
 	intmap_list *list = intmap_to_list(m1);
 	void *value;
 	while (list) {
-		value = intmap_ref(m2, list->key);
-		if (value == list->value) {
-			intmap_set_inplace(new_map, list->key, value);
+		value = intmap_ref(m2, list->p.key);
+		if (value == list->p.value) {
+			intmap_set_inplace(new_map, list->p.key, value);
 		}
 		list = list->next;
 	}

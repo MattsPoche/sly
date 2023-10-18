@@ -97,15 +97,53 @@ struct cps_ret_t {
 #define CPS_ENTRYK 0
 #define CPS_RET(g, k) (struct cps_ret_t){g,k}
 
+CPS_Kont *cps_graph_ref(intmap *graph, cps_label k);
+intmap *cps_graph_set(intmap *graph, cps_label k, CPS_Kont *kont);
 CPS_Term *cps_new_term(void);
 CPS_Expr *cps_make_constant(sly_value value);
 CPS_Expr *cps_new_expr(void);
 cps_variable cps_new_variable(sly_value name);
-CPS_Kont *cps_make_kargs(sly_value name, CPS_Term *term, u32 nvars, ...);
-CPS_Kont *cps_make_ktail(void);
+CPS_Kont *cps_make_kargs(Sly_State *ss, sly_value name, CPS_Term *term, u32 nvars, ...);
+CPS_Kont *cps_make_ktail(Sly_State *ss, int genname);
 intmap *cps_new_continuation(intmap *graph, cps_label lbl, CPS_Kont **retc);
 struct cps_ret_t cps_translate(Sly_State *ss, cps_label cc, intmap *graph, sly_value form);
+intmap_list *cps_klist(intmap *graph, cps_label k);
+intmap *cps_kgraph(intmap *graph, cps_label k);
 void cps_display(intmap *graph, cps_label k);
+
+CPS_Kont *
+cps_graph_ref(intmap *graph, cps_label k)
+{
+	void *p = intmap_ref(graph, k);
+	sly_assert(p != NULL, "Error label not set");
+	return p;
+}
+
+intmap *
+cps_graph_set(intmap *graph, cps_label k, CPS_Kont *kont)
+{
+	intmap *r = intmap_set(graph, k, kont);
+	sly_assert(r != NULL, "Error label already defined");
+	return r;
+}
+
+#if 0
+static DEF_INTMAP_ITER_CB(im_len, p, i,
+{
+	UNUSED(p);
+	*((size_t *)i) += 1;
+	printf("i = %zu\n", *((size_t *)i));
+	return NULL;
+})
+
+size_t
+cps_graph_count_nodes(intmap *graph)
+{
+	size_t i = 0;
+	intmap_foreach(graph, 0, im_len, &i);
+	return i;
+}
+#endif
 
 CPS_Term *
 cps_new_term(void)
@@ -132,10 +170,13 @@ cps_new_expr(void)
 }
 
 CPS_Kont *
-cps_make_ktail(void)
+cps_make_ktail(Sly_State *ss, int genname)
 {
 	CPS_Kont *c = GC_MALLOC(sizeof(*c));
 	c->type = tt_cps_ktail;
+	if (genname) {
+		c->name = gensym_from_cstr(ss, "$ktail");
+	}
 	return c;
 }
 
@@ -162,11 +203,11 @@ cps_new_variable(sly_value name)
 }
 
 CPS_Kont *
-cps_make_kargs(sly_value name, CPS_Term *term, u32 nvars, ...)
+cps_make_kargs(Sly_State *ss, sly_value name, CPS_Term *term, u32 nvars, ...)
 {
 	va_list ap;
 	va_start(ap, nvars);
-	CPS_Kont *k = cps_make_ktail();
+	CPS_Kont *k = cps_make_ktail(ss, 0);
 	k->type = tt_cps_kargs;
 	k->name = name;
 	k->u.kargs.nvars = nvars;
@@ -181,6 +222,58 @@ cps_make_kargs(sly_value name, CPS_Term *term, u32 nvars, ...)
 	return k;
 }
 
+intmap_list *
+cps_klist(intmap *graph, cps_label k)
+{
+	CPS_Kont *kont;
+	intmap_list *list = NULL;
+	for (;;) {
+		kont = cps_graph_ref(graph, k);
+		list = intmap_list_append(list,
+								  intmap_list_node(k, kont));
+		if (kont->type == tt_cps_ktail) {
+			return list;
+		}
+		CPS_Term *term = kont->u.kargs.term;
+		switch (term->type) {
+		case tt_cps_continue: {
+			k = term->u.cont.k;
+		} break;
+		case tt_cps_branch: {
+ 			return intmap_list_append(cps_klist(graph, term->u.branch.kt),
+									  cps_klist(graph, term->u.branch.kf));
+		} break;
+		default: sly_assert(0, "Error not a cps term");
+		}
+	}
+	return list;
+}
+
+intmap *
+cps_kgraph(intmap *graph, cps_label k)
+{
+	CPS_Kont *kont;
+	intmap *new_graph = intmap_empty();
+	for (;;) {
+		kont = cps_graph_ref(graph, k);
+		intmap_set_inplace(new_graph, k, kont);
+		if (kont->type == tt_cps_ktail) {
+			return new_graph;
+		}
+		CPS_Term *term = kont->u.kargs.term;
+		switch (term->type) {
+		case tt_cps_continue: {
+			k = term->u.cont.k;
+		} break;
+		case tt_cps_branch: {
+			new_graph = intmap_union(new_graph, cps_kgraph(graph, term->u.branch.kt));
+			return intmap_union(new_graph, cps_kgraph(graph, term->u.branch.kf));
+		} break;
+		default: sly_assert(0, "Error not a cps term");
+		}
+	}
+	return new_graph;
+}
 
 struct cps_ret_t
 cps_translate(Sly_State *ss, cps_label cc, intmap *graph, sly_value form)
@@ -215,7 +308,7 @@ cps_translate(Sly_State *ss, cps_label cc, intmap *graph, sly_value form)
 				kf = r.k;
 				graph = r.g;
 				t = cps_new_term();
-				k = cps_make_kargs(gensym_from_cstr(ss, "$k"), t, 1,
+				k = cps_make_kargs(ss, gensym_from_cstr(ss, "$k"), t, 1,
 								   gensym_from_cstr(ss, "$t"));
 				t->type = tt_cps_branch;
 				t->u.branch.arg  = k->u.kargs.vars[0];
@@ -223,7 +316,7 @@ cps_translate(Sly_State *ss, cps_label cc, intmap *graph, sly_value form)
 				t->u.branch.kt = kt;
 				t->u.branch.kf = kf;
 				cc = cps_new_variable(k->name);
-				graph = intmap_set(graph, cc, k);
+				graph = cps_graph_set(graph, cc, k);
 				return cps_translate(ss, cc, graph, cform);
 			} else if (symbol_eq(syntax_to_datum(fst), make_symbol(ss, "quote", 5))) {
 				form = CAR(rest);
@@ -248,10 +341,10 @@ constant:
 		t->u.cont.expr = cps_make_constant(strip_syntax(form));
 	}
 	t->u.cont.k = cc;
-	k = cps_make_kargs(gensym_from_cstr(ss, "$k"), t, 1,
+	k = cps_make_kargs(ss, gensym_from_cstr(ss, "$k"), t, 1,
 					   gensym_from_cstr(ss, "$t"));
 	cc = cps_new_variable(k->name);
-	graph = intmap_set(graph, cc, k);
+	graph = cps_graph_set(graph, cc, k);
 	return CPS_RET(graph, cc);
 }
 
@@ -281,14 +374,10 @@ display_term(intmap *graph, CPS_Term *term)
 	switch (term->type) {
 	case tt_cps_continue: {
 		cps_label k = term->u.cont.k;
-		CPS_Kont *kont = intmap_ref(graph, k);
+		CPS_Kont *kont = cps_graph_ref(graph, k);
 		printf("(continue ");
-		if (kont->type == tt_cps_ktail) {
-			printf("ktail ");
-		} else {
-			sly_display(kont->name, 1);
-			printf(" ");
-		}
+		sly_display(kont->name, 1);
+		printf(" ");
 		display_expr(graph, term->u.cont.expr);
 		printf(")");
 		return k;
@@ -297,13 +386,24 @@ display_term(intmap *graph, CPS_Term *term)
 		printf("(branch (");
 		sly_display(term->u.branch.name, 1);
 		printf(") ");
-		CPS_Kont *k = intmap_ref(graph, term->u.branch.kt);
+		CPS_Kont *k = cps_graph_ref(graph, term->u.branch.kt);
 		sly_display(k->name, 1);
-		k = intmap_ref(graph, term->u.branch.kf);
+		k = cps_graph_ref(graph, term->u.branch.kf);
 		printf(" ");
 		sly_display(k->name, 1);
-		printf(")");
-		return term->u.branch.kt;
+		printf(")\n");
+		cps_label kt = term->u.branch.kt;
+		cps_label kf = term->u.branch.kf;
+		cps_display(graph, kt);
+		cps_display(graph, kf);
+		intmap_list *l = intmap_to_list(intmap_intersect(cps_kgraph(graph, kt),
+														 cps_kgraph(graph, kf)));
+		while (l) {
+			k = l->p.value;
+			printf("$k = ");
+			sly_displayln(k->name);
+			l = l->next;
+		}
 	} break;
 	default: sly_assert(0, "Error not a cps continuation");
 	}
@@ -313,7 +413,7 @@ display_term(intmap *graph, CPS_Term *term)
 void
 cps_display(intmap *graph, cps_label k)
 {
-	CPS_Kont *kont = intmap_ref(graph, k);
+	CPS_Kont *kont = cps_graph_ref(graph, k);
 	switch (kont->type) {
 	case tt_cps_ktail: {
 		printf("ktail");
@@ -366,7 +466,7 @@ main(int argc, char *argv[])
 				Sly_State ss = {0};
 				sly_value ast = sly_expand_only(&ss, next_arg(&argc, &argv));
 				intmap *graph = intmap_empty();
-				graph = intmap_set(graph, CPS_ENTRYK, cps_make_ktail());
+				graph = cps_graph_set(graph, CPS_ENTRYK, cps_make_ktail(&ss, 1));
 				struct cps_ret_t r = cps_translate(&ss, CPS_ENTRYK, graph, ast);
 				cps_display(r.g, r.k);
 			} else {
