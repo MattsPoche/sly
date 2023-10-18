@@ -602,14 +602,14 @@ comp_lambda(Sly_State *ss, sly_value form, int reg)
 }
 
 sly_value
-strip_syntax(Sly_State *ss, sly_value form)
+strip_syntax(sly_value form)
 {
 	if (syntax_pair_p(form)) {
-		return strip_syntax(ss, syntax_to_datum(form));
+		return strip_syntax(syntax_to_datum(form));
 	}
 	if (pair_p(form)) {
-		return cons(ss, strip_syntax(ss, CAR(form)),
-					    strip_syntax(ss, CDR(form)));
+		return cons(NULL, strip_syntax(CAR(form)),
+					strip_syntax(CDR(form)));
 	}
 	if (syntax_p(form)) {
 		return syntax_to_datum(form);
@@ -705,7 +705,7 @@ comp_expr(Sly_State *ss, sly_value form, int reg)
 				sly_raise_exception(ss, EXC_COMPILE, "Error malformed quote");
 			}
 			form = CAR(form);
-			form = strip_syntax(ss, form);
+			form = strip_syntax(form);
 			prototype *proto = GET_PTR(ss->cc->cscope->proto);
 			int src_info = intern_syntax(ss, stx);
 			if (null_p(form)) {

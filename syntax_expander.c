@@ -596,7 +596,7 @@ compile(Sly_State *ss, sly_value s)
 		r = resolve(ss, s);
 		if (sly_equal(r, undefined)) {
 			printf("Undefined Identifier `");
-			sly_display(strip_syntax(ss, s), 1);
+			sly_display(strip_syntax(s), 1);
 			printf("`\n");
 			token t = syntax_get_token(ss, s);
 			if (t.src != NULL) {

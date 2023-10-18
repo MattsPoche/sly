@@ -8,7 +8,6 @@
 #include "common_def.h"
 #include "lexer.h"
 
-
 typedef u64 sly_value;
 
 #define st_ptr   0x0
@@ -105,6 +104,7 @@ enum type_tag {
 	tt_scope,			// 15
 	tt_stack_frame,		// 16
 	tt_user_data,       // 17
+	tt_ir_closure,
 };
 
 #define OBJ_HEADER int type
@@ -190,9 +190,9 @@ typedef sly_value (*cfunc)(Sly_State *ss, sly_value args);
 
 typedef struct _cclos {
 	OBJ_HEADER;
+	int has_varg;
 	size_t nargs; // <vector> arglist
 	cfunc fn;     // pointer to c function
-	int has_varg;
 } cclosure;
 
 struct scope {
@@ -219,7 +219,7 @@ typedef struct _syntax {
 
 typedef struct _user_data {
 	OBJ_HEADER;
-	sly_value properties; // plist
+	sly_value properties;    // plist
 	size_t size;
 	u8 data_bytes[];
 } user_data;
@@ -254,6 +254,7 @@ void append(sly_value p, sly_value v);
 size_t list_len(sly_value list);
 sly_value list_ref(sly_value list, size_t idx);
 int list_contains(sly_value list, sly_value value);
+sly_value list_reverse(Sly_State *ss, sly_value list);
 sly_value list_to_vector(Sly_State *ss, sly_value list);
 sly_value vector_to_list(Sly_State *ss, sly_value vec);
 sly_value make_byte_vector(Sly_State *ss, size_t len, size_t cap);
@@ -277,6 +278,7 @@ sly_value gensym(Sly_State *ss, sly_value base);
 sly_value gensym_from_cstr(Sly_State *ss, char *base);
 sly_value get_interned_symbol(sly_value alist, char *name, size_t len);
 void intern_symbol(Sly_State *ss, sly_value sym_v);
+u64 symbol_hash(sly_value sym);
 char *char_name_cstr(char c);
 sly_value char_name(Sly_State *ss, sly_value c);
 sly_value make_string(Sly_State *ss, char *cstr, size_t len);
@@ -392,6 +394,7 @@ sly_value construct_syntax(Sly_State *ss, sly_value template, sly_value pvars,
 #define heap_obj_p(v)    (ptr_p(v) || pair_p(v))
 #define syntax_pair_p(v) (syntax_p(v) && pair_p(syntax_to_datum(v)))
 #define identifier_p(v)  (syntax_p(v) && symbol_p(syntax_to_datum(v)))
+#define ir_closure_p(v)  (ptr_p(v) && TYPEOF(v) == tt_ir_closure)
 
 static inline int
 int_p(sly_value val)

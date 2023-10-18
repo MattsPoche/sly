@@ -22,6 +22,6 @@ void sly_do_file(char *file_path, int debug_info);
 int comp_expr(Sly_State *ss, sly_value form, int reg);
 sly_value sly_compile_lambda(Sly_State *ss, sly_value ast);
 sly_value sly_compile(Sly_State *ss, sly_value ast);
-sly_value strip_syntax(Sly_State *ss, sly_value form);
+sly_value strip_syntax(sly_value form);
 
 #endif /* SLY_COMPILE_H_ */

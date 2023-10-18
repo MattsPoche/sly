@@ -192,6 +192,8 @@ sly_display(sly_value v, int lit)
 		printf("#<closure@%p>", GET_PTR(v));
 		closure *clos = GET_PTR(v);
 		sly_display(clos->proto, 1);
+	} else if (ir_closure_p(v)) {
+		printf("#<ir-closure@%p>", GET_PTR(v));
 	} else if (cclosure_p(v)) {
 		printf("#<cclosure@%p>", GET_PTR(v));
 	} else if (upvalue_p(v)) {
@@ -566,6 +568,17 @@ list_contains(sly_value list, sly_value value)
 }
 
 sly_value
+list_reverse(Sly_State *ss, sly_value list)
+{
+	if (null_p(list) || null_p(cdr(list))) {
+		return list;
+	} else {
+		return list_append(ss, list_reverse(ss, cdr(list)),
+						   cons(ss, car(list), SLY_NULL));
+	}
+}
+
+sly_value
 list_to_vector(Sly_State *ss, sly_value list)
 {
 	sly_value vec = make_vector(ss, 0, 8); /* arbitrary starting cap */
@@ -844,6 +857,15 @@ intern_symbol(Sly_State *ss, sly_value sym)
 	sly_value str = make_string(ss, (char *)s->name, s->len);
 	dictionary_set(ss, interned, str, sym);
 }
+
+u64
+symbol_hash(sly_value sym)
+{
+	sly_assert(symbol_p(sym), "Type error expected <symbol>");
+	symbol *s = GET_PTR(sym);
+	return s->hash;
+}
+
 
 char *
 char_name_cstr(char c)
@@ -2127,7 +2149,7 @@ id_in(sly_value id, sly_value list)
 static void
 pvar_bind(Sly_State *ss, sly_value pvars, sly_value p, sly_value f, int repeat)
 {
-	sly_value key = strip_syntax(ss, p);
+	sly_value key = strip_syntax(p);
 	sly_value entry = dictionary_entry_ref(pvars, key);
 	if (repeat) {
 		if (slot_is_free(entry)) {
@@ -2150,7 +2172,7 @@ pvar_bind(Sly_State *ss, sly_value pvars, sly_value p, sly_value f, int repeat)
 static sly_value
 pvar_value(Sly_State *ss, sly_value pvars, sly_value t, size_t idx)
 {
-	sly_value key = strip_syntax(ss, t);
+	sly_value key = strip_syntax(t);
 	sly_value entry = dictionary_entry_ref(pvars, key);
 	if (slot_is_free(entry)) {
 		return SLY_VOID;

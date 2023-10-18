@@ -580,7 +580,8 @@ cgensym(Sly_State *ss, sly_value args)
 static sly_value
 csyntax_to_datum(Sly_State *ss, sly_value args)
 {
-	return strip_syntax(ss, vector_ref(args, 0));
+	UNUSED(ss);
+	return strip_syntax(vector_ref(args, 0));
 }
 
 static sly_value
