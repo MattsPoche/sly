@@ -1,9 +1,4 @@
-;; 32
-;; "hello world"
-;; "foo bar"
-;; 69
-;; 420
-(if #t
-	"foo"
-	"bar")
-"hello"
+(define x 69)
+(define y 420)
+(define z (+ x (+ y 5)))
+

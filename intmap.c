@@ -206,6 +206,18 @@ intmap_to_list(intmap *imap)
 	return build_list(imap, 0);
 }
 
+int
+intmap_list_member(intmap_list *imap, u32 key)
+{
+	while (imap) {
+		if (imap->p.key == key) {
+			return 1;
+		}
+		imap = imap->next;
+	}
+	return 0;
+}
+
 intmap *
 intmap_union(intmap *m1, intmap *m2)
 {
@@ -236,3 +248,4 @@ intmap_intersect(intmap *m1, intmap *m2)
 	}
 	return new_map;
 }
+
