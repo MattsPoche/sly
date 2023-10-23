@@ -247,6 +247,7 @@ void set_car(sly_value obj, sly_value value);
 void set_cdr(sly_value obj, sly_value value);
 sly_value tail(sly_value obj);
 int list_p(sly_value list);
+sly_value make_list(Sly_State *ss, size_t nelems, ...);
 sly_value copy_list(Sly_State *ss, sly_value list);
 int list_eq(sly_value o1, sly_value o2);
 sly_value list_append(Sly_State *ss, sly_value p, sly_value v);

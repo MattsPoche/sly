@@ -248,4 +248,3 @@ intmap_intersect(intmap *m1, intmap *m2)
 	}
 	return new_map;
 }
-

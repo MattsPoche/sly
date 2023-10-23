@@ -1,6 +1,7 @@
 #include <time.h>
 #include <execinfo.h>
 #include <math.h>
+#include <stdarg.h>
 #include "sly_types.h"
 #include "opcodes.h"
 
@@ -506,6 +507,19 @@ list_p(sly_value list)
 	}
 	return 0;
 
+}
+
+sly_value
+make_list(Sly_State *ss, size_t nelems, ...)
+{
+	va_list ap;
+	va_start(ap, nelems);
+	sly_value xs = SLY_NULL;
+	for (size_t i = 0; i < nelems; ++i) {
+		sly_value e = va_arg(ap, sly_value);
+		xs = list_append(ss, xs, cons(ss, e, SLY_NULL));
+	}
+	return xs;
 }
 
 sly_value

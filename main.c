@@ -20,7 +20,11 @@ typedef u32 cps_label;
 enum cps_type {
 	tt_cps_const,
 	tt_cps_call,
+	tt_cps_kcall,
+	tt_cps_callwcc,
 	tt_cps_proc,
+	tt_cps_prim,
+	tt_cps_primcall,
 	tt_cps_values,
 	tt_cps_branch,
 	tt_cps_continue,
@@ -100,6 +104,17 @@ typedef struct _cps_proc {
 	cps_label k;    // kfun
 } CPS_Proc;
 
+typedef struct _cps_prim {
+	sly_value name;
+} CPS_Prim;
+
+typedef struct _cps_primcall {
+	sly_value prim_name;
+	u32 nargs;
+	sly_value *names;
+	cps_variable *args;
+} CPS_Primcall;
+
 typedef struct _cps_call {
 	sly_value proc_name;
 	cps_variable proc;
@@ -108,12 +123,29 @@ typedef struct _cps_call {
 	cps_variable *args;
 } CPS_Call;
 
+typedef struct _cps_kcall {
+	sly_value proc_name;
+	cps_label label;
+	u32 nargs;
+	sly_value *names;
+	cps_variable *args;
+} CPS_Kcall;
+
+typedef struct _cps_callwcc {
+	sly_value proc_name;
+	cps_variable proc;
+} CPS_Callwcc;
+
 typedef struct _cps_expr {
 	int type;
 	union {
 		CPS_Call call;
+		CPS_Kcall kcall;
+		CPS_Callwcc callwcc;
 		CPS_Const constant;
 		CPS_Proc proc;
+		CPS_Prim prim;
+		CPS_Primcall primcall;
 		CPS_Values values;
 	} u;
 } CPS_Expr;
@@ -269,8 +301,8 @@ cps_make_kargs(Sly_State *ss, sly_value name, CPS_Term *term, u32 nvars, ...)
 	k->u.kargs.vars  = GC_MALLOC(sizeof(cps_variable) * nvars);
 	for (u32 i = 0; i < nvars; ++i) {
 		sly_value s = va_arg(ap, sly_value);
-		k->u.kargs.names[0] = s;
-		k->u.kargs.vars[0] = cps_new_variable(s);
+		k->u.kargs.names[i] = s;
+		k->u.kargs.vars[i] = cps_new_variable(s);
 	}
 	return k;
 }
@@ -359,9 +391,9 @@ cps_translate(Sly_State *ss, cps_label cc, intmap *graph, sly_value form)
 	if (syntax_pair_p(form) || pair_p(form)) {
 		sly_value fst = CAR(form);
 		sly_value rest = CDR(form);
-		if (identifier_p(fst)) {
-			if (symbol_eq(syntax_to_datum(fst), make_symbol(ss, "define", 6))
-				|| symbol_eq(syntax_to_datum(fst), make_symbol(ss, "set!", 4))) {
+		if (identifier_p(fst) || symbol_p(fst)) {
+			if (symbol_eq(strip_syntax(fst), make_symbol(ss, "define", 6))
+				|| symbol_eq(strip_syntax(fst), make_symbol(ss, "set!", 4))) {
 				sly_value name = strip_syntax(CAR(rest));
 				sly_value kname = cps_gensym_label_name(ss);
 				cps_label kk = cps_new_variable(kname);
@@ -380,14 +412,172 @@ cps_translate(Sly_State *ss, cps_label cc, intmap *graph, sly_value form)
 				k = cps_make_kargs(ss, kname, t, 1, name);
 				r.g = cps_graph_set(graph, kk, k);
 				return r;
-			} else if (symbol_eq(syntax_to_datum(fst), make_symbol(ss, "begin", 5))) {
+			} else if (symbol_eq(strip_syntax(fst), make_symbol(ss, "call/cc", 7))
+					   || symbol_eq(strip_syntax(fst),
+									make_symbol(ss, "call-with-current-continuation", 30))) {
+				/* (λ (f cc) (f (λ (x _) (cc x)) cc))  */
+				sly_value e = CAR(rest);
+				sly_value proc_name;
+				cps_variable proc;
+				k = cps_make_ktail(ss, 0);
+				k->type = tt_cps_kreceive;
+				k->name = cps_gensym_label_name(ss);
+				k->u.kreceive.k = cc;
+				k->u.kreceive.arity.req = cons(ss,
+											   cps_gensym_temporary_name(ss),
+											   SLY_NULL);
+				k->u.kreceive.arity.rest = SLY_FALSE;
+				cc = cps_new_variable(k->name);
+				graph = cps_graph_set(graph, cc, k);
+				t = cps_new_term();
+				t->type = tt_cps_continue;
+				t->u.cont.expr = cps_new_expr();
+				t->u.cont.expr->type = tt_cps_call;
+				t->u.cont.expr->u.call.nargs = 1;
+				t->u.cont.expr->u.call.names = GC_MALLOC(sizeof(sly_value));
+				t->u.cont.expr->u.call.args  = GC_MALLOC(sizeof(cps_variable));
+				t->u.cont.expr->u.call.names[0] = k->name;
+				t->u.cont.expr->u.call.args[0] = cc;
+				t->u.cont.k = cc;
+				sly_value tmp = cps_gensym_temporary_name(ss);
+				k = cps_make_kargs(ss, cps_gensym_label_name(ss), t, 1, tmp);
+				cc = cps_new_variable(k->name);
+				graph = cps_graph_set(graph, cc, k);
+				if (identifier_p(e) || symbol_p(e)) {
+					proc_name = strip_syntax(e);
+					proc = cps_new_variable(proc_name);
+				} else {
+					r = cps_translate(ss, cc, graph, CAR(rest));
+					cc = r.k;
+					graph = r.g;
+					k = cps_graph_ref(graph, r.k);
+					proc_name = tmp;
+					proc = cps_new_variable(tmp);
+				}
+				t->u.cont.expr->u.call.proc_name = proc_name;
+				t->u.cont.expr->u.call.proc = proc;
+				r.g = graph;
+				r.k = cc;
+				return r;
+			} else if (symbol_eq(strip_syntax(fst), make_symbol(ss, "values", 6))) {
+				sly_value vlist = SLY_NULL;
+				sly_value e;
+				t = cps_new_term();
+				t->u.cont.k = cc;
+				t->type = tt_cps_continue;
+				t->u.cont.expr = cps_new_expr();
+				sly_value tmp = cps_gensym_temporary_name(ss);
+				k = cps_make_kargs(ss, cps_gensym_label_name(ss), t, 1, tmp);
+				cc = cps_new_variable(k->name);
+				graph = cps_graph_set(graph, cc, k);
+				sly_value name;
+				while (!null_p(rest)) {
+					e = CAR(rest);
+					if (identifier_p(e) || symbol_p(e)) {
+						name = strip_syntax(e);
+					} else { // constant or expression
+						r = cps_translate(ss, cc, graph, e);
+						cc = r.k;
+						graph = r.g;
+						k = cps_graph_ref(graph, cc);
+						name = tmp;
+						tmp = k->u.kargs.names[0];
+					}
+					vlist = list_append(ss, vlist, cons(ss, name, SLY_NULL));
+					rest = CDR(rest);
+				}
+				t->u.cont.expr->type = tt_cps_values;
+				u32 nargs = list_len(vlist);
+				t->u.cont.expr->u.values.nargs = nargs;
+				t->u.cont.expr->u.values.names = GC_MALLOC(sizeof(sly_value) * nargs);
+				t->u.cont.expr->u.values.args  = GC_MALLOC(sizeof(cps_variable) * nargs);
+				for (u32 i = 0; i < nargs; ++i) {
+					name = car(vlist);
+					t->u.cont.expr->u.values.names[i] = name;
+					t->u.cont.expr->u.values.args[i] = cps_new_variable(name);
+					vlist = cdr(vlist);
+				}
+				r.g = graph;
+				r.k = cc;
+				return r;
+			} else if (symbol_eq(strip_syntax(fst), make_symbol(ss, "call-with-values", 16))) {
+				sly_value pe = CAR(rest);
+				sly_value re = CAR(CDR(rest));
+				cps_label kp, kr;
+				sly_value tmp_name = cps_gensym_temporary_name(ss);
+				r = cps_translate(ss, cc, graph,
+								  make_list(ss, 3,
+											make_symbol(ss, "apply", 5),
+											re,
+											tmp_name));
+				graph = r.g;
+				cc = r.k;
+				kr = cc;
+				r = cps_translate(ss, cc, graph, cons(ss, pe, SLY_NULL));
+				graph = r.g;
+				cc = r.k;
+				kp = cc;
+				UNUSED(kr);
+				k = cps_graph_ref(graph, kp);
+				k = cps_graph_ref(graph, k->u.kargs.term->u.cont.k);
+				k->u.kreceive.arity.req = SLY_NULL;
+				k->u.kreceive.arity.rest = tmp_name;
+				k = cps_graph_ref(graph, k->u.kreceive.k);
+				k->u.kargs.names[0] = tmp_name;
+				k->u.kargs.vars[0] = cps_new_variable(tmp_name);
+				cps_display(graph, kp);
+				sly_assert(0, "(call-with-values) undefined");
+			} else if (symbol_eq(strip_syntax(fst), make_symbol(ss, "lambda", 6))) {
+				sly_value arg_formals = CAR(rest);
+				sly_value name = cps_gensym_label_name(ss);
+				u32 kp = cps_new_variable(name);
+				graph = cps_graph_set(graph, kp, cps_make_ktail(ss, 1));
+				t = cps_new_term();
+				t->type = tt_cps_continue;
+				t->u.cont.expr = cps_new_expr();
+				t->u.cont.expr->type = tt_cps_proc;
+				t->u.cont.k = cc;
+				{
+					k = cps_make_ktail(ss, 0);
+					k->type = tt_cps_kproc;
+					k->name = cps_gensym_label_name(ss);
+					k->u.kproc.tail = kp;
+					form = cons(ss, make_symbol(ss, "begin", 5), CDR(rest));
+					r = cps_translate(ss, kp, graph, form);
+					k->u.kproc.body = r.k;
+					graph = r.g;
+					sly_value req = SLY_NULL;
+					while (syntax_pair_p(arg_formals) || pair_p(arg_formals)) {
+						sly_value a = strip_syntax(CAR(arg_formals));
+						req = list_append(ss, req,
+										  cons(ss, a, SLY_NULL));
+						arg_formals = CDR(arg_formals);
+					}
+					k->u.kproc.arity.rest = null_p(arg_formals) ?
+						SLY_FALSE : strip_syntax(arg_formals);
+					k->u.kproc.arity.req = req;
+					cps_label kk = cps_new_variable(k->name);
+					t->u.cont.expr->u.proc.k = kk;
+					graph = cps_graph_set(graph, kk, k);
+				}
+				{
+					sly_value name = cps_gensym_label_name(ss);
+					cc = cps_new_variable(name);
+					k = cps_make_kargs(ss, name, t, 1,
+									   cps_gensym_temporary_name(ss));
+					graph = cps_graph_set(graph, cc, k);
+				}
+				r.k = cc;
+				r.g = graph;
+				return r;
+			} else if (symbol_eq(strip_syntax(fst), make_symbol(ss, "begin", 5))) {
 				if (!null_p(CDR(rest))) {
 					r = cps_translate(ss, cc, graph, cons(ss, fst, CDR(rest)));
 					graph = r.g;
 					cc = r.k;
 				}
 				return cps_translate(ss, cc, graph, CAR(rest));
-			} else if (symbol_eq(syntax_to_datum(fst), make_symbol(ss, "if", 2))) {
+			} else if (symbol_eq(strip_syntax(fst), make_symbol(ss, "if", 2))) {
 				sly_value cform = CAR(rest);
 				sly_value tform = CAR(CDR(rest));
 				sly_value fform = CAR(CDR(CDR(rest)));
@@ -409,70 +599,72 @@ cps_translate(Sly_State *ss, cps_label cc, intmap *graph, sly_value form)
 				cc = cps_new_variable(k->name);
 				graph = cps_graph_set(graph, cc, k);
 				return cps_translate(ss, cc, graph, cform);
-			} else if (symbol_eq(syntax_to_datum(fst), make_symbol(ss, "quote", 5))) {
+			} else if (symbol_eq(strip_syntax(fst), make_symbol(ss, "quote", 5))) {
 				form = CAR(rest);
 				CPS_CONSTANT();
 				return r;
-			} else if (symbol_eq(syntax_to_datum(fst), make_symbol(ss, "syntax-quote", 12))) {
+			} else if (symbol_eq(strip_syntax(fst), make_symbol(ss, "syntax-quote", 12))) {
 				syntax_quote = 1;
 				form = CAR(rest);
 				CPS_CONSTANT();
 				return r;
-			} else { /* call */
-				sly_value vlist = SLY_NULL;
-				sly_value e;
-				while (!null_p(form)) {
-					e = CAR(form); // TODO: kreceive
-					if (identifier_p(e) || symbol_p(e)) {
-						vlist = list_append(ss, vlist,
-											cons(ss, strip_syntax(e),
-												 SLY_NULL));
-					} else { // constant or expression
-						// TODO: Fix this
-						r = cps_translate(ss, cc, graph, e);
-						cc = r.k;
-						graph = r.g;
-					}
-					form = CDR(form);
-				}
-				k = cps_make_ktail(ss, 0);
-				k->type = tt_cps_kreceive;
-				k->name = cps_gensym_label_name(ss);
-				k->u.kreceive.k = cc;
-				k->u.kreceive.arity.req = cons(ss,
-											   cps_gensym_temporary_name(ss),
-											   SLY_NULL);
-				k->u.kreceive.arity.rest = SLY_FALSE;
-				cc = cps_new_variable(k->name);
-				graph = cps_graph_set(graph, cc, k);				
-				u32 nargs = list_len(cdr(vlist));
-				t = cps_new_term();
-				t->type = tt_cps_continue;
-				t->u.cont.expr = cps_new_expr();
-				t->u.cont.expr->type = tt_cps_call;
-				t->u.cont.expr->u.call.nargs = nargs;
-				t->u.cont.expr->u.call.names = GC_MALLOC(sizeof(sly_value) * nargs);
-				t->u.cont.expr->u.call.args  = GC_MALLOC(sizeof(cps_variable) * nargs);
-				sly_value name = car(vlist);
-				t->u.cont.expr->u.call.proc_name = name;
-				t->u.cont.expr->u.call.proc = cps_new_variable(name);
-				vlist = cdr(vlist);
-				for (u32 i = 0; i < nargs; ++i) {
-					name = car(vlist);
-					t->u.cont.expr->u.call.names[i] = name;
-					t->u.cont.expr->u.call.args[0] = cps_new_variable(name);
-					vlist = cdr(vlist);
-				}
-				t->u.cont.k = cc;
-				k = cps_make_kargs(ss, cps_gensym_label_name(ss), t, 1,
-								   cps_gensym_temporary_name(ss));
-				r.k = cps_new_variable(k->name);
-				r.g = cps_graph_set(graph, r.k, k);
-				return r;
 			}
-		} else {
-			sly_assert(0, "unimplemented");
 		}
+		/* call */
+		sly_value vlist = SLY_NULL;
+		sly_value e;
+		k = cps_make_ktail(ss, 0);
+		k->type = tt_cps_kreceive;
+		k->name = cps_gensym_label_name(ss);
+		k->u.kreceive.k = cc;
+		k->u.kreceive.arity.req = cons(ss,
+									   cps_gensym_temporary_name(ss),
+									   SLY_NULL);
+		k->u.kreceive.arity.rest = SLY_FALSE;
+		cc = cps_new_variable(k->name);
+		graph = cps_graph_set(graph, cc, k);
+		t = cps_new_term();
+		t->u.cont.k = cc;
+		t->type = tt_cps_continue;
+		t->u.cont.expr = cps_new_expr();
+		sly_value tmp = cps_gensym_temporary_name(ss);
+		k = cps_make_kargs(ss, cps_gensym_label_name(ss), t, 1, tmp);
+		cc = cps_new_variable(k->name);
+		graph = cps_graph_set(graph, cc, k);
+		while (!null_p(form)) {
+			e = CAR(form);
+			sly_value name;
+			if (identifier_p(e) || symbol_p(e)) {
+				name = strip_syntax(e);
+			} else { // constant or expression
+				r = cps_translate(ss, cc, graph, e);
+				cc = r.k;
+				graph = r.g;
+				k = cps_graph_ref(graph, cc);
+				name = tmp;
+				tmp = k->u.kargs.names[0];
+			}
+			vlist = list_append(ss, vlist, cons(ss, name, SLY_NULL));
+			form = CDR(form);
+		}
+		sly_value name = car(vlist);
+		vlist = cdr(vlist);
+		u32 nargs = list_len(vlist);
+		t->u.cont.expr->type = tt_cps_call;
+		t->u.cont.expr->u.call.nargs = nargs;
+		t->u.cont.expr->u.call.names = GC_MALLOC(sizeof(sly_value) * nargs);
+		t->u.cont.expr->u.call.args  = GC_MALLOC(sizeof(cps_variable) * nargs);
+		t->u.cont.expr->u.call.proc_name = name;
+		t->u.cont.expr->u.call.proc = cps_new_variable(name);
+		for (u32 i = 0; i < nargs; ++i) {
+			name = car(vlist);
+			t->u.cont.expr->u.call.names[i] = name;
+			t->u.cont.expr->u.call.args[i] = cps_new_variable(name);
+			vlist = cdr(vlist);
+		}
+		r.g = graph;
+		r.k = cc;
+		return r;
 	} else if (identifier_p(form) || symbol_p(form)) {
 		t = cps_new_term();
 		t->type = tt_cps_continue;
@@ -497,10 +689,9 @@ cps_translate(Sly_State *ss, cps_label cc, intmap *graph, sly_value form)
 
 static intmap *_cps_display(intmap *graph, intmap *visited, cps_label k);
 
-static void
-display_expr(intmap *graph, CPS_Expr *expr)
+static intmap *
+display_expr(intmap *graph, intmap *visited, CPS_Expr *expr)
 {
-	UNUSED(graph);
 	switch (expr->type) {
 	case tt_cps_call: {
 		printf("(call ");
@@ -520,6 +711,7 @@ display_expr(intmap *graph, CPS_Expr *expr)
 		printf("(values ");
 		sly_display(expr->u.values.names[0], 1);
 		for (u32 i = 1; i < nargs; ++i) {
+			printf(" ");
 			sly_display(expr->u.values.names[i], 1);
 		}
 	} break;
@@ -527,9 +719,23 @@ display_expr(intmap *graph, CPS_Expr *expr)
 		printf("(const ");
 		sly_display(expr->u.constant.value, 1);
 	} break;
-	default: sly_assert(0, "Error not a cps continuation");
+	case tt_cps_proc: {
+		printf("(proc ");
+		CPS_Kont *kont = cps_graph_ref(graph, expr->u.proc.k);
+		sly_display(kont->name, 1);
+		printf(");\n");
+		visited = _cps_display(graph, visited, expr->u.proc.k);
+		printf(";");
+		return visited;
+	} break;
+	case tt_cps_callwcc: {
+		printf("(call/cc ");
+		sly_display(expr->u.callwcc.proc_name, 1);
+	} break;
+	default: sly_assert(0, "Error not a cps expression");
 	}
 	printf(")");
+	return visited;
 }
 
 static struct cps_ret_t
@@ -542,7 +748,8 @@ display_term(intmap *graph, intmap *visited, CPS_Term *term)
 		CPS_Kont *kont = cps_graph_ref(graph, k);
 		sly_display(kont->name, 1);
 		printf(" ");
-		display_expr(graph, term->u.cont.expr);
+		visited = display_expr(graph, visited, term->u.cont.expr);
+		if (r.g) visited = r.g;
 		printf(";\n");
 		r.g = visited;
 		r.k = k;
@@ -550,13 +757,13 @@ display_term(intmap *graph, intmap *visited, CPS_Term *term)
 	case tt_cps_branch: {
 		cps_label kt = term->u.branch.kt;
 		cps_label kf = term->u.branch.kf;
-		printf("if   ");
+		printf("if ");
 		sly_display(term->u.branch.name, 1);
-		printf("\n\tthen ");
+		printf(" then ");
 		CPS_Kont *k = cps_graph_ref(graph, kt);
 		sly_display(k->name, 1);
 		k = cps_graph_ref(graph, kf);
-		printf("\n\telse ");
+		printf(" else ");
 		sly_display(k->name, 1);
 		printf(";\n");
 		visited = _cps_display(graph, visited, kt);
@@ -579,12 +786,12 @@ begin:
 	CPS_Kont *kont = cps_graph_ref(graph, k);
 	switch (kont->type) {
 	case tt_cps_ktail: {
-		sly_display(kont->name, 1);
+		return visited;
 	} break;
 	case tt_cps_kargs: {
 		printf("let ");
 		sly_display(kont->name, 1);
-		printf(" = κα ");
+		printf(" = kargs ");
 		u32 nvars = kont->u.kargs.nvars;
 		if (nvars) {
 			sly_display(kont->u.kargs.names[0], 1);
@@ -593,7 +800,7 @@ begin:
 				sly_display(kont->u.kargs.names[i], 1);
 			}
 		}
-		printf(" ->\n\t");
+		printf(" -> ");
 		struct cps_ret_t r = display_term(graph, visited, kont->u.kargs.term);
 		k = r.k;
 		visited = r.g;
@@ -601,12 +808,42 @@ begin:
 	case tt_cps_kreceive: {
 		printf("let ");
 		sly_display(kont->name, 1);
-		printf(" = κρ => ");
+		u32 req = list_len(kont->u.kreceive.arity.req);
+		char *rst = kont->u.kreceive.arity.rest == SLY_FALSE ? "#f" : "#t";
+		printf(" = kreceive (req: %u, rest: %s) => ", req, rst);
 		CPS_Kont *tmp = cps_graph_ref(graph, kont->u.kreceive.k);
 		sly_display(tmp->name, 1);
 		printf(";\n");
 		visited = cps_graph_set(visited, k, kont);
 		k = kont->u.kreceive.k;
+		goto begin;
+	} break;
+	case tt_cps_kproc: {
+		printf("let ");
+		sly_display(kont->name, 1);
+		printf(" = λ ");
+		sly_value arity = kont->u.kproc.arity.req;
+		if (kont->u.kproc.arity.rest != SLY_FALSE) {
+			if (null_p(arity)) {
+				arity = kont->u.kproc.arity.rest;
+			} else {
+				sly_value a = arity;
+				while (!null_p(cdr(a))) {
+					a = cdr(a);
+				}
+				set_cdr(a, kont->u.kproc.arity.rest);
+			}
+		}
+		sly_display(arity, 1);
+		printf(" -> ");
+		CPS_Kont *tmp = cps_graph_ref(graph, kont->u.kproc.body);
+		sly_display(tmp->name, 1);
+		printf(" : ");
+		tmp = cps_graph_ref(graph, kont->u.kproc.tail);
+		sly_display(tmp->name, 1);
+		visited = cps_graph_set(visited, k, kont);
+		k = kont->u.kproc.body;
+		printf(";\n");
 		goto begin;
 	} break;
 	default: sly_assert(0, "Error not a cps continuation");
