@@ -415,7 +415,6 @@ cps_translate(Sly_State *ss, cps_label cc, intmap *graph, sly_value form)
 			} else if (symbol_eq(strip_syntax(fst), make_symbol(ss, "call/cc", 7))
 					   || symbol_eq(strip_syntax(fst),
 									make_symbol(ss, "call-with-current-continuation", 30))) {
-				/* (λ (f cc) (f (λ (x _) (cc x)) cc))  */
 				sly_value e = CAR(rest);
 				sly_value proc_name;
 				cps_variable proc;
@@ -503,7 +502,7 @@ cps_translate(Sly_State *ss, cps_label cc, intmap *graph, sly_value form)
 			} else if (symbol_eq(strip_syntax(fst), make_symbol(ss, "call-with-values", 16))) {
 				sly_value pe = CAR(rest);
 				sly_value re = CAR(CDR(rest));
-				cps_label kp, kr;
+				cps_label kp;
 				sly_value tmp_name = cps_gensym_temporary_name(ss);
 				r = cps_translate(ss, cc, graph,
 								  make_list(ss, 3,
@@ -512,12 +511,10 @@ cps_translate(Sly_State *ss, cps_label cc, intmap *graph, sly_value form)
 											tmp_name));
 				graph = r.g;
 				cc = r.k;
-				kr = cc;
 				r = cps_translate(ss, cc, graph, cons(ss, pe, SLY_NULL));
 				graph = r.g;
 				cc = r.k;
 				kp = cc;
-				UNUSED(kr);
 				k = cps_graph_ref(graph, kp);
 				k = cps_graph_ref(graph, k->u.kargs.term->u.cont.k);
 				k->u.kreceive.arity.req = SLY_NULL;
@@ -525,8 +522,9 @@ cps_translate(Sly_State *ss, cps_label cc, intmap *graph, sly_value form)
 				k = cps_graph_ref(graph, k->u.kreceive.k);
 				k->u.kargs.names[0] = tmp_name;
 				k->u.kargs.vars[0] = cps_new_variable(tmp_name);
-				cps_display(graph, kp);
-				sly_assert(0, "(call-with-values) undefined");
+				r.g = graph;
+				r.k = cc;
+				return r;
 			} else if (symbol_eq(strip_syntax(fst), make_symbol(ss, "lambda", 6))) {
 				sly_value arg_formals = CAR(rest);
 				sly_value name = cps_gensym_label_name(ss);
