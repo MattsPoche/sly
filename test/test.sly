@@ -1,12 +1,2 @@
-(define dank
-  (lambda () (values 69 420)))
-
-(call-with-values
- dank
- (lambda x
-   (display x)))
-
-;;(call/cc +)
-;; (define x 69)
-;; (define y 420)
-;; (define z (+ x (+ y 3)))
+(define f (if #t 69 420))
+(+ f 32)

@@ -3,7 +3,7 @@
 #include "sly_types.h"
 #include "sly_ports.h"
 
-#define EOF_OBJECT(ss) dictionary_ref((ss)->cc->globals, cstr_to_symbol("eof"))
+#define EOF_OBJECT(ss) dictionary_ref((ss)->cc->globals, cstr_to_symbol("eof"), SLY_VOID)
 
 struct output_string {
 	FILE *stream;

@@ -240,7 +240,7 @@ resolve(Sly_State *ss, sly_value id)
 	}
 	sly_value max_id = get_max_id(candidate_ids);
 	check_unambiguous(ss, max_id, candidate_ids);
-	return dictionary_ref(all_bindings, max_id);
+	return dictionary_ref(all_bindings, max_id, SLY_VOID);
 }
 
 static sly_value

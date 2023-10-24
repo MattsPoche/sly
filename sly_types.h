@@ -338,7 +338,7 @@ sly_value copy_dictionary(Sly_State *ss, sly_value dict);
 int slot_is_free(sly_value slot);
 void dictionary_set(Sly_State *ss, sly_value d, sly_value key, sly_value value);
 sly_value dictionary_entry_ref(sly_value d, sly_value key);
-sly_value dictionary_ref(sly_value d, sly_value key);
+sly_value dictionary_ref(sly_value d, sly_value key, sly_value not_found);
 void dictionary_remove(sly_value d, sly_value key);
 void dictionary_import(Sly_State *ss, sly_value dst, sly_value src);
 sly_value dictionary_get_entries(Sly_State *ss, sly_value d);

@@ -1853,14 +1853,11 @@ dictionary_entry_ref(sly_value d, sly_value key)
 }
 
 sly_value
-dictionary_ref(sly_value d, sly_value key)
+dictionary_ref(sly_value d, sly_value key, sly_value not_found)
 {
 	sly_value entry = dictionary_entry_ref(d, key);
 	if (slot_is_free(entry)) {
-		printf("Key not found: ");
-		sly_display(key, 1);
-		printf("\n");
-		sly_assert(0, "Dictionary Key Error key not found");
+		return not_found;
 	}
 	return cdr(entry);
 }

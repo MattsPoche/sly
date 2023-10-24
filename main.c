@@ -21,7 +21,6 @@ enum cps_type {
 	tt_cps_const,
 	tt_cps_call,
 	tt_cps_kcall,
-	tt_cps_callwcc,
 	tt_cps_proc,
 	tt_cps_prim,
 	tt_cps_primcall,
@@ -32,6 +31,31 @@ enum cps_type {
 	tt_cps_kreceive,
 	tt_cps_kproc,
 	tt_cps_ktail,
+};
+
+enum prim {
+	prim_null = 0,
+	prim_add,
+	prim_sub,
+	prim_mul,
+	prim_div,
+	prim_idiv,
+	prim_mod,
+	prim_bw_and,
+	prim_bw_ior,
+	prim_bw_xor,
+	prim_bw_eqv,
+	prim_bw_nor,
+	prim_bw_nand,
+	prim_bw_not,
+	prim_bw_shift,
+	prim_void,
+	prim_apply,
+};
+
+struct primop {
+	char *cstr;
+	sly_value name;
 };
 
 struct arity_t {
@@ -110,6 +134,7 @@ typedef struct _cps_prim {
 
 typedef struct _cps_primcall {
 	sly_value prim_name;
+	u8 __pad__[sizeof(cps_variable)];
 	u32 nargs;
 	sly_value *names;
 	cps_variable *args;
@@ -131,17 +156,11 @@ typedef struct _cps_kcall {
 	cps_variable *args;
 } CPS_Kcall;
 
-typedef struct _cps_callwcc {
-	sly_value proc_name;
-	cps_variable proc;
-} CPS_Callwcc;
-
 typedef struct _cps_expr {
 	int type;
 	union {
 		CPS_Call call;
 		CPS_Kcall kcall;
-		CPS_Callwcc callwcc;
 		CPS_Const constant;
 		CPS_Proc proc;
 		CPS_Prim prim;
@@ -157,6 +176,8 @@ struct cps_ret_t {
 
 CPS_Kont *cps_graph_ref(intmap *graph, cps_label k);
 intmap *cps_graph_set(intmap *graph, cps_label k, CPS_Kont *kont);
+CPS_Expr *cps_binding_ref(intmap *bindings, cps_variable v);
+intmap *cps_binding_update(intmap *bindings, cps_variable v, CPS_Expr *e);
 int cps_graph_is_member(intmap *graph, cps_label k);
 CPS_Term *cps_new_term(void);
 CPS_Expr *cps_make_constant(sly_value value);
@@ -168,6 +189,7 @@ sly_value cps_gensym_label_name(Sly_State *ss);
 CPS_Kont *cps_make_kargs(Sly_State *ss, sly_value name, CPS_Term *term, u32 nvars, ...);
 CPS_Kont *cps_make_ktail(Sly_State *ss, int genname);
 intmap *cps_new_continuation(intmap *graph, cps_label lbl, CPS_Kont **retc);
+void cps_init_primops(Sly_State *ss);
 struct cps_ret_t cps_translate(Sly_State *ss, cps_label cc, intmap *graph, sly_value form);
 intmap_list *cps_klist(intmap *graph, cps_label k);
 intmap *cps_kgraph(intmap *graph, cps_label k);
@@ -181,6 +203,69 @@ void cps_display(intmap *graph, cps_label k);
 	} while (0)
 
 static sly_value PB_TNAME = 0;
+static struct primop primops[] = {
+	[prim_null]		= {NULL},
+	[prim_add]		= {"+"},                     // (+ . args)   ; addition
+	[prim_sub]		= {"-"},                     // (- . args)   ; subtraction
+	[prim_mul]		= {"*"},                     // (* . args)   ; multiplication
+	[prim_div]		= {"/"},                     // (/ . args)   ; real division
+	[prim_idiv]		= {"div"},                   // (div . args) ; integer division
+	[prim_mod]		= {"%"},                     // (% . args)   ; mod
+	[prim_bw_and]	= {"bitwise-and"},           // (bitwise-and x y)
+	[prim_bw_ior]	= {"bitwise-ior"},           // (bitwise-ior x y)
+	[prim_bw_xor]	= {"bitwise-xor"},           // (bitwise-xor x y)
+	[prim_bw_eqv]	= {"bitwise-eqv"},           // (bitwise-eqv x y)
+	[prim_bw_nor]	= {"bitwise-nor"},           // (bitwise-nor x y)
+	[prim_bw_nand]	= {"bitwise-nand"},          // (bitwise-nand x y)
+	[prim_bw_not]	= {"bitwise-not"},           // (bitwise-not x y)
+	[prim_bw_shift] = {"arithmetic-shift"},      // (bitwise-shift x y)
+	[prim_void]		= {"void"},                  // (void) ; #<void>
+	[prim_apply]	= {"apply"},
+};
+
+void
+cps_init_primops(Sly_State *ss)
+{
+	for (size_t i = 1; i < ARR_LEN(primops); ++i) {
+		char *cstr = primops[i].cstr;
+		primops[i].name = make_symbol(ss, cstr, strlen(cstr));
+	}
+}
+
+static int
+primop_p(sly_value name)
+{
+	if (identifier_p(name)) {
+		name = strip_syntax(name);
+	} else if (!symbol_p(name)) {
+		return 0;
+	}
+	for (size_t i = 1; i < ARR_LEN(primops); ++i) {
+		if (symbol_eq(name, primops[i].name)) {
+			return i;
+		}
+	}
+	return 0;
+}
+
+CPS_Expr *
+cps_binding_ref(intmap *bindings, cps_variable v)
+{
+	void *p = intmap_ref(bindings, v);
+	sly_assert(p != NULL, "Error variable undefined");
+	return p;
+}
+
+intmap *
+cps_binding_update(intmap *bindings, cps_variable v, CPS_Expr *e)
+{
+	intmap *r = intmap_set(bindings, v, e);
+	if (r == NULL) {
+		r = intmap_replace(bindings, v, e);
+	}
+	return r;
+}
+
 
 CPS_Kont *
 cps_graph_ref(intmap *graph, cps_label k)
@@ -393,6 +478,7 @@ cps_translate(Sly_State *ss, cps_label cc, intmap *graph, sly_value form)
 		sly_value rest = CDR(form);
 		if (identifier_p(fst) || symbol_p(fst)) {
 			if (symbol_eq(strip_syntax(fst), make_symbol(ss, "define", 6))
+				|| symbol_eq(strip_syntax(fst), make_symbol(ss, "define-syntax", 13))
 				|| symbol_eq(strip_syntax(fst), make_symbol(ss, "set!", 4))) {
 				sly_value name = strip_syntax(CAR(rest));
 				sly_value kname = cps_gensym_label_name(ss);
@@ -442,7 +528,8 @@ cps_translate(Sly_State *ss, cps_label cc, intmap *graph, sly_value form)
 				k = cps_make_kargs(ss, cps_gensym_label_name(ss), t, 1, tmp);
 				cc = cps_new_variable(k->name);
 				graph = cps_graph_set(graph, cc, k);
-				if (identifier_p(e) || symbol_p(e)) {
+				if ((identifier_p(e) || symbol_p(e))
+					&& !primop_p(e)) {
 					proc_name = strip_syntax(e);
 					proc = cps_new_variable(proc_name);
 				} else {
@@ -647,8 +734,12 @@ cps_translate(Sly_State *ss, cps_label cc, intmap *graph, sly_value form)
 		}
 		sly_value name = car(vlist);
 		vlist = cdr(vlist);
+		if (primop_p(name)) {
+			t->u.cont.expr->type = tt_cps_primcall;
+		} else {
+			t->u.cont.expr->type = tt_cps_call;
+		}
 		u32 nargs = list_len(vlist);
-		t->u.cont.expr->type = tt_cps_call;
 		t->u.cont.expr->u.call.nargs = nargs;
 		t->u.cont.expr->u.call.names = GC_MALLOC(sizeof(sly_value) * nargs);
 		t->u.cont.expr->u.call.args  = GC_MALLOC(sizeof(cps_variable) * nargs);
@@ -664,16 +755,21 @@ cps_translate(Sly_State *ss, cps_label cc, intmap *graph, sly_value form)
 		r.k = cc;
 		return r;
 	} else if (identifier_p(form) || symbol_p(form)) {
+		sly_value s = strip_syntax(form);
 		t = cps_new_term();
 		t->type = tt_cps_continue;
 		t->u.cont.expr = cps_new_expr();
-		t->u.cont.expr->type = tt_cps_values;
-		t->u.cont.expr->u.values.nargs = 1;
-		t->u.cont.expr->u.values.names = GC_MALLOC(sizeof(sly_value));
-		t->u.cont.expr->u.values.args = GC_MALLOC(sizeof(cps_variable));
-		sly_value s = strip_syntax(form);
-		t->u.cont.expr->u.values.names[0] = s;
-		t->u.cont.expr->u.values.args[0] = cps_new_variable(s);
+		if (primop_p(s)) {
+			t->u.cont.expr->type = tt_cps_prim;
+			t->u.cont.expr->u.prim.name = s;
+		} else {
+			t->u.cont.expr->type = tt_cps_values;
+			t->u.cont.expr->u.values.nargs = 1;
+			t->u.cont.expr->u.values.names = GC_MALLOC(sizeof(sly_value));
+			t->u.cont.expr->u.values.args = GC_MALLOC(sizeof(cps_variable));
+			t->u.cont.expr->u.values.names[0] = s;
+			t->u.cont.expr->u.values.args[0] = cps_new_variable(s);
+		}
 		t->u.cont.k = cc;
 		k = cps_make_kargs(ss, cps_gensym_label_name(ss), t, 1,
 						   cps_gensym_temporary_name(ss));
@@ -726,9 +822,22 @@ display_expr(intmap *graph, intmap *visited, CPS_Expr *expr)
 		printf(";");
 		return visited;
 	} break;
-	case tt_cps_callwcc: {
-		printf("(call/cc ");
-		sly_display(expr->u.callwcc.proc_name, 1);
+	case tt_cps_prim: {
+		printf("(prim ");
+		sly_display(expr->u.prim.name, 1);
+	} break;
+	case tt_cps_primcall: {
+		printf("(primcall ");
+		sly_display(expr->u.call.proc_name, 1);
+		u32 nargs = expr->u.call.nargs;
+		if (nargs) {
+			printf(" ");
+			sly_display(expr->u.call.names[0], 1);
+			for (u32 i = 1; i < nargs; ++i) {
+				printf(" ");
+				sly_display(expr->u.call.names[i], 1);
+			}
+		}
 	} break;
 	default: sly_assert(0, "Error not a cps expression");
 	}
@@ -900,6 +1009,7 @@ main(int argc, char *argv[])
 					graph = cps_graph_set(graph, CPS_EXITK, kont);
 				}
 				sly_displayln(strip_syntax(ast));
+				cps_init_primops(&ss);
 				struct cps_ret_t r = cps_translate(&ss, CPS_EXITK, graph, ast);
 				cps_display(r.g, r.k);
 			} else {

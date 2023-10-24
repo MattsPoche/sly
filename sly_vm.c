@@ -281,7 +281,7 @@ vm_run(Sly_State *ss)
 			u8 b = GET_B(instr);
 			u8 c = GET_C(instr);
 			sly_value dict = get_upval(b);
-			set_reg(a, dictionary_ref(dict, get_reg(c)));
+			set_reg(a, dictionary_ref(dict, get_reg(c), SLY_VOID));
 		} break;
 		case OP_SETUPDICT: {
 			u8 a = GET_A(instr);
@@ -295,7 +295,7 @@ vm_run(Sly_State *ss)
 			u8 b = GET_B(instr);
 			u8 c = GET_C(instr);
 			sly_value dict = get_reg(b);
-			set_reg(a, dictionary_ref(dict, get_reg(c)));
+			set_reg(a, dictionary_ref(dict, get_reg(c), SLY_VOID));
 		} break;
 		case OP_DICTSET: {
 			u8 a = GET_A(instr);

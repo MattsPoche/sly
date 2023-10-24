@@ -938,7 +938,7 @@ static sly_value
 cvargs(Sly_State *ss, sly_value args)
 {
 	UNUSED(args);
-	return dictionary_ref(ss->cc->globals, cstr_to_symbol("__VARGS__"));
+	return dictionary_ref(ss->cc->globals, cstr_to_symbol("__VARGS__"), SLY_VOID);
 }
 
 static sly_value
@@ -1118,21 +1118,21 @@ static sly_value
 ccurrent_input_port(Sly_State *ss, sly_value args)
 {
 	UNUSED(args);
-	return dictionary_ref(ss->cc->globals, cstr_to_symbol("*STDIN*"));
+	return dictionary_ref(ss->cc->globals, cstr_to_symbol("*STDIN*"), SLY_VOID);
 }
 
 static sly_value
 ccurrent_output_port(Sly_State *ss, sly_value args)
 {
 	UNUSED(args);
-	return dictionary_ref(ss->cc->globals, cstr_to_symbol("*STDOUT*"));
+	return dictionary_ref(ss->cc->globals, cstr_to_symbol("*STDOUT*"), SLY_VOID);
 }
 
 static sly_value
 ccurrent_error_port(Sly_State *ss, sly_value args)
 {
 	UNUSED(args);
-	return dictionary_ref(ss->cc->globals, cstr_to_symbol("*STDERR*"));
+	return dictionary_ref(ss->cc->globals, cstr_to_symbol("*STDERR*"), SLY_VOID);
 }
 
 static sly_value

@@ -169,22 +169,6 @@ intmap_list_append(intmap_list *xs, intmap_list *ys)
 	return xs;
 }
 
-void
-intmap_foreach(intmap *imap, u32 key, intmap_iter_cb cb, void *ud)
-{
-	struct intmap_kv_pair p;
-	if (imap->value) {
-		p.value = imap->value;
-		p.key = key;
-		cb(p, ud);
-	}
-	for (int i = 0; i < INTMAP_NODEC; ++i) {
-		if (imap->nodes[i]) {
-			intmap_foreach(imap, key | (U32_LMB >> i), cb, ud);
-		}
-	}
-}
-
 static intmap_list *
 build_list(intmap *imap, u32 key)
 {
@@ -247,4 +231,21 @@ intmap_intersect(intmap *m1, intmap *m2)
 		list = list->next;
 	}
 	return new_map;
+}
+
+intmap *
+intmap_subtract(intmap *m1, intmap *m2)
+{
+	intmap *new_map = intmap_empty();
+	intmap_list *list = intmap_to_list(m1);
+	void *value;
+	while (list) {
+		value = intmap_ref(m2, list->p.key);
+		if (value == NULL) {
+			intmap_set_inplace(new_map, list->p.key, value);
+		}
+		list = list->next;
+	}
+	return new_map;
+
 }

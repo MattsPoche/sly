@@ -20,9 +20,6 @@ typedef struct _intmap_list {
 
 typedef void *(*intmap_iter_cb)(struct intmap_kv_pair, void *);
 
-#define DEF_INTMAP_ITER_CB(name, pair, ud, body) \
-	void *name(struct intmap_kv_pair pair, void *ud) body
-
 intmap *intmap_empty(void);
 intmap *intmap_copy(intmap *map);
 void *intmap_ref(intmap *map, u32 key);
@@ -31,12 +28,12 @@ intmap *intmap_set(intmap *map, u32 key, void *value);
 intmap *intmap_replace(intmap *map, u32 key, void *value);
 intmap *intmap_remove(intmap *map, u32 key);
 int intmap_eqv(intmap *m1, intmap *m2);
-void intmap_foreach(intmap *imap, u32 key, intmap_iter_cb cb, void *ud);
 intmap_list *intmap_list_node(u32 key, void *value);
 intmap_list *intmap_to_list(intmap *imap);
 int intmap_list_member(intmap_list *imap, u32 key);
 intmap_list *intmap_list_append(intmap_list *xs, intmap_list *ys);
 intmap *intmap_union(intmap *m1, intmap *m2);
 intmap *intmap_intersect(intmap *m1, intmap *m2);
+intmap *intmap_subtract(intmap *m1, intmap *m2);
 
 #endif /* INTMAP_H_ */
