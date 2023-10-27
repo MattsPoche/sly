@@ -1,2 +1,5 @@
-(define f (if #t 69 420))
-(+ f 32)
+(define f
+  (lambda ()
+	(lambda (x y) (+ x y))))
+
+((f) 69 42)
