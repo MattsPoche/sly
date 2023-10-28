@@ -341,6 +341,7 @@ sly_value dictionary_entry_ref(sly_value d, sly_value key);
 sly_value dictionary_ref(sly_value d, sly_value key, sly_value not_found);
 void dictionary_remove(sly_value d, sly_value key);
 void dictionary_import(Sly_State *ss, sly_value dst, sly_value src);
+sly_value dictionary_union(Sly_State *ss, sly_value d1, sly_value d2);
 sly_value dictionary_get_entries(Sly_State *ss, sly_value d);
 sly_value dictionary_get_keys(Sly_State *ss, sly_value d);
 sly_value dictionary_get_values(Sly_State *ss, sly_value d);

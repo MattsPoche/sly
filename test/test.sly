@@ -1,5 +1,5 @@
-(define f
-  (lambda ()
-	(lambda (x y) (+ x y))))
-
-((f) 69 42)
+(display
+ (if 69
+	 "foo"
+	 "bar"))
+	

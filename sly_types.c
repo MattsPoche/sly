@@ -1890,6 +1890,14 @@ dictionary_import(Sly_State *ss, sly_value dst, sly_value src)
 }
 
 sly_value
+dictionary_union(Sly_State *ss, sly_value d1, sly_value d2)
+{
+	sly_value dict = copy_dictionary(ss, d1);
+	dictionary_import(ss, dict, d2);
+	return dict;
+}
+
+sly_value
 dictionary_get_entries(Sly_State *ss, sly_value d)
 {
 	sly_assert(dictionary_p(d), "Type Error expected <dictionary>");
