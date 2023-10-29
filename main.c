@@ -1,4 +1,3 @@
-#include <assert.h>
 #include <stdio.h>
 #include <gc.h>
 #include <time.h>
@@ -9,7 +8,6 @@
 #include "opcodes.h"
 #include "eval.h"
 #include "sly_vm.h"
-//#include "intmap.h"
 
 #define CAR(val) (syntax_p(val) ? car(syntax_to_datum(val)) : car(val))
 #define CDR(val) (syntax_p(val) ? cdr(syntax_to_datum(val)) : cdr(val))
@@ -34,28 +32,31 @@ enum cps_type {
 };
 
 enum prim {
-	prim_null = 0,
-	prim_add,
-	prim_sub,
-	prim_mul,
-	prim_div,
-	prim_idiv,
-	prim_mod,
-	prim_bw_and,
-	prim_bw_ior,
-	prim_bw_xor,
-	prim_bw_eqv,
-	prim_bw_nor,
-	prim_bw_nand,
-	prim_bw_not,
-	prim_bw_shift,
-	prim_void,
-	prim_apply,
+	tt_prim_null = 0,
+	tt_prim_add,
+	tt_prim_sub,
+	tt_prim_mul,
+	tt_prim_div,
+	tt_prim_idiv,
+	tt_prim_mod,
+	tt_prim_bw_and,
+	tt_prim_bw_ior,
+	tt_prim_bw_xor,
+	tt_prim_bw_eqv,
+	tt_prim_bw_nor,
+	tt_prim_bw_nand,
+	tt_prim_bw_not,
+	tt_prim_bw_shift,
+	tt_prim_void,
+	tt_prim_apply,
 };
+
+typedef sly_value (*fn_primop)(Sly_State *ss, size_t nargs, ...);
 
 struct primop {
 	char *cstr;
 	sly_value name;
+	fn_primop fn;
 };
 
 struct arity_t {
@@ -183,24 +184,82 @@ sly_value cps_translate(Sly_State *ss, sly_value cc, sly_value graph, sly_value 
 void cps_display(Sly_State *ss, sly_value graph, sly_value k);
 
 static struct primop primops[] = {
-	[prim_null]		= {NULL},
-	[prim_add]		= {"+"},                     // (+ . args)   ; addition
-	[prim_sub]		= {"-"},                     // (- . args)   ; subtraction
-	[prim_mul]		= {"*"},                     // (* . args)   ; multiplication
-	[prim_div]		= {"/"},                     // (/ . args)   ; real division
-	[prim_idiv]		= {"div"},                   // (div . args) ; integer division
-	[prim_mod]		= {"%"},                     // (% . args)   ; mod
-	[prim_bw_and]	= {"bitwise-and"},           // (bitwise-and x y)
-	[prim_bw_ior]	= {"bitwise-ior"},           // (bitwise-ior x y)
-	[prim_bw_xor]	= {"bitwise-xor"},           // (bitwise-xor x y)
-	[prim_bw_eqv]	= {"bitwise-eqv"},           // (bitwise-eqv x y)
-	[prim_bw_nor]	= {"bitwise-nor"},           // (bitwise-nor x y)
-	[prim_bw_nand]	= {"bitwise-nand"},          // (bitwise-nand x y)
-	[prim_bw_not]	= {"bitwise-not"},           // (bitwise-not x y)
-	[prim_bw_shift] = {"arithmetic-shift"},      // (bitwise-shift x y)
-	[prim_void]		= {"void"},                  // (void) ; #<void>
-	[prim_apply]	= {"apply"},
+	[tt_prim_null]		= {NULL},
+	[tt_prim_add]		= {"+"},                     // (+ . args)   ; addition
+	[tt_prim_sub]		= {"-"},                     // (- . args)   ; subtraction
+	[tt_prim_mul]		= {"*"},                     // (* . args)   ; multiplication
+	[tt_prim_div]		= {"/"},                     // (/ . args)   ; real division
+	[tt_prim_idiv]		= {"div"},                   // (div . args) ; integer division
+	[tt_prim_mod]		= {"%"},                     // (% . args)   ; mod
+	[tt_prim_bw_and]	= {"bitwise-and"},           // (bitwise-and x y)
+	[tt_prim_bw_ior]	= {"bitwise-ior"},           // (bitwise-ior x y)
+	[tt_prim_bw_xor]	= {"bitwise-xor"},           // (bitwise-xor x y)
+	[tt_prim_bw_eqv]	= {"bitwise-eqv"},           // (bitwise-eqv x y)
+	[tt_prim_bw_nor]	= {"bitwise-nor"},           // (bitwise-nor x y)
+	[tt_prim_bw_nand]	= {"bitwise-nand"},          // (bitwise-nand x y)
+	[tt_prim_bw_not]	= {"bitwise-not"},           // (bitwise-not x y)
+	[tt_prim_bw_shift] = {"arithmetic-shift"},      // (bitwise-shift x y)
+	[tt_prim_void]		= {"void"},                  // (void) ; #<void>
+	[tt_prim_apply]	= {"apply"},
 };
+
+static sly_value
+prim_add(Sly_State *ss, size_t nargs, ...)
+{
+	va_list ap;
+	va_start(ap, nargs);
+	sly_value total = make_int(ss, 0);
+	for (size_t i = 0; i < nargs; ++i) {
+		total = sly_add(ss, total, va_arg(ap, sly_value));
+	}
+	return total;
+}
+
+static sly_value
+prim_sub(Sly_State *ss, size_t nargs, ...)
+{
+	sly_assert(nargs >= 1, "Error subtraction requires at least 1 argument");
+	va_list ap;
+	va_start(ap, nargs);
+	if (nargs == 1) {
+		return sly_sub(ss, make_int(ss, 0), va_arg(ap, sly_value));
+	}
+	sly_value fst = va_arg(ap, sly_value);
+	sly_value total = make_int(ss, 0);
+	for (size_t i = 1; i < nargs; ++i) {
+		total = sly_add(ss, total, va_arg(ap, sly_value));
+	}
+	return sly_sub(ss, fst, total);
+}
+
+static sly_value
+prim_mul(Sly_State *ss, size_t nargs, ...)
+{
+	va_list ap;
+	va_start(ap, nargs);
+	sly_value total = make_int(ss, 1);
+	for (size_t i = 0; i < nargs; ++i) {
+		total = sly_mul(ss, total, va_arg(ap, sly_value));
+	}
+	return total;
+}
+
+static sly_value
+prim_div(Sly_State *ss, size_t nargs, ...)
+{
+	sly_assert(nargs >= 1, "Error subtraction requires at least 1 argument");
+	va_list ap;
+	va_start(ap, nargs);
+	if (nargs == 1) {
+		return sly_div(ss, make_int(ss, 1), va_arg(ap, sly_value));
+	}
+	sly_value fst = va_arg(ap, sly_value);
+	sly_value total = make_int(ss, 1);
+	for (size_t i = 0; i < nargs; ++i) {
+		total = sly_mul(ss, total, va_arg(ap, sly_value));
+	}
+	return sly_div(ss, fst, total);
+}
 
 void
 cps_init_primops(Sly_State *ss)
