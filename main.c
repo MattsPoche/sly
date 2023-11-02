@@ -49,6 +49,10 @@ enum prim {
 	tt_prim_bw_shift,
 	tt_prim_void,
 	tt_prim_apply,
+	tt_prim_cons,
+	tt_prim_car,
+	tt_prim_cdr,
+	tt_prim_list,
 };
 
 typedef sly_value (*fn_primop)(Sly_State *ss, sly_value arg_list);
@@ -191,6 +195,10 @@ static sly_value prim_mul(Sly_State *ss, sly_value arg_list);
 static sly_value prim_div(Sly_State *ss, sly_value arg_list);
 static sly_value prim_idiv(Sly_State *ss, sly_value arg_list);
 static sly_value prim_mod(Sly_State *ss, sly_value arg_list);
+static sly_value prim_cons(Sly_State *ss, sly_value arg_list);
+static sly_value prim_car(Sly_State *ss, sly_value arg_list);
+static sly_value prim_cdr(Sly_State *ss, sly_value arg_list);
+static sly_value prim_list(Sly_State *ss, sly_value arg_list);
 
 static struct primop primops[] = {
 	[tt_prim_null]		= {NULL, SLY_VOID, NULL},
@@ -210,6 +218,10 @@ static struct primop primops[] = {
 	[tt_prim_bw_shift]  = {"arithmetic-shift"},         // (bitwise-shift x y)
 	[tt_prim_void]		= {"void"},                     // (void) ; #<void>
 	[tt_prim_apply]	    = {"apply"},
+	[tt_prim_cons]      = {"cons", SLY_VOID, prim_cons},
+	[tt_prim_car]       = {"car", SLY_VOID, prim_car},
+	[tt_prim_cdr]       = {"cdr", SLY_VOID, prim_cdr},
+	[tt_prim_list]      = {"list", SLY_VOID, prim_list},
 };
 
 static sly_value
@@ -296,6 +308,36 @@ prim_mod(Sly_State *ss, sly_value arg_list)
 	sly_value x = car(arg_list);
 	sly_value y = car(cdr(arg_list));
 	return sly_mod(ss, x, y);
+}
+
+static sly_value
+prim_cons(Sly_State *ss, sly_value arg_list)
+{
+	sly_assert(list_len(arg_list) == 2, "Error cons requires 2 arguments");
+	return cons(ss, car(arg_list), car(cdr(arg_list)));
+}
+
+static sly_value
+prim_car(Sly_State *ss, sly_value arg_list)
+{
+	UNUSED(ss);
+	sly_assert(list_len(arg_list) == 1, "Error car requires 2 arguments");
+	return car(car(arg_list));
+}
+
+static sly_value
+prim_cdr(Sly_State *ss, sly_value arg_list)
+{
+	UNUSED(ss);
+	sly_assert(list_len(arg_list) == 1, "Error cdr requires 2 arguments");
+	return cdr(car(arg_list));
+}
+
+static sly_value
+prim_list(Sly_State *ss, sly_value arg_list)
+{
+	UNUSED(ss);
+	return arg_list;
 }
 
 void
@@ -651,13 +693,22 @@ cps_translate(Sly_State *ss, sly_value cc, sly_value graph, sly_value form)
 		/* call */
 		sly_value vlist = SLY_NULL;
 		sly_value e;
+		sly_value vars = make_list(ss, 1, cps_gensym_temporary_name(ss));
+		t = cps_new_term();
+		t->type = tt_cps_continue;
+		t->u.cont.expr = cps_new_expr();
+		t->u.cont.expr->type = tt_cps_values;
+		t->u.cont.expr->u.values.args = vars;
+		t->u.cont.k = cc;
+		k = cps_make_kargs(ss, cps_gensym_label_name(ss), t, vars);
+		k->name = cps_gensym_label_name(ss);
+		cps_graph_set(ss, graph, k->name, k);
+		cc = k->name;
 		k = cps_make_ktail(ss, 0);
 		k->type = tt_cps_kreceive;
 		k->name = cps_gensym_label_name(ss);
 		k->u.kreceive.k = cc;
-		k->u.kreceive.arity.req = cons(ss,
-									   cps_gensym_temporary_name(ss),
-									   SLY_NULL);
+		k->u.kreceive.arity.req = vars;
 		k->u.kreceive.arity.rest = SLY_FALSE;
 		cc = k->name;
 		cps_graph_set(ss, graph, cc, k);
@@ -927,6 +978,9 @@ static int DELTA = 0;
 static int
 var_is_dead(sly_value var_info, sly_value var)
 {
+	if (void_p(var_info)) {
+		return 0;
+	}
 	sly_value s = dictionary_ref(var_info, var, SLY_VOID);
 	if (void_p(s)) {
 		return 0;  // No info. Variable may be imported
@@ -1001,17 +1055,26 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph, sly_value var_info, sly
 	cps_graph_set(ss, new_graph, k, kont);
 	switch (kont->type) {
 	case tt_cps_kargs: {
+		if (list_len(kont->u.kargs.vars) > 0) {
+			sly_value var = car(kont->u.kargs.vars);
+			sly_value info = dictionary_ref(var_info, k, SLY_VOID);
+			CPS_Var_Info *vi = GET_PTR(dictionary_ref(info, var, SLY_VOID));
+			if (vi) {
+				printf("var = ");
+				sly_display(var, 1);
+				printf("; isalias? %c\n", vi->isalias ? 't' : 'f');
+			}
+		}
 		CPS_Term *term = kont->u.kargs.term;
 		if (term->type == tt_cps_continue) {
 			sly_value info = dictionary_ref(var_info, k, SLY_VOID);
 			sly_assert(!void_p(info), "Error No var info");
 			CPS_Expr *expr = cps_opt_constant_folding_visit_expr(ss, info, term->u.cont.expr);
 			CPS_Kont *new_kont = cps_copy_kont(kont);
-			sly_value nk;
+			sly_value nk = term->u.cont.k;
 			if (expr != term->u.cont.expr) {
 				new_kont->u.kargs.term = cps_new_term();
 				new_kont->u.kargs.term->u.cont.expr = expr;
-				nk = term->u.cont.k;
 				CPS_Kont *receive = cps_graph_ref(graph, nk);
 				if (receive->type == tt_cps_kreceive) { // expression folded, don't need receive
 					new_kont->u.kargs.term->u.cont.k = receive->u.kreceive.k;
@@ -1099,6 +1162,68 @@ replace_ktails(Sly_State *ss, sly_value graph, sly_value new_graph,
 	return k;
 }
 
+static CPS_Kont *
+bind_args_to_k(Sly_State *ss, sly_value graph, CPS_Kont *kont,
+			   sly_value cc, sly_value args, struct arity_t arity)
+{
+	sly_assert(list_len(args) >= list_len(arity.req), "Error arity mismatch");
+	dictionary_set(ss, graph, kont->name, (sly_value)kont);
+	if (list_len(arity.req) == 0) { // handle rest arg
+		if (arity.rest == SLY_FALSE) {
+			kont->u.kargs.term->u.cont.k = cc;
+			kont->u.kargs.term->u.cont.expr = NULL;
+			return kont;
+		} else if (list_len(args) == 0) {
+			// pass (const '()) => rest
+			sly_value var = arity.rest;
+			CPS_Expr *expr = cps_new_expr();
+			expr->type = tt_cps_const;
+			expr->u.constant.value = SLY_NULL;
+			CPS_Term *t = cps_new_term();
+			t->type = tt_cps_continue;
+			t->u.cont.k = cc;
+			CPS_Kont *next = cps_make_kargs(ss, cps_gensym_label_name(ss), t,
+											make_list(ss, 1, var));
+			kont->u.kargs.term->u.cont.k = next->name;
+			kont->u.kargs.term->u.cont.expr = expr;
+			return next;
+		} else {
+			// pass (primop list remaining args) => rest
+			sly_value var = arity.rest;
+			CPS_Expr *expr = cps_new_expr();
+			expr->type = tt_cps_primcall;
+			expr->u.primcall.prim = primops[tt_prim_list].name;
+			expr->u.primcall.args = args;
+			CPS_Term *t = cps_new_term();
+			t->type = tt_cps_continue;
+			t->u.cont.k = cc;
+			CPS_Kont *next = cps_make_kargs(ss, cps_gensym_label_name(ss), t,
+											make_list(ss, 1, var));
+			kont->u.kargs.term->u.cont.k = next->name;
+			kont->u.kargs.term->u.cont.expr = expr;
+			return next;
+		}
+	} else {
+		// pass (car args) => kargs ((car arity)) -> ...
+		// kont->u.kargs
+		sly_value val = car(args);
+		args = cdr(args);
+		sly_value var = car(arity.req);
+		arity.req = cdr(arity.req);
+		CPS_Expr *expr = cps_new_expr();
+		expr->type = tt_cps_values;
+		expr->u.values.args = make_list(ss, 1, val);
+		CPS_Term *t = cps_new_term();
+		t->type = tt_cps_continue;
+		CPS_Kont *next = cps_make_kargs(ss, cps_gensym_label_name(ss), t,
+										make_list(ss, 1, var));
+		kont->u.kargs.term->u.cont.k = next->name;
+		kont->u.kargs.term->u.cont.expr = expr;
+		return bind_args_to_k(ss, graph, next, cc, args, arity);
+	}
+	sly_assert(0, "Unreachable");
+}
+
 static sly_value
 cps_opt_beta_contraction(Sly_State *ss, sly_value graph, sly_value var_info, sly_value k)
 {
@@ -1129,27 +1254,32 @@ cps_opt_beta_contraction(Sly_State *ss, sly_value graph, sly_value var_info, sly
 			CPS_Var_Info *vi = GET_PTR(dictionary_ref(info, expr->u.call.proc, SLY_VOID));
 			CPS_Kont *kproc = cps_graph_ref(graph, vi->binding->u.proc.k);
 			CPS_Kont *new_kont = cps_copy_kont(kont);
+			sly_value body = kproc->u.kproc.body;
 			sly_value args = expr->u.call.args;
+			struct arity_t arity = kproc->u.kproc.arity;
 			new_kont->u.kargs.term = cps_new_term();
 			new_kont->u.kargs.term->type = tt_cps_continue;
-			new_kont->u.kargs.term->u.cont = term->u.cont;
-			new_kont->u.kargs.term->u.cont.expr = cps_new_expr();
-			expr = new_kont->u.kargs.term->u.cont.expr;
-			expr->type = tt_cps_values;
-			expr->u.values.args = args;
+			sly_value kk = term->u.cont.k;
+			{
+				CPS_Kont *krec = cps_graph_ref(graph, kk);
+				if (krec->type == tt_cps_kreceive) {
+					kk = krec->u.kreceive.k;
+				}
+			}
+			new_kont->u.kargs.term->u.cont.expr = term->u.cont.expr;
+			new_kont->u.kargs.term->u.cont.k = kk;
 			dictionary_set(ss, new_graph, k, (sly_value)new_kont);
-//
-			CPS_Kont *krec = cps_make_ktail(ss, 0);
-			krec->name = cps_gensym_label_name(ss);
-			krec->type = tt_cps_kreceive;
-			krec->u.kreceive.arity = kproc->u.kproc.arity;
-			krec->u.kreceive.k = kproc->u.kproc.body;
-			dictionary_set(ss, new_graph, krec->name, (sly_value)krec);
-			new_kont->u.kargs.term->u.cont.k = krec->name;
+			CPS_Kont *kbody = cps_graph_ref(graph, body);
+			sly_assert(kbody->type == tt_cps_kargs, "Error expected kargs");
+			kbody->u.kargs.vars = SLY_NULL;
+			CPS_Kont *begin = bind_args_to_k(ss, new_graph, new_kont, body, args, arity);
+			if (begin->u.kargs.term->u.cont.expr == NULL) {
+				begin->u.kargs.term = kbody->u.kargs.term;
+			}
 			replace_ktails(ss, graph, new_graph,
-						   kproc->u.kproc.tail, term->u.cont.k, kproc->u.kproc.body);
+						   kproc->u.kproc.tail, kk, kproc->u.kproc.body);
 			return dictionary_union(ss, new_graph,
-									cps_opt_beta_contraction(ss, graph, var_info, term->u.cont.k));
+									cps_opt_beta_contraction(ss, graph, var_info, kk));
 		} else if (term->type == tt_cps_branch) {
 			new_graph = dictionary_union(ss, new_graph,
 										 cps_opt_beta_contraction(ss, graph, var_info, term->u.branch.kt));
@@ -1174,15 +1304,18 @@ sly_value
 cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k)
 {
 	sly_value var_info;
-	UNUSED(cps_opt_beta_contraction);
 	do {
 		DELTA = 0;
 		var_info = cps_collect_var_info(ss, graph, make_dictionary(ss),
 										make_dictionary(ss), NULL, k);
 		graph = cps_opt_constant_folding(ss, graph, var_info, k);
+		cps_display(ss, graph, k);
+		printf("================================================\n");
 		var_info = cps_collect_var_info(ss, graph, make_dictionary(ss),
 										make_dictionary(ss), NULL, k);
 		graph = cps_opt_beta_contraction(ss, graph, var_info, k);
+		cps_display(ss, graph, k);
+		printf("================================================\n");
 	} while (DELTA);
 	return graph;
 }
