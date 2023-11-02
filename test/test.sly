@@ -1,4 +1,3 @@
-(define x ((lambda (x y) (+ x y)) 69 420))
-(define y ((lambda (x y) (* x y)) 69 420))
-(display x)
-(* x y)
+(define pair (cons 69 420))
+(display (cdr pair))
+(display (car pair))

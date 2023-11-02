@@ -780,20 +780,29 @@ cps_translate(Sly_State *ss, sly_value cc, sly_value graph, sly_value form)
 }
 
 static sly_value
-cps_get_const_number(sly_value var_info, sly_value var)
+cps_get_const(sly_value var_info, sly_value var)
 {
 	sly_value s = dictionary_ref(var_info, var, SLY_VOID);
 	if (!void_p(s)) {
 		CPS_Var_Info *vi = GET_PTR(s);
-		if (vi->binding && (vi->alt == NULL)) {
-			if (vi->binding->type == tt_cps_const) {
-				if (number_p(vi->binding->u.constant.value)) {
-					return vi->binding->u.constant.value;
-				}
-			}
+		if (vi->binding
+			&& vi->alt == NULL
+			&& vi->binding->type == tt_cps_const) {
+			return vi->binding->u.constant.value;
 		}
 	}
-	return SLY_FALSE;
+	return SLY_VOID;
+}
+
+static sly_value
+cps_get_const_number(sly_value var_info, sly_value var)
+{
+	sly_value val = cps_get_const(var_info, var);
+	if (void_p(val)
+		|| !number_p(val)) {
+		return SLY_FALSE;
+	}
+	return val;
 }
 
 static void
@@ -1028,16 +1037,99 @@ cps_opt_constant_folding_visit_expr(Sly_State *ss, sly_value var_info, CPS_Expr 
 	sly_value args = expr->u.primcall.args;
 	sly_value val_list = SLY_NULL;
 	if (expr->type == tt_cps_primcall) {
-		while (!null_p(args)) {
-			sly_value val = cps_get_const_number(var_info, car(args));
-			if (val == SLY_FALSE) {
+		enum prim op = primop_p(expr->u.primcall.prim);
+		switch (op) {
+		case tt_prim_null: break;
+		case tt_prim_add:
+		case tt_prim_sub:
+		case tt_prim_mul:
+		case tt_prim_div:
+		case tt_prim_idiv: {
+			while (!null_p(args)) {
+				sly_value val = cps_get_const_number(var_info, car(args));
+				if (val == SLY_FALSE) {
+					return expr;
+				}
+				val_list = list_append(ss, val_list,
+									   cons(ss, val, SLY_NULL));
+				args = cdr(args);
+			}
+		} break;
+		case tt_prim_mod: {
+			sly_assert(list_len(args) == 2, "Error arity mismatch");
+			while (!null_p(args)) {
+				sly_value val = cps_get_const_number(var_info, car(args));
+				if (val == SLY_FALSE || !int_p(val)) {
+					return expr;
+				}
+				val_list = list_append(ss, val_list,
+									   cons(ss, val, SLY_NULL));
+				args = cdr(args);
+			}
+		} break;
+		case tt_prim_bw_and: break;
+		case tt_prim_bw_ior: break;
+		case tt_prim_bw_xor: break;
+		case tt_prim_bw_eqv: break;
+		case tt_prim_bw_nor: break;
+		case tt_prim_bw_nand: break;
+		case tt_prim_bw_not: break;
+		case tt_prim_bw_shift: break;
+		case tt_prim_void: break;
+		case tt_prim_apply: break;
+		case tt_prim_cons: {
+			sly_assert(list_len(args) == 2, "Error arity mismatch");
+			sly_value v1 = cps_get_const(var_info, car(args));
+			if (v1 == SLY_VOID) {
 				return expr;
 			}
-			val_list = list_append(ss, val_list,
-								   cons(ss, val, SLY_NULL));
-			args = cdr(args);
+			sly_value v2 = cps_get_const(var_info, car(cdr(args)));
+			if (v1 == SLY_VOID) {
+				return expr;
+			}
+			expr = cps_new_expr();
+			expr->type = tt_cps_const;
+			expr->u.constant.value = cons(ss, v1, v2);
+			return expr;
+		} break;
+		case tt_prim_car: {
+			sly_assert(list_len(args) == 1, "Error arity mismatch");
+			sly_value v = cps_get_const(var_info, car(args));
+			if (!pair_p(v)) {
+				return expr;
+			}
+			expr = cps_new_expr();
+			expr->type = tt_cps_const;
+			expr->u.constant.value = car(v);
+			return expr;
+		} break;
+		case tt_prim_cdr: {
+			sly_assert(list_len(args) == 1, "Error arity mismatch");
+			sly_value v = cps_get_const(var_info, car(args));
+			if (!pair_p(v)) {
+				return expr;
+			}
+			expr = cps_new_expr();
+			expr->type = tt_cps_const;
+			expr->u.constant.value = cdr(v);
+			return expr;
+		} break;
+		case tt_prim_list: {
+			while (!null_p(args)) {
+				sly_value val = cps_get_const(var_info, car(args));
+				if (void_p(val)) {
+					return expr;
+				}
+				val_list = list_append(ss, val_list,
+									   cons(ss, val, SLY_NULL));
+				args = cdr(args);
+			}
+			expr = cps_new_expr();
+			expr->type = tt_cps_const;
+			expr->u.constant.value = val_list;
+			return expr;
+		} break;
 		}
-		int op = primop_p(expr->u.primcall.prim);
 		if (primops[op].fn) {
 			expr = cps_new_expr();
 			expr->type = tt_cps_const;
