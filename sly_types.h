@@ -333,6 +333,8 @@ char *symbol_to_cstr(sly_value sym);
 void symbol_set_alias(sly_value sym, sly_value alias);
 sly_value symbol_get_alias(sly_value sym);
 sly_value make_dictionary(Sly_State *ss);
+size_t dictionary_len(sly_value d);
+size_t dictionary_cap(sly_value d);
 sly_value dictionary_to_alist(Sly_State *ss, sly_value d);
 sly_value copy_dictionary(Sly_State *ss, sly_value dict);
 int slot_is_free(sly_value slot);

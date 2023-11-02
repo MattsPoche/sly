@@ -1,1 +1,4 @@
-((lambda (x y) (+ x y)) 69 420)
+(define x ((lambda (x y) (+ x y)) 69 420))
+(define y ((lambda (x y) (* x y)) 69 420))
+(display x)
+(* x y)

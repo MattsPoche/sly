@@ -9,11 +9,23 @@
 #include "eval.h"
 #include "sly_vm.h"
 
+/*
+ * CPS intermediate language
+ * TODO: Move this to seperate file.
+ */
+
+/*
+ * Referances:
+ * How Guile does it
+ * - https://www.gnu.org/software/guile/manual/html_node/CPS-in-Guile.html
+ * Blog from a guile dev
+ * - https://wingolog.org/
+ * Good book
+ * - https://www.amazon.com/Compiling-Continuations-Andrew-W-Appel/dp/052103311X
+ */
+
 #define CAR(val) (syntax_p(val) ? car(syntax_to_datum(val)) : car(val))
 #define CDR(val) (syntax_p(val) ? cdr(syntax_to_datum(val)) : cdr(val))
-
-/* typedef u32 cps_variable; */
-/* typedef u32 cps_label; */
 
 enum cps_type {
 	tt_cps_const,
@@ -183,7 +195,7 @@ sly_value cps_gensym_temporary_name(Sly_State *ss);
 sly_value cps_gensym_label_name(Sly_State *ss);
 CPS_Kont *cps_make_kargs(Sly_State *ss, sly_value name, CPS_Term *term, sly_value vars);
 CPS_Kont *cps_make_ktail(Sly_State *ss, int genname);
-sly_value cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k);
+sly_value cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug);
 void cps_init_primops(Sly_State *ss);
 sly_value cps_translate(Sly_State *ss, sly_value cc, sly_value graph, sly_value form);
 void cps_display(Sly_State *ss, sly_value graph, sly_value k);
@@ -997,7 +1009,7 @@ var_is_dead(sly_value var_info, sly_value var)
 }
 
 static int
-var_is_called_once(sly_value var_info, sly_value var)
+var_is_used_once(sly_value var_info, sly_value var)
 {
 	sly_value s = dictionary_ref(var_info, var, SLY_VOID);
 	if (void_p(s)) {
@@ -1032,7 +1044,6 @@ cps_opt_constant_folding_visit_expr(Sly_State *ss, sly_value var_info, CPS_Expr 
 			expr->u.constant.value = primops[op].fn(ss, val_list);
 		}
 	}
-	// TODO: curry values -> kreceive
 	return expr;
 }
 
@@ -1055,19 +1066,9 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph, sly_value var_info, sly
 	cps_graph_set(ss, new_graph, k, kont);
 	switch (kont->type) {
 	case tt_cps_kargs: {
-		if (list_len(kont->u.kargs.vars) > 0) {
-			sly_value var = car(kont->u.kargs.vars);
-			sly_value info = dictionary_ref(var_info, k, SLY_VOID);
-			CPS_Var_Info *vi = GET_PTR(dictionary_ref(info, var, SLY_VOID));
-			if (vi) {
-				printf("var = ");
-				sly_display(var, 1);
-				printf("; isalias? %c\n", vi->isalias ? 't' : 'f');
-			}
-		}
+		sly_value info = dictionary_ref(var_info, k, SLY_VOID);
 		CPS_Term *term = kont->u.kargs.term;
 		if (term->type == tt_cps_continue) {
-			sly_value info = dictionary_ref(var_info, k, SLY_VOID);
 			sly_assert(!void_p(info), "Error No var info");
 			CPS_Expr *expr = cps_opt_constant_folding_visit_expr(ss, info, term->u.cont.expr);
 			CPS_Kont *new_kont = cps_copy_kont(kont);
@@ -1083,24 +1084,32 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph, sly_value var_info, sly
 				}
 				DELTA++;
 			}
-			dictionary_set(ss, new_graph, k, (sly_value)new_kont);
-			nk = new_kont->u.kargs.term->u.cont.k;
-			if (expr_has_no_possible_side_effect(expr)) {
-				CPS_Kont *next = cps_graph_ref(graph, nk);
-				if (next->type == tt_cps_kargs) {
-					if (list_len(next->u.kargs.vars) == 1) {
-						info = dictionary_ref(var_info, nk, SLY_VOID);
-						if (var_is_dead(info, car(next->u.kargs.vars))) {
-							new_kont->u.kargs.term = next->u.kargs.term;
-							term = new_kont->u.kargs.term;
-							DELTA++;
-						}
-					}
-				}
-			}
 			if (expr->type == tt_cps_proc) {
 				new_graph = dictionary_union(ss, new_graph,
 											 cps_opt_constant_folding(ss, graph, var_info, expr->u.proc.k));
+			}
+			dictionary_set(ss, new_graph, k, (sly_value)new_kont);
+			nk = new_kont->u.kargs.term->u.cont.k;
+			CPS_Kont *next = cps_graph_ref(graph, nk);
+			if (expr_has_no_possible_side_effect(expr)
+				&& next->type == tt_cps_kargs
+				&& list_len(next->u.kargs.vars) == 1) {
+				info = dictionary_ref(var_info, nk, SLY_VOID);
+				if (var_is_dead(info, car(next->u.kargs.vars))) {
+					new_kont->u.kargs.term = next->u.kargs.term;
+					term = new_kont->u.kargs.term;
+					DELTA++;
+				}
+			}
+			if (expr->type == tt_cps_values
+				&& next->type == tt_cps_kargs
+				&& list_len(next->u.kargs.vars) == 1
+				&& var_is_used_once(info, car(expr->u.values.args))) {
+				CPS_Var_Info *vi = GET_PTR(dictionary_ref(info, car(expr->u.values.args), SLY_VOID));
+				if (expr_has_no_possible_side_effect(vi->binding)) {
+					*expr = *vi->binding;
+					DELTA++;
+				}
 			}
 			return dictionary_union(ss, new_graph,
 									cps_opt_constant_folding(ss, graph, var_info, term->u.cont.k));
@@ -1246,7 +1255,7 @@ cps_opt_beta_contraction(Sly_State *ss, sly_value graph, sly_value var_info, sly
 										cps_opt_beta_contraction(ss, graph, var_info, term->u.cont.k));
 			}
 			sly_value info = dictionary_ref(var_info, k, SLY_VOID);
-			if (!var_is_called_once(info, expr->u.call.proc)) {
+			if (!var_is_used_once(info, expr->u.call.proc)) {
 				return dictionary_union(ss, new_graph,
 										cps_opt_beta_contraction(ss, graph, var_info, term->u.cont.k));
 			}
@@ -1301,7 +1310,7 @@ cps_opt_beta_contraction(Sly_State *ss, sly_value graph, sly_value var_info, sly
 }
 
 sly_value
-cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k)
+cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug)
 {
 	sly_value var_info;
 	do {
@@ -1309,13 +1318,17 @@ cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k)
 		var_info = cps_collect_var_info(ss, graph, make_dictionary(ss),
 										make_dictionary(ss), NULL, k);
 		graph = cps_opt_constant_folding(ss, graph, var_info, k);
-		cps_display(ss, graph, k);
-		printf("================================================\n");
+		if (debug) {
+			cps_display(ss, graph, k);
+			printf("================================================\n");
+		}
 		var_info = cps_collect_var_info(ss, graph, make_dictionary(ss),
 										make_dictionary(ss), NULL, k);
 		graph = cps_opt_beta_contraction(ss, graph, var_info, k);
-		cps_display(ss, graph, k);
-		printf("================================================\n");
+		if (debug) {
+			cps_display(ss, graph, k);
+			printf("================================================\n");
+		}
 	} while (DELTA);
 	return graph;
 }
@@ -1536,7 +1549,7 @@ main(int argc, char *argv[])
 				cps_init_primops(&ss);
 				sly_value entry = cps_translate(&ss, name, graph, ast);
 				cps_display(&ss, graph, entry);
-				graph = cps_opt_contraction_phase(&ss, graph, entry);
+				graph = cps_opt_contraction_phase(&ss, graph, entry, 1);
 				cps_display(&ss, graph, entry);
 			} else {
 				printf("Running file %s ...\n", arg);

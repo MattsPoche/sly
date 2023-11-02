@@ -1744,6 +1744,22 @@ make_dictionary(Sly_State *ss)
 	return make_dictionary_sz(ss, DICT_INIT_SIZE);
 }
 
+size_t
+dictionary_len(sly_value d)
+{
+	sly_assert(dictionary_p(d), "Type error expected dictionary");
+	vector *v = GET_PTR(d);
+	return v->len;
+}
+
+size_t
+dictionary_cap(sly_value d)
+{
+	sly_assert(dictionary_p(d), "Type error expected dictionary");
+	vector *v = GET_PTR(d);
+	return v->cap;
+}
+
 sly_value
 dictionary_to_alist(Sly_State *ss, sly_value d)
 {
