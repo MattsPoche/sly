@@ -59,6 +59,14 @@ enum prim {
 	tt_prim_bw_nand,
 	tt_prim_bw_not,
 	tt_prim_bw_shift,
+	tt_prim_eq,     // eq?
+	tt_prim_eqv,
+	tt_prim_equal,
+	tt_prim_num_eq, // =
+	tt_prim_less,   // <
+	tt_prim_gr,     // >
+	tt_prim_leq,    // <=
+	tt_prim_geq,    // >=
 	tt_prim_void,
 	tt_prim_apply,
 	tt_prim_cons,
@@ -207,19 +215,24 @@ static sly_value prim_mul(Sly_State *ss, sly_value arg_list);
 static sly_value prim_div(Sly_State *ss, sly_value arg_list);
 static sly_value prim_idiv(Sly_State *ss, sly_value arg_list);
 static sly_value prim_mod(Sly_State *ss, sly_value arg_list);
+static sly_value prim_num_eq(Sly_State *ss, sly_value arg_list);
+static sly_value prim_less(Sly_State *ss, sly_value arg_list);
+static sly_value prim_gr(Sly_State *ss, sly_value arg_list);
+static sly_value prim_leq(Sly_State *ss, sly_value arg_list);
+static sly_value prim_geq(Sly_State *ss, sly_value arg_list);
 static sly_value prim_cons(Sly_State *ss, sly_value arg_list);
 static sly_value prim_car(Sly_State *ss, sly_value arg_list);
 static sly_value prim_cdr(Sly_State *ss, sly_value arg_list);
 static sly_value prim_list(Sly_State *ss, sly_value arg_list);
 
 static struct primop primops[] = {
-	[tt_prim_null]		= {NULL, SLY_VOID, NULL},
-	[tt_prim_add]		= {"+", SLY_VOID, prim_add},    // (+ . args)   ; addition
-	[tt_prim_sub]		= {"-", SLY_VOID, prim_sub},    // (- . args)   ; subtraction
-	[tt_prim_mul]		= {"*", SLY_VOID, prim_mul},    // (* . args)   ; multiplication
-	[tt_prim_div]		= {"/", SLY_VOID, prim_div},    // (/ . args)   ; real division
-	[tt_prim_idiv]		= {"div", SLY_VOID, prim_idiv}, // (div . args) ; integer division
-	[tt_prim_mod]		= {"%", SLY_VOID, prim_mod},    // (% x y)      ; modulo
+	[tt_prim_null]		= {0},
+	[tt_prim_add]		= {"+", .fn = prim_add},    // (+ . args)   ; addition
+	[tt_prim_sub]		= {"-", .fn = prim_sub},    // (- . args)   ; subtraction
+	[tt_prim_mul]		= {"*", .fn = prim_mul},    // (* . args)   ; multiplication
+	[tt_prim_div]		= {"/", .fn = prim_div},    // (/ . args)   ; real division
+	[tt_prim_idiv]		= {"div", .fn = prim_idiv}, // (div . args) ; integer division
+	[tt_prim_mod]		= {"%", .fn = prim_mod},    // (% x y)      ; modulo
 	[tt_prim_bw_and]	= {"bitwise-and"},              // (bitwise-and x y)
 	[tt_prim_bw_ior]	= {"bitwise-ior"},              // (bitwise-ior x y)
 	[tt_prim_bw_xor]	= {"bitwise-xor"},              // (bitwise-xor x y)
@@ -228,12 +241,20 @@ static struct primop primops[] = {
 	[tt_prim_bw_nand]	= {"bitwise-nand"},             // (bitwise-nand x y)
 	[tt_prim_bw_not]	= {"bitwise-not"},              // (bitwise-not x y)
 	[tt_prim_bw_shift]  = {"arithmetic-shift"},         // (bitwise-shift x y)
+	[tt_prim_eq]		= {"eq?"},
+	[tt_prim_eqv]		= {"eqv?"},
+	[tt_prim_equal]		= {"equal?"},
+	[tt_prim_num_eq]	= {"=", .fn = prim_num_eq},
+	[tt_prim_less]		= {"<", .fn = prim_less},
+	[tt_prim_gr]		= {">", .fn = prim_gr},
+	[tt_prim_leq]		= {"<=", .fn = prim_leq},
+	[tt_prim_geq]		= {">=", .fn = prim_geq},
 	[tt_prim_void]		= {"void"},                     // (void) ; #<void>
 	[tt_prim_apply]	    = {"apply"},
-	[tt_prim_cons]      = {"cons", SLY_VOID, prim_cons},
-	[tt_prim_car]       = {"car", SLY_VOID, prim_car},
-	[tt_prim_cdr]       = {"cdr", SLY_VOID, prim_cdr},
-	[tt_prim_list]      = {"list", SLY_VOID, prim_list},
+	[tt_prim_cons]      = {"cons", .fn = prim_cons},
+	[tt_prim_car]       = {"car", .fn = prim_car},
+	[tt_prim_cdr]       = {"cdr", .fn = prim_cdr},
+	[tt_prim_list]      = {"list", .fn = prim_list},
 };
 
 static sly_value
@@ -320,6 +341,111 @@ prim_mod(Sly_State *ss, sly_value arg_list)
 	sly_value x = car(arg_list);
 	sly_value y = car(cdr(arg_list));
 	return sly_mod(ss, x, y);
+}
+
+static sly_value
+prim_num_eq(Sly_State *ss, sly_value arg_list)
+{
+	UNUSED(ss);
+	if (list_len(arg_list) < 2) {
+		return SLY_TRUE;
+	}
+	sly_value x = car(arg_list);
+	sly_value y;
+	arg_list = cdr(arg_list);
+	while (!null_p(arg_list)) {
+		y = car(arg_list);
+		if (!sly_num_eq(x, y)) {
+			return SLY_FALSE;
+		}
+		x = y;
+		arg_list = cdr(arg_list);
+	}
+	return SLY_TRUE;
+}
+
+static sly_value
+prim_less(Sly_State *ss, sly_value arg_list)
+{
+	UNUSED(ss);
+	if (list_len(arg_list) < 2) {
+		return SLY_TRUE;
+	}
+	sly_value x = car(arg_list);
+	sly_value y;
+	arg_list = cdr(arg_list);
+	while (!null_p(arg_list)) {
+		y = car(arg_list);
+		if (!sly_num_lt(x, y)) {
+			return SLY_FALSE;
+		}
+		x = y;
+		arg_list = cdr(arg_list);
+	}
+	return SLY_TRUE;
+}
+
+static sly_value
+prim_gr(Sly_State *ss, sly_value arg_list)
+{
+	UNUSED(ss);
+	if (list_len(arg_list) < 2) {
+		return SLY_TRUE;
+	}
+	sly_value x = car(arg_list);
+	sly_value y;
+	arg_list = cdr(arg_list);
+	while (!null_p(arg_list)) {
+		y = car(arg_list);
+		if (!sly_num_gt(x, y)) {
+			return SLY_FALSE;
+		}
+		x = y;
+		arg_list = cdr(arg_list);
+	}
+	return SLY_TRUE;
+}
+
+static sly_value
+prim_leq(Sly_State *ss, sly_value arg_list)
+{
+	UNUSED(ss);
+	if (list_len(arg_list) < 2) {
+		return SLY_TRUE;
+	}
+	sly_value x = car(arg_list);
+	sly_value y;
+	arg_list = cdr(arg_list);
+	while (!null_p(arg_list)) {
+		y = car(arg_list);
+		if (!(sly_num_lt(x, y) || sly_num_eq(x, y))) {
+			return SLY_FALSE;
+		}
+		x = y;
+		arg_list = cdr(arg_list);
+	}
+	return SLY_TRUE;
+}
+
+static sly_value
+prim_geq(Sly_State *ss, sly_value arg_list)
+{
+	UNUSED(ss);
+	if (list_len(arg_list) < 2) {
+		return SLY_TRUE;
+	}
+	sly_value x = car(arg_list);
+	sly_value y;
+	arg_list = cdr(arg_list);
+	while (!null_p(arg_list)) {
+		y = car(arg_list);
+		if (!(sly_num_gt(x, y) || sly_num_eq(x, y))) {
+			return SLY_FALSE;
+		}
+		x = y;
+		arg_list = cdr(arg_list);
+	}
+	return SLY_TRUE;
 }
 
 static sly_value
@@ -1045,7 +1171,12 @@ cps_opt_constant_folding_visit_expr(Sly_State *ss, sly_value var_info, CPS_Expr 
 		case tt_prim_sub:
 		case tt_prim_mul:
 		case tt_prim_div:
-		case tt_prim_idiv: {
+		case tt_prim_idiv:
+		case tt_prim_num_eq:
+		case tt_prim_less:
+		case tt_prim_gr:
+		case tt_prim_leq:
+		case tt_prim_geq: {
 			while (!null_p(args)) {
 				sly_value val = cps_get_const_number(var_info, car(args));
 				if (val == SLY_FALSE) {
@@ -1076,6 +1207,51 @@ cps_opt_constant_folding_visit_expr(Sly_State *ss, sly_value var_info, CPS_Expr 
 		case tt_prim_bw_nand: break;
 		case tt_prim_bw_not: break;
 		case tt_prim_bw_shift: break;
+		case tt_prim_eq: {
+			sly_assert(list_len(args) == 2, "Error arity mismatch");
+			sly_value v1 = cps_get_const(var_info, car(args));
+			if (v1 == SLY_VOID) {
+				return expr;
+			}
+			sly_value v2 = cps_get_const(var_info, car(cdr(args)));
+			if (v1 == SLY_VOID) {
+				return expr;
+			}
+			expr = cps_new_expr();
+			expr->type = tt_cps_const;
+			expr->u.constant.value = ctobool(sly_eq(v1, v2));
+			return expr;
+		} break;
+		case tt_prim_eqv: {
+			sly_assert(list_len(args) == 2, "Error arity mismatch");
+			sly_value v1 = cps_get_const(var_info, car(args));
+			if (v1 == SLY_VOID) {
+				return expr;
+			}
+			sly_value v2 = cps_get_const(var_info, car(cdr(args)));
+			if (v1 == SLY_VOID) {
+				return expr;
+			}
+			expr = cps_new_expr();
+			expr->type = tt_cps_const;
+			expr->u.constant.value = ctobool(sly_eqv(v1, v2));
+			return expr;
+		} break;
+		case tt_prim_equal: {
+			sly_assert(list_len(args) == 2, "Error arity mismatch");
+			sly_value v1 = cps_get_const(var_info, car(args));
+			if (v1 == SLY_VOID) {
+				return expr;
+			}
+			sly_value v2 = cps_get_const(var_info, car(cdr(args)));
+			if (v1 == SLY_VOID) {
+				return expr;
+			}
+			expr = cps_new_expr();
+			expr->type = tt_cps_const;
+			expr->u.constant.value = ctobool(sly_equal(v1, v2));
+			return expr;
+		} break;
 		case tt_prim_void: break;
 		case tt_prim_apply: break;
 		case tt_prim_cons: {
