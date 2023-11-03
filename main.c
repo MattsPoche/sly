@@ -879,6 +879,7 @@ var_info_cat(CPS_Var_Info *info1, CPS_Var_Info *info2)
 {
 	if (info1 == NULL) return info2;
 	if (info2 == NULL) return info1;
+	if (info1 == info2) return info1;
 	info1->alt = var_info_cat(info1->alt, info2);
 	return info1;
 }
@@ -1206,10 +1207,32 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph, sly_value var_info, sly
 			return dictionary_union(ss, new_graph,
 									cps_opt_constant_folding(ss, graph, var_info, term->u.cont.k));
 		} else if (term->type == tt_cps_branch) {
-			new_graph = dictionary_union(ss, new_graph,
-										 cps_opt_constant_folding(ss, graph, var_info, term->u.branch.kt));
-			return dictionary_union(ss, new_graph,
-									cps_opt_constant_folding(ss, graph, var_info, term->u.branch.kf));
+			sly_value arg = cps_get_const(info, term->u.branch.arg);
+			if (void_p(arg)) {
+				new_graph = dictionary_union(ss, new_graph,
+											 cps_opt_constant_folding(ss, graph, var_info, term->u.branch.kt));
+				return dictionary_union(ss, new_graph,
+										cps_opt_constant_folding(ss, graph, var_info, term->u.branch.kf));
+			}
+			CPS_Kont *new_kont = cps_copy_kont(kont);
+			dictionary_set(ss, new_graph, k, (sly_value)new_kont);
+			sly_value vars = new_kont->u.kargs.vars;
+			new_kont->u.kargs.term = cps_new_term();
+			new_kont->u.kargs.term->type = tt_cps_continue;
+			CPS_Expr *expr = cps_new_expr();
+			new_kont->u.kargs.term->u.cont.expr = expr;
+			expr->type = tt_cps_values;
+			expr->u.values.args = vars;
+			if (arg == SLY_FALSE) {
+				printf("HERE\n");
+				new_kont->u.kargs.term->u.cont.k = term->u.branch.kf;
+				return dictionary_union(ss, new_graph,
+										cps_opt_constant_folding(ss, graph, var_info, term->u.branch.kf));
+			} else {
+				new_kont->u.kargs.term->u.cont.k = term->u.branch.kt;
+				return dictionary_union(ss, new_graph,
+										cps_opt_constant_folding(ss, graph, var_info, term->u.branch.kt));
+			}
 		}
 		sly_assert(0, "Error Unreachable");
 	} break;

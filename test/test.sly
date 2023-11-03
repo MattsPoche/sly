@@ -1,3 +1,4 @@
-(define pair (cons 69 420))
-(display (cdr pair))
-(display (car pair))
+(+ 5
+   (if #f
+	   (+ 50 20)
+	   (- 70 90)))
