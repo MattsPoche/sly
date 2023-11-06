@@ -1,9 +1,14 @@
-(define x 1)
-(define (foo)
-  (set! x 5))
-(foo)
-(+ x 1)
+;; (if #f
+;; 	(begin
+;; 	  (define (foo x)
+;; 		(if (> x 0)
+;; 			(begin (display x)
+;; 				   (foo (- x 1)))
+;; 			(void)))
+;; 	  (foo 10))
+;; 	(void))
 
-;; (define x 1)
-;; (define (foo x y) (* x y))
-;; (display (+ x (foo 69 420)))
+(define x 3)
+(define (foo x y) (* x y))
+(display (/ (foo 69 420) x))
+(display x)
