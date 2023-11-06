@@ -18,6 +18,7 @@ typedef double   f64;
 
 #define ARR_LEN(arr) (sizeof(arr) / sizeof((arr)[0]))
 #define UNUSED(var)  ((void)(var))
+#define UNUSED_ATTR  __attribute__((unused))
 #define FLAG_ON(var, flag)  ((var)|(flag))
 #define FLAG_OFF(var, flag) ((var) & (flag) ? (var) ^ (flag) : (var))
 

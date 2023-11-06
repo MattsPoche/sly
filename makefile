@@ -1,8 +1,9 @@
 CC=gcc
 WARNINGS=-Wmissing-prototypes -Werror -Wextra -pedantic -Wall -Wswitch-enum
-CFLAGS=-ggdb
+CFLAGS=-ggdb -std=c11
 CFLAGS += $(WARNINGS)
-RELEASE=-O3 -Werror -Wextra -pedantic -Wall -Wswitch-enum -std=c11
+RELEASE=-O3 -std=c11
+RELEASE += $(WARNINGS)
 DEFS=-D _POSIX_C_SOURCE=200809L
 LFLAGS=-lm -lgc
 TARGET=sly
