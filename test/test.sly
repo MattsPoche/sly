@@ -1,3 +1,4 @@
+
 ;; (if #f
 ;; 	(begin
 ;; 	  (define (foo x)
@@ -8,7 +9,24 @@
 ;; 	  (foo 10))
 ;; 	(void))
 
-(define x 3)
-(define (foo x y) (* x y))
-(display (/ (foo 69 420) x))
-(display x)
+;; fix test
+
+(define n 10)
+(define (foo x) (+ x n))
+(define (bar x) (- x n))
+
+(display (foo 5))
+(display (bar 5))
+
+
+;; (define (foo x)
+;;   (if (> x 0)
+;; 	  (begin (display x)
+;; 			 (foo (- x 1)))
+;; 	  (display "done")))
+;; (foo 10)
+
+;; (define x 3)
+;; (define (foo x y) (* x y))
+;; (display (/ (foo 69 420) x))
+;; (display x)

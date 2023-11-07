@@ -10,6 +10,7 @@ enum cps_type {
 	tt_cps_primcall,
 	tt_cps_values,
 	tt_cps_set,
+	tt_cps_fix,
 	tt_cps_branch,
 	tt_cps_continue,
 	tt_cps_kargs,
@@ -148,6 +149,11 @@ typedef struct _cps_set {
 	sly_value val;
 } CPS_Set;
 
+typedef struct _cps_fix {
+	sly_value names;  // list of names
+	sly_value procs;  // list of proc exprs
+} CPS_Fix;
+
 typedef struct _cps_expr {
 	int type;
 	union {
@@ -159,6 +165,7 @@ typedef struct _cps_expr {
 		CPS_Primcall primcall;
 		CPS_Values values;
 		CPS_Set set;
+		CPS_Fix fix;
 	} u;
 } CPS_Expr;
 
@@ -180,11 +187,14 @@ int cps_graph_is_member(sly_value graph, sly_value k);
 CPS_Term *cps_new_term(void);
 CPS_Expr *cps_make_constant(sly_value value);
 CPS_Expr *cps_new_expr(void);
+CPS_Expr *cps_make_fix(void);
 CPS_Var_Info *cps_new_var_info(CPS_Expr *binding, int isalias, int which);
 sly_value cps_gensym_temporary_name(Sly_State *ss);
 sly_value cps_gensym_label_name(Sly_State *ss);
 CPS_Kont *cps_make_kargs(Sly_State *ss, sly_value name, CPS_Term *term, sly_value vars);
 CPS_Kont *cps_make_ktail(Sly_State *ss, int genname);
+sly_value cps_collect_var_info(Sly_State *ss, sly_value graph, sly_value state,
+							   sly_value prev_tbl, CPS_Expr *expr, sly_value k);
 sly_value cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug);
 void cps_init_primops(Sly_State *ss);
 sly_value cps_translate(Sly_State *ss, sly_value cc, sly_value graph, sly_value form);

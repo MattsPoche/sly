@@ -38,8 +38,12 @@ main(int argc, char *argv[])
 				cps_init_primops(&ss);
 				sly_value entry = cps_translate(&ss, name, graph, ast);
 				cps_display(&ss, graph, entry);
+				/* cps_display_var_info(&ss, graph, */
+				/* 					 cps_collect_var_info(&ss, graph, */
+				/* 										  make_dictionary(&ss), */
+				/* 										  make_dictionary(&ss), NULL, entry)); */
 				printf("========================================================\n");
-				graph = cps_opt_contraction_phase(&ss, graph, entry, 1);
+				graph = cps_opt_contraction_phase(&ss, graph, entry, 0);
 				cps_display(&ss, graph, entry);
 			} else {
 				printf("Running file %s ...\n", arg);
