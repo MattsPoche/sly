@@ -193,8 +193,8 @@ sly_value cps_gensym_temporary_name(Sly_State *ss);
 sly_value cps_gensym_label_name(Sly_State *ss);
 CPS_Kont *cps_make_kargs(Sly_State *ss, sly_value name, CPS_Term *term, sly_value vars);
 CPS_Kont *cps_make_ktail(Sly_State *ss, int genname);
-sly_value cps_collect_var_info(Sly_State *ss, sly_value graph, sly_value state,
-							   sly_value prev_tbl, CPS_Expr *expr, sly_value k);
+sly_value cps_collect_var_info(Sly_State *ss, sly_value graph, sly_value global_tbl,
+							   sly_value state, sly_value prev_tbl, CPS_Expr *expr, sly_value k);
 sly_value cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug);
 void cps_init_primops(Sly_State *ss);
 sly_value cps_translate(Sly_State *ss, sly_value cc, sly_value graph, sly_value form);

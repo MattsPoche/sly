@@ -43,7 +43,7 @@ main(int argc, char *argv[])
 				/* 										  make_dictionary(&ss), */
 				/* 										  make_dictionary(&ss), NULL, entry)); */
 				printf("========================================================\n");
-				graph = cps_opt_contraction_phase(&ss, graph, entry, 0);
+				graph = cps_opt_contraction_phase(&ss, graph, entry, 1);
 				cps_display(&ss, graph, entry);
 			} else {
 				printf("Running file %s ...\n", arg);
