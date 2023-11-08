@@ -1648,6 +1648,39 @@ cps_alpha_rename(Sly_State *ss, sly_value graph, sly_value k, sly_value replacem
 	}
 }
 
+static void
+cps_inline_kproc(Sly_State *ss, sly_value graph, sly_value new_graph,
+				 CPS_Kont *kont, CPS_Kont *kproc)
+{
+	CPS_Term *term = kont->u.kargs.term;
+	CPS_Expr *expr = term->u.cont.expr;
+	sly_value body = cps_copy_proc_body(ss, graph, new_graph, kproc->u.kproc.body);
+	cps_alpha_rename(ss, new_graph, body, make_dictionary(ss));
+	sly_value args = expr->u.call.args;
+	struct arity_t arity = kproc->u.kproc.arity;
+	kont->u.kargs.term = cps_new_term();
+	kont->u.kargs.term->type = tt_cps_continue;
+	sly_value kk = term->u.cont.k;
+	{
+		CPS_Kont *krec = cps_graph_ref(graph, kk);
+		if (krec->type == tt_cps_kreceive) {
+			kk = krec->u.kreceive.k;
+		}
+	}
+	kont->u.kargs.term->u.cont.expr = term->u.cont.expr;
+	kont->u.kargs.term->u.cont.k = kk;
+	dictionary_set(ss, new_graph, kont->name, (sly_value)kont);
+	CPS_Kont *kbody = cps_graph_ref(graph, body);
+	sly_assert(kbody->type == tt_cps_kargs, "Error expected kargs");
+	kbody->u.kargs.vars = SLY_NULL;
+	CPS_Kont *begin = bind_args_to_k(ss, new_graph, kont, body, args, arity);
+	if (begin->u.kargs.term->u.cont.expr == NULL) {
+		begin->u.kargs.term = kbody->u.kargs.term;
+	}
+	replace_ktails(ss, graph, new_graph,
+				   kproc->u.kproc.tail, kk, body);
+}
+
 static sly_value
 cps_opt_beta_contraction(Sly_State *ss, sly_value graph, sly_value global_var_info,
 						 sly_value var_info, sly_value k)
@@ -1695,33 +1728,11 @@ cps_opt_beta_contraction(Sly_State *ss, sly_value graph, sly_value global_var_in
 			CPS_Expr *binding = vi->binding;
 			CPS_Kont *kproc = cps_graph_ref(graph, binding->u.proc.k);
 			CPS_Kont *new_kont = cps_copy_kont(kont);
-			sly_value body = cps_copy_proc_body(ss, graph, new_graph, kproc->u.kproc.body);
-			cps_alpha_rename(ss, new_graph, body, make_dictionary(ss));
-			sly_value args = expr->u.call.args;
-			struct arity_t arity = kproc->u.kproc.arity;
-			new_kont->u.kargs.term = cps_new_term();
-			new_kont->u.kargs.term->type = tt_cps_continue;
-			sly_value kk = term->u.cont.k;
-			{
-				CPS_Kont *krec = cps_graph_ref(graph, kk);
-				if (krec->type == tt_cps_kreceive) {
-					kk = krec->u.kreceive.k;
-				}
-			}
-			new_kont->u.kargs.term->u.cont.expr = term->u.cont.expr;
-			new_kont->u.kargs.term->u.cont.k = kk;
-			dictionary_set(ss, new_graph, k, (sly_value)new_kont);
-			CPS_Kont *kbody = cps_graph_ref(graph, body);
-			sly_assert(kbody->type == tt_cps_kargs, "Error expected kargs");
-			kbody->u.kargs.vars = SLY_NULL;
-			CPS_Kont *begin = bind_args_to_k(ss, new_graph, new_kont, body, args, arity);
-			if (begin->u.kargs.term->u.cont.expr == NULL) {
-				begin->u.kargs.term = kbody->u.kargs.term;
-			}
-			replace_ktails(ss, graph, new_graph,
-						   kproc->u.kproc.tail, kk, body);
+			cps_inline_kproc(ss, graph, new_graph, new_kont, kproc);
 			return dictionary_union(ss, new_graph,
-									cps_opt_beta_contraction(ss, graph, global_var_info, var_info, kk));
+									cps_opt_beta_contraction(ss, graph,
+															 global_var_info,
+															 var_info, term->u.cont.k));
 		} else if (term->type == tt_cps_branch) {
 			new_graph = dictionary_union(ss, new_graph,
 										 cps_opt_beta_contraction(ss, graph, global_var_info,
