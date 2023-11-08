@@ -18,6 +18,7 @@
 (display (foo 5))
 (display (bar 5))
 
+;;((lambda (x y) (* x y)) 6 5)
 
 ;; (define (foo x)
 ;;   (if (> x 0)
