@@ -324,20 +324,6 @@ primop_p(sly_value name)
 	return 0;
 }
 
-CPS_Expr *
-cps_binding_ref(sly_value bindings, sly_value v)
-{
-	sly_value x = dictionary_ref(bindings, v, SLY_FALSE);
-	sly_assert(x != SLY_FALSE, "Error variable undefined");
-	return GET_PTR(x);
-}
-
-void
-cps_binding_update(Sly_State *ss, sly_value bindings, sly_value v, CPS_Expr *e)
-{
-	dictionary_set(ss, bindings, v, (sly_value)e);
-}
-
 CPS_Kont *
 cps_graph_ref(sly_value graph, sly_value k)
 {
@@ -787,7 +773,6 @@ cps_get_const(sly_value var_info, sly_value var)
 		CPS_Var_Info *vi = GET_PTR(s);
 		if (vi->binding
 			&& vi->alt == NULL
-			&& vi->updates == 0
 			&& vi->binding->type == tt_cps_const) {
 			return vi->binding->u.constant.value;
 		}
@@ -812,6 +797,22 @@ cps_var_def_info(Sly_State *ss, sly_value tbl, sly_value name, CPS_Expr *expr, i
 	CPS_Var_Info *vi = cps_new_var_info(expr, isalias, which);
 	dictionary_set(ss, tbl, name, (sly_value)vi);
 	return vi;
+}
+
+UNUSED_ATTR static CPS_Expr *
+cps_var_info_get_binding(sly_value tbl, sly_value name)
+{
+	return GET_PTR(dictionary_ref(tbl, name, SLY_VOID));
+}
+
+static void
+cps_var_info_set_binding(sly_value tbl, sly_value name, CPS_Expr *binding)
+{
+	CPS_Var_Info *vi = GET_PTR(dictionary_ref(tbl, name, SLY_VOID));
+	if (vi == NULL) {
+		return;
+	}
+	vi->binding = binding;
 }
 
 static void
@@ -892,12 +893,17 @@ cps_var_info_visit_expr(Sly_State *ss, sly_value global_tbl, sly_value tbl, CPS_
 		}
 	} break;
 	case tt_cps_set: {
-		cps_var_info_inc_used(ss, tbl, expr->u.set.val);
-		cps_var_info_inc_used(ss, tbl, expr->u.set.var);
+		/* NOTE: If a variable is set, it should be marked "updated" but
+		 * not "used".
+		 * This way the variable can potentially be constant folded
+		 * even after its value changes.
+		 */
+		/* cps_var_info_inc_used(ss, global_tbl, expr->u.set.var); */
+		/* cps_var_info_inc_used(ss, tbl, expr->u.set.var); */
 		cps_var_info_inc_updates(ss, tbl, expr->u.set.var);
-		cps_var_info_inc_used(ss, global_tbl, expr->u.set.val);
-		cps_var_info_inc_used(ss, global_tbl, expr->u.set.var);
 		cps_var_info_inc_updates(ss, global_tbl, expr->u.set.var);
+		cps_var_info_inc_used(ss, tbl, expr->u.set.val);
+		cps_var_info_inc_used(ss, global_tbl, expr->u.set.val);
 	} break;
 	case tt_cps_fix: {
 		sly_value n, names = expr->u.fix.names;
@@ -1003,6 +1009,9 @@ cps_collect_var_info(Sly_State *ss, sly_value graph, sly_value global_tbl,
 												 state, var_tbl, p, p->u.proc.k);
 					procs = cdr(procs);
 				}
+				cps_var_info_visit_expr(ss, global_tbl, var_tbl, nexpr);
+			} else if (nexpr->type == tt_cps_set) {
+				cps_var_info_set_binding(var_tbl, nexpr->u.set.var, expr);
 				cps_var_info_visit_expr(ss, global_tbl, var_tbl, nexpr);
 			} else {
 				cps_var_info_visit_expr(ss, global_tbl, var_tbl, nexpr);
@@ -1554,6 +1563,92 @@ cps_copy_proc_body(Sly_State *ss, sly_value graph, sly_value new_graph, sly_valu
 }
 
 static sly_value
+cps_alpha_rename_get_replacement(sly_value var, sly_value replacements)
+{
+	sly_value x = dictionary_ref(replacements, var, SLY_VOID);
+	if (void_p(x)) {
+		return var;
+	}
+	return x;
+}
+
+static void
+cps_alpha_rename_visit_expr(CPS_Expr *expr, sly_value replacements)
+{
+	sly_value values = SLY_NULL;
+	switch (expr->type) {
+	case tt_cps_call: {
+		expr->u.call.proc =
+			cps_alpha_rename_get_replacement(expr->u.call.proc, replacements);
+		values = expr->u.call.args;
+	} break;
+	case tt_cps_kcall: {
+		sly_assert(0, "unimplemented");
+	} break;
+	case tt_cps_const: break;
+	case tt_cps_proc: break;
+	case tt_cps_prim: break;
+	case tt_cps_primcall: {
+		values = expr->u.primcall.args;
+	} break;
+	case tt_cps_values: {
+		values = expr->u.values.args;
+	} break;
+	case tt_cps_set: {
+		expr->u.set.val =
+			cps_alpha_rename_get_replacement(expr->u.set.val, replacements);
+		expr->u.set.var =
+			cps_alpha_rename_get_replacement(expr->u.set.var, replacements);
+	} break;
+	case tt_cps_fix: {
+		values = expr->u.fix.names;
+	} break;
+	default: sly_assert(0, "Unreachable");
+	}
+	while (!null_p(values)) {
+		set_car(values, cps_alpha_rename_get_replacement(car(values), replacements));
+		values = cdr(values);
+	}
+}
+
+static void
+cps_alpha_rename(Sly_State *ss, sly_value graph, sly_value k, sly_value replacements)
+{
+	CPS_Kont *kont = cps_graph_ref(graph, k);
+	switch (kont->type) {
+	case tt_cps_kargs: {
+		sly_value vars = kont->u.kargs.vars;
+		while (!null_p(vars)) {
+			sly_value name = cps_gensym_temporary_name(ss);
+			dictionary_set(ss, replacements, car(vars), name);
+			set_car(vars, name);
+			vars = cdr(vars);
+		}
+		switch (kont->u.kargs.term->type) {
+		case tt_cps_continue: {
+			cps_alpha_rename_visit_expr(kont->u.kargs.term->u.cont.expr, replacements);
+			cps_alpha_rename(ss, graph, kont->u.kargs.term->u.cont.k, replacements);
+		} break;
+		case tt_cps_branch: {
+			kont->u.kargs.term->u.branch.arg =
+				cps_alpha_rename_get_replacement(kont->u.kargs.term->u.branch.arg, replacements);
+			cps_alpha_rename(ss, graph, kont->u.kargs.term->u.branch.kt, replacements);
+			cps_alpha_rename(ss, graph, kont->u.kargs.term->u.branch.kf, replacements);
+		} break;
+		default: sly_assert(0, "Unreachable");
+		}
+	} break;
+	case tt_cps_kproc: {
+		sly_assert(0, "Unreachable");
+	} break;
+	case tt_cps_kreceive: {
+		cps_alpha_rename(ss, graph, kont->u.kreceive.k, replacements);
+	} break;
+	case tt_cps_ktail: break;
+	}
+}
+
+static sly_value
 cps_opt_beta_contraction(Sly_State *ss, sly_value graph, sly_value global_var_info,
 						 sly_value var_info, sly_value k)
 {
@@ -1601,6 +1696,7 @@ cps_opt_beta_contraction(Sly_State *ss, sly_value graph, sly_value global_var_in
 			CPS_Kont *kproc = cps_graph_ref(graph, binding->u.proc.k);
 			CPS_Kont *new_kont = cps_copy_kont(kont);
 			sly_value body = cps_copy_proc_body(ss, graph, new_graph, kproc->u.kproc.body);
+			cps_alpha_rename(ss, new_graph, body, make_dictionary(ss));
 			sly_value args = expr->u.call.args;
 			struct arity_t arity = kproc->u.kproc.arity;
 			new_kont->u.kargs.term = cps_new_term();

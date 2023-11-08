@@ -16,7 +16,9 @@
 (define (bar x) (- x n))
 
 (display (foo 5))
+(set! n 5)
 (display (bar 5))
+(display n)
 
 ;;((lambda (x y) (* x y)) 6 5)
 

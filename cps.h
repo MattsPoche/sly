@@ -181,8 +181,6 @@ typedef struct _var_info {
 
 CPS_Kont *cps_graph_ref(sly_value graph, sly_value k);
 void cps_graph_set(Sly_State *ss, sly_value graph, sly_value k, CPS_Kont *kont);
-CPS_Expr *cps_binding_ref(sly_value bindings, sly_value v);
-void cps_binding_update(Sly_State *ss, sly_value bindings, sly_value v, CPS_Expr *e);
 int cps_graph_is_member(sly_value graph, sly_value k);
 CPS_Term *cps_new_term(void);
 CPS_Expr *cps_make_constant(sly_value value);
