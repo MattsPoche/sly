@@ -38,19 +38,19 @@
 		cps_graph_set(ss, graph, cc, k);								\
 	} while (0)
 
-#define SYM_SET cstr_to_symbol("set!")
-#define SYM_CALLWCC cstr_to_symbol("call/cc")
-#define SYM_CALLWCC_LONG cstr_to_symbol("call-with-current-continuation")
-#define SYM_VALUES cstr_to_symbol("values")
-#define SYM_CALLWVALUES cstr_to_symbol("call-with-values")
-#define SYM_APPLY cstr_to_symbol("apply")
-#define SYM_LAMBDA cstr_to_symbol("lambda")
-#define SYM_BEGIN cstr_to_symbol("begin")
-#define SYM_IF cstr_to_symbol("if")
-#define SYM_QUOTE cstr_to_symbol("quote")
-#define SYM_SYNTAX_QUOTE cstr_to_symbol("syntax-quote")
-#define SYM_DEFINE cstr_to_symbol("define")
-#define SYM_DEFINE_SYNTAX cstr_to_symbol("define-syntax")
+#define SYM_SET				cstr_to_symbol("set!")
+#define SYM_CALLWCC			cstr_to_symbol("call/cc")
+#define SYM_CALLWCC_LONG	cstr_to_symbol("call-with-current-continuation")
+#define SYM_VALUES			cstr_to_symbol("values")
+#define SYM_CALLWVALUES		cstr_to_symbol("call-with-values")
+#define SYM_APPLY			cstr_to_symbol("apply")
+#define SYM_LAMBDA			cstr_to_symbol("lambda")
+#define SYM_BEGIN			cstr_to_symbol("begin")
+#define SYM_IF				cstr_to_symbol("if")
+#define SYM_QUOTE			cstr_to_symbol("quote")
+#define SYM_SYNTAX_QUOTE	cstr_to_symbol("syntax-quote")
+#define SYM_DEFINE			cstr_to_symbol("define")
+#define SYM_DEFINE_SYNTAX	cstr_to_symbol("define-syntax")
 
 static sly_value prim_add(Sly_State *ss, sly_value arg_list);
 static sly_value prim_sub(Sly_State *ss, sly_value arg_list);
@@ -99,6 +99,23 @@ static struct primop primops[] = {
 	[tt_prim_cdr]       = {"cdr", .fn = prim_cdr},
 	[tt_prim_list]      = {"list", .fn = prim_list},
 };
+
+#define CLICK() click(1)
+#define CLICK_RESET() click(0)
+
+static size_t
+click(int x)
+{
+	static size_t delta = 0;
+	if (x) {
+		delta++;
+		return delta;
+	} else {
+		size_t tmp = delta;
+		delta = 0;
+		return tmp;
+	}
+}
 
 static sly_value
 prim_add(Sly_State *ss, sly_value arg_list)
@@ -823,12 +840,6 @@ cps_var_def_info(Sly_State *ss, sly_value tbl, sly_value name, CPS_Expr *expr,
 	return vi;
 }
 
-UNUSED_ATTR static CPS_Expr *
-cps_var_info_get_binding(sly_value tbl, sly_value name)
-{
-	return GET_PTR(dictionary_ref(tbl, name, SLY_VOID));
-}
-
 static void
 cps_var_info_set_binding(sly_value tbl, sly_value name, CPS_Expr *binding)
 {
@@ -1088,8 +1099,6 @@ cps_collect_var_info(Sly_State *ss, sly_value graph, sly_value global_tbl,
 	return state;
 }
 
-static int DELTA = 0;
-
 static int
 var_is_dead(sly_value var_info, sly_value var)
 {
@@ -1335,7 +1344,7 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 				} else {
 					new_kont->u.kargs.term->u.cont.k = nk;
 				}
-				DELTA++;
+				CLICK();
 			}
 			if (expr->type == tt_cps_proc) {
 				sly_value tmp =
@@ -1351,13 +1360,13 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 				CPS_Expr *p;
 				int idx = 0;
 				if (null_p(names)) {
-					DELTA++;
+					CLICK();
 					*term = *next->u.kargs.term;
 				} else {
 					while (!null_p(names)) {
 						name = car(names);
 						if (var_is_dead(global_var_info, name)) {
-							DELTA++;
+							CLICK();
 							expr->u.fix.names =
 								list_remove_idx(ss, expr->u.fix.names, idx);
 							expr->u.fix.procs =
@@ -1382,13 +1391,16 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 			dictionary_set(ss, new_graph, k, (sly_value)new_kont);
 			nk = new_kont->u.kargs.term->u.cont.k;
 			next = cps_graph_ref(graph, nk);
-			if (expr_has_no_possible_side_effect(expr)
+			int try = 1;
+			if (try
+				&& expr_has_no_possible_side_effect(expr)
 				&& next->type == tt_cps_kargs
 				&& list_len(next->u.kargs.vars) == 1) {
 				if (var_is_dead(global_var_info, car(next->u.kargs.vars))) {
 					new_kont->u.kargs.term = next->u.kargs.term;
 					term = new_kont->u.kargs.term;
-					DELTA++;
+					CLICK();
+					try = 0;
 					if (term->type == tt_cps_continue
 						&& term->u.cont.expr->type == tt_cps_proc) {
 						sly_value k = term->u.cont.expr->u.proc.k;
@@ -1399,7 +1411,8 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 					}
 				}
 			}
-			if (expr->type == tt_cps_values
+			if (try
+				&& expr->type == tt_cps_values
 				&& next->type == tt_cps_kargs
 				&& list_len(next->u.kargs.vars) == 1
 				&& var_is_used_once(global_var_info, car(expr->u.values.args))) {
@@ -1407,16 +1420,32 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 					dictionary_ref(info, car(expr->u.values.args), SLY_VOID);
 				CPS_Var_Info *vi = GET_PTR(tmp);
 				if (expr_has_no_possible_side_effect(vi->binding)) {
+					CLICK();
+					try = 0;
 					*expr = *vi->binding;
-					DELTA++;
 				}
 			}
-			if (next->type == tt_cps_kreceive
+			if (try
+				&& expr->type == tt_cps_values
+				&& next->type == tt_cps_kargs
+				&& list_len(expr->u.values.args) == 1
+				&& list_len(new_kont->u.kargs.vars) == 1
+				&& list_len(next->u.kargs.vars) == 1
+				&& sly_equal(car(new_kont->u.kargs.vars),
+							 car(expr->u.values.args))
+				&& var_is_used_once(info, car(expr->u.values.args))) {
+				CLICK();
+				try = 0;
+				new_kont->u.kargs.vars = next->u.kargs.vars;
+				new_kont->u.kargs.term = next->u.kargs.term;
+			}
+			if (try
+				&& next->type == tt_cps_kreceive
 				&& list_len(next->u.kreceive.arity.req) == 1
 				&& next->u.kreceive.arity.rest == SLY_FALSE) {
 				CPS_Kont *kn = cps_graph_ref(graph, next->u.kreceive.k);
 				if (var_is_dead(global_var_info, car(kn->u.kargs.vars))) {
-					DELTA++;
+					CLICK();
 					kn->u.kargs.vars = SLY_NULL;
 					term->u.cont.k = next->u.kreceive.k;
 				}
@@ -1792,11 +1821,20 @@ cps_opt_beta_contraction(Sly_State *ss,
 				return dictionary_union(ss, new_graph, tmp);
 			}
 			sly_value info = dictionary_ref(var_info, k, SLY_VOID);
+			if (void_p(info)) {
+				printf("VOID INFO\n");
+				printf("k = ");
+				sly_display(k, 1);
+				printf("; proc = ");
+				sly_displayln(expr->u.call.proc);
+				CLICK();
+				return dictionary_union(ss, new_graph, graph);
+			}
 			CPS_Var_Info *vi = GET_PTR(dictionary_ref(info, expr->u.call.proc,
 													  SLY_VOID));
 			CPS_Expr *binding = vi->binding;
 			sly_value knext = term->u.cont.k;
-			if (binding->type == tt_cps_proc) {
+			if (binding && binding->type == tt_cps_proc) {
 				if (!var_is_used_once(global_var_info, expr->u.call.proc)) {
 					sly_value tmp =
 						cps_opt_beta_contraction(ss, graph, global_var_info,
@@ -1805,7 +1843,7 @@ cps_opt_beta_contraction(Sly_State *ss,
 				}
 				CPS_Kont *kproc = cps_graph_ref(graph, binding->u.proc.k);
 				CPS_Kont *new_kont = cps_copy_kont(kont);
-				DELTA++;
+				CLICK();
 				cps_inline_kproc(ss, graph, new_graph, new_kont, kproc);
 				knext = new_kont->name;
 			}
@@ -1842,7 +1880,6 @@ cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug
 {
 	sly_value gvi, vi;
 	do {
-		DELTA = 0;
 		gvi = make_dictionary(ss);
 		vi = cps_collect_var_info(ss, graph,
 								  gvi,
@@ -1863,7 +1900,7 @@ cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug
 			cps_display(ss, graph, k);
 			printf("================================================\n");
 		}
-	} while (DELTA);
+	} while (CLICK_RESET());
 	return graph;
 }
 

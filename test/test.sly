@@ -1,14 +1,22 @@
-;; (define (foo x y)
-;;   (lambda () (+ x y)))
+(define (op x y)
+  (+ x y))
 
-;; ((foo 5 6))
+(display (op 5 7))
+(display (op 9 3))
 
 (define add
   (lambda (x)
 	(lambda (y)
-	  (+ x y))))
+	  (op x y))))
 
-((add 5) 6)
+(display ((add 5) 6))
+(display (op 69 420))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (define (foo x y)
+;;   (lambda () (+ x y)))
+
+;; ((foo 5 6))
 
 ;; (if #f
 ;; 	(begin
