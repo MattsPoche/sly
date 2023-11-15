@@ -76,37 +76,41 @@ static sly_value prim_cons(Sly_State *ss, sly_value arg_list);
 static sly_value prim_car(Sly_State *ss, sly_value arg_list);
 static sly_value prim_cdr(Sly_State *ss, sly_value arg_list);
 static sly_value prim_list(Sly_State *ss, sly_value arg_list);
+static sly_value prim_vector(Sly_State *ss, sly_value arg_list);
 
 static struct primop primops[] = {
-	[tt_prim_null]		= {0},
-	[tt_prim_add]		= {"+", .fn = prim_add},    // (+ . args)
-	[tt_prim_sub]		= {"-", .fn = prim_sub},    // (- . args)
-	[tt_prim_mul]		= {"*", .fn = prim_mul},    // (* . args)
-	[tt_prim_div]		= {"/", .fn = prim_div},    // (/ . args)
-	[tt_prim_idiv]		= {"div", .fn = prim_idiv}, // (div . args)
-	[tt_prim_mod]		= {"%", .fn = prim_mod},    // (% x y)
-	[tt_prim_bw_and]	= {"bitwise-and"},          // (bitwise-and x y)
-	[tt_prim_bw_ior]	= {"bitwise-ior"},          // (bitwise-ior x y)
-	[tt_prim_bw_xor]	= {"bitwise-xor"},          // (bitwise-xor x y)
-	[tt_prim_bw_eqv]	= {"bitwise-eqv"},          // (bitwise-eqv x y)
-	[tt_prim_bw_nor]	= {"bitwise-nor"},          // (bitwise-nor x y)
-	[tt_prim_bw_nand]	= {"bitwise-nand"},         // (bitwise-nand x y)
-	[tt_prim_bw_not]	= {"bitwise-not"},          // (bitwise-not x y)
-	[tt_prim_bw_shift]  = {"arithmetic-shift"},     // (bitwise-shift x y)
-	[tt_prim_eq]		= {"eq?"},
-	[tt_prim_eqv]		= {"eqv?"},
-	[tt_prim_equal]		= {"equal?"},
-	[tt_prim_num_eq]	= {"=", .fn = prim_num_eq},
-	[tt_prim_less]		= {"<", .fn = prim_less},
-	[tt_prim_gr]		= {">", .fn = prim_gr},
-	[tt_prim_leq]		= {"<=", .fn = prim_leq},
-	[tt_prim_geq]		= {">=", .fn = prim_geq},
-	[tt_prim_void]		= {"void"},                     // (void) ; #<void>
-	[tt_prim_apply]	    = {"apply"},
-	[tt_prim_cons]      = {"cons", .fn = prim_cons},
-	[tt_prim_car]       = {"car", .fn = prim_car},
-	[tt_prim_cdr]       = {"cdr", .fn = prim_cdr},
-	[tt_prim_list]      = {"list", .fn = prim_list},
+	[tt_prim_null]			= {0},
+	[tt_prim_add]			= {"+", .fn = prim_add},    // (+ . args)
+	[tt_prim_sub]			= {"-", .fn = prim_sub},    // (- . args)
+	[tt_prim_mul]			= {"*", .fn = prim_mul},    // (* . args)
+	[tt_prim_div]			= {"/", .fn = prim_div},    // (/ . args)
+	[tt_prim_idiv]			= {"div", .fn = prim_idiv}, // (div . args)
+	[tt_prim_mod]			= {"%", .fn = prim_mod},    // (% x y)
+	[tt_prim_bw_and]		= {"bitwise-and"},          // (bitwise-and x y)
+	[tt_prim_bw_ior]		= {"bitwise-ior"},          // (bitwise-ior x y)
+	[tt_prim_bw_xor]		= {"bitwise-xor"},          // (bitwise-xor x y)
+	[tt_prim_bw_eqv]		= {"bitwise-eqv"},          // (bitwise-eqv x y)
+	[tt_prim_bw_nor]		= {"bitwise-nor"},          // (bitwise-nor x y)
+	[tt_prim_bw_nand]		= {"bitwise-nand"},         // (bitwise-nand x y)
+	[tt_prim_bw_not]		= {"bitwise-not"},          // (bitwise-not x y)
+	[tt_prim_bw_shift]		= {"arithmetic-shift"},     // (bitwise-shift x y)
+	[tt_prim_eq]			= {"eq?"},
+	[tt_prim_eqv]			= {"eqv?"},
+	[tt_prim_equal]			= {"equal?"},
+	[tt_prim_num_eq]		= {"=", .fn = prim_num_eq},
+	[tt_prim_less]			= {"<", .fn = prim_less},
+	[tt_prim_gr]			= {">", .fn = prim_gr},
+	[tt_prim_leq]			= {"<=", .fn = prim_leq},
+	[tt_prim_geq]			= {">=", .fn = prim_geq},
+	[tt_prim_void]			= {"void"},                     // (void) ; #<void>
+	[tt_prim_apply]			= {"apply"},
+	[tt_prim_cons]			= {"cons", .fn = prim_cons},
+	[tt_prim_car]			= {"car", .fn = prim_car},
+	[tt_prim_cdr]			= {"cdr", .fn = prim_cdr},
+	[tt_prim_list]			= {"list", .fn = prim_list},
+	[tt_prim_vector]		= {"vector", .fn = prim_vector},
+	[tt_prim_vector_ref]	= {"vector-ref"},
+	[tt_prim_vector_set]	= {"vector-set"},
 };
 
 #define CLICK() click(1)
@@ -337,6 +341,12 @@ static sly_value
 prim_list(UNUSED_ATTR Sly_State *ss, sly_value arg_list)
 {
 	return arg_list;
+}
+
+static sly_value
+prim_vector(Sly_State *ss, sly_value arg_list)
+{
+	return list_to_vector(ss, arg_list);
 }
 
 void
@@ -862,8 +872,15 @@ static CPS_Var_Info *
 cps_var_def_info(Sly_State *ss, sly_value tbl, sly_value name, CPS_Expr *expr,
 				 int isalias, int which)
 {
-	CPS_Var_Info *vi = cps_new_var_info(expr, isalias, which);
-	dictionary_set(ss, tbl, name, (sly_value)vi);
+	CPS_Var_Info *vi = GET_PTR(dictionary_ref(tbl, name, SLY_VOID));
+	if (vi == NULL) {
+		vi = cps_new_var_info(expr, isalias, which);
+		dictionary_set(ss, tbl, name, (sly_value)vi);
+	} else {
+		vi->isalias = isalias;
+		vi->which = which;
+		vi->binding = expr;
+	}
 	return vi;
 }
 
@@ -1190,7 +1207,6 @@ cps_opt_constant_folding_visit_expr(Sly_State *ss, sly_value var_info,
 									   cons(ss, val, SLY_NULL));
 				args = cdr(args);
 			}
-			sly_displayln(val_list);
 		} break;
 		case tt_prim_mod: {
 			sly_assert(list_len(args) == 2, "Error arity mismatch");
@@ -1296,6 +1312,9 @@ cps_opt_constant_folding_visit_expr(Sly_State *ss, sly_value var_info,
 			expr->u.constant.value = cdr(v);
 			return expr;
 		} break;
+		case tt_prim_vector_ref: break;
+		case tt_prim_vector_set: break;
+		case tt_prim_vector:
 		case tt_prim_list: {
 			while (!null_p(args)) {
 				sly_value val = cps_get_const(var_info, car(args));
@@ -1316,7 +1335,6 @@ cps_opt_constant_folding_visit_expr(Sly_State *ss, sly_value var_info,
 			expr = cps_new_expr();
 			expr->type = tt_cps_const;
 			expr->u.constant.value = primops[op].fn(ss, val_list);
-			sly_displayln(expr->u.constant.value);
 		}
 	}
 	return expr;
@@ -1425,17 +1443,27 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 			}
 			nk = new_kont->u.kargs.term->u.cont.k;
 			next = cps_graph_ref(graph, nk);
-			int try = 1;
-			if (try
-				&& expr_has_no_possible_side_effect(expr)
-				&& next->type == tt_cps_kargs
-				&& list_len(next->u.kargs.vars) == 1) {
+			if (next->type == tt_cps_kreceive
+				&& list_len(next->u.kreceive.arity.req) == 1
+				&& next->u.kreceive.arity.rest == SLY_FALSE) {
+				CPS_Kont *ktmp = cps_graph_ref(graph, next->u.kreceive.k);
+				if (var_is_dead(global_var_info, car(ktmp->u.kargs.vars))) {
+					CLICK();
+					ktmp->u.kargs.vars = SLY_NULL;
+					term->u.cont.k = next->u.kreceive.k;
+					sly_value tmp =
+						cps_opt_constant_folding(ss, graph, global_var_info,
+												 var_info, term->u.cont.k);
+					new_graph = dictionary_union(ss, new_graph, tmp);
+				}
+			} else if (expr_has_no_possible_side_effect(expr)
+					   && next->type == tt_cps_kargs
+					   && list_len(next->u.kargs.vars) == 1) {
 				if (var_is_dead(global_var_info, car(next->u.kargs.vars))) {
 					new_kont->u.kargs.term = next->u.kargs.term;
 					term = new_kont->u.kargs.term;
 					expr = term->u.cont.expr;
 					CLICK();
-					try = 0;
 					if (term->type == tt_cps_branch) {
 						kont = new_kont;
 						goto handle_branch;
@@ -1484,36 +1512,30 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 															 var_info, term->u.cont.k);
 					return dictionary_union(ss, new_graph, tmp);
 				}
-			}
-			if (try
-				&& expr->type == tt_cps_values
-				&& next->type == tt_cps_kargs
-				&& list_len(next->u.kargs.vars) == 1
-				&& var_is_used_once(global_var_info, car(expr->u.values.args))) {
+			} else if (expr->type == tt_cps_values
+					   && next->type == tt_cps_kargs
+					   && list_len(next->u.kargs.vars) == 1
+					   && var_is_used_once(global_var_info, car(expr->u.values.args))) {
 				sly_value tmp =
 					dictionary_ref(info, car(expr->u.values.args), SLY_VOID);
 				CPS_Var_Info *vi = GET_PTR(tmp);
 				if (vi->binding
 					&& expr_has_no_possible_side_effect(vi->binding)) {
 					CLICK();
-					try = 0;
 					*expr = *vi->binding;
 					tmp = cps_opt_constant_folding(ss, graph, global_var_info,
 												   var_info, new_kont->name);
 					return dictionary_union(ss, new_graph, tmp);
 				}
-			}
-			if (try
-				&& expr->type == tt_cps_values
-				&& next->type == tt_cps_kargs
-				&& list_len(expr->u.values.args) == 1
-				&& list_len(new_kont->u.kargs.vars) == 1
-				&& list_len(next->u.kargs.vars) == 1
-				&& sly_equal(car(new_kont->u.kargs.vars),
-							 car(expr->u.values.args))
-				&& var_is_used_once(info, car(expr->u.values.args))) {
+			} else if (expr->type == tt_cps_values
+					   && next->type == tt_cps_kargs
+					   && list_len(expr->u.values.args) == 1
+					   && list_len(new_kont->u.kargs.vars) == 1
+					   && list_len(next->u.kargs.vars) == 1
+					   && sly_equal(car(new_kont->u.kargs.vars),
+									car(expr->u.values.args))
+					   && var_is_used_once(info, car(expr->u.values.args))) {
 				CLICK();
-				try = 0;
 				new_kont->u.kargs.vars = next->u.kargs.vars;
 				new_kont->u.kargs.term = next->u.kargs.term;
 				term = new_kont->u.kargs.term;
@@ -1560,11 +1582,6 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 							procs = cdr(procs);
 						}
 					}
-				}
-				if (list_len(new_kont->u.kargs.vars) == 1
-					&& var_is_dead(global_var_info, car(new_kont->u.kargs.vars))) {
-					CLICK();
-					new_kont->u.kargs.vars = SLY_NULL;
 				}
 				sly_value tmp = cps_opt_constant_folding(ss, graph, global_var_info,
 														 var_info, term->u.cont.k);
@@ -2098,8 +2115,14 @@ cps_opt_beta_contraction(Sly_State *ss,
 sly_value
 cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug)
 {
+	static int called = 0;
+	int rounds = 0;
 	sly_value gvi, vi;
+	called++;
+	printf("CONTRACTION PHASE #%d\n", called);
 	do {
+		rounds++;
+		printf("ROUND #%d\n", rounds);
 		gvi = make_dictionary(ss);
 		vi = cps_collect_var_info(ss, graph,
 								  gvi,
@@ -2107,7 +2130,7 @@ cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug
 								  make_dictionary(ss), NULL, k);
 		cps_opt_resolve_aliases(ss, graph, gvi, vi, k);
 		if (debug) {
-			printf("RESOLVE_ALIASES:\n");
+			printf("RESOLVE-ALIASES:\n");
 			cps_display(ss, graph, k);
 			printf("================================================\n");
 		}
@@ -2118,7 +2141,7 @@ cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug
 								  make_dictionary(ss), NULL, k);
 		graph = cps_opt_constant_folding(ss, graph, gvi, vi, k);
 		if (debug) {
-			printf("CONSTANT_FOLDING:\n");
+			printf("CONSTANT-FOLDING:\n");
 			cps_display(ss, graph, k);
 			printf("================================================\n");
 		}
@@ -2129,7 +2152,7 @@ cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug
 								  make_dictionary(ss), NULL, k);
 		graph = cps_opt_beta_contraction(ss, graph, gvi, vi, k);
 		if (debug) {
-			printf("BETA_CONTRACTION:\n");
+			printf("BETA-CONTRACTION:\n");
 			cps_display(ss, graph, k);
 			printf("================================================\n");
 		}

@@ -1,3 +1,11 @@
+(define x 69)
+(define y 420)
+(define (f)
+  (+ x y))
+(display f)
+(display (f))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; (define (count p)
 ;;   (define (f xs)
 ;; 	(if (null? xs) 0
@@ -18,12 +26,12 @@
 ;(display "\n")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define add
-  (lambda (x)
-	(lambda (y)
-	  (+ x y))))
+;; (define add
+;;   (lambda (x)
+;; 	(lambda (y)
+;; 	  (+ x y))))
 
-(display ((add 5) 6))
+;; (display ((add 5) 6))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; (define (foo x y)

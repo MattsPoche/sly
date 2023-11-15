@@ -49,6 +49,9 @@ enum prim {
 	tt_prim_car,
 	tt_prim_cdr,
 	tt_prim_list,
+	tt_prim_vector,
+	tt_prim_vector_ref,
+	tt_prim_vector_set,
 };
 
 typedef sly_value (*fn_primop)(Sly_State *ss, sly_value arg_list);
