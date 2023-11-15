@@ -20,6 +20,15 @@
  * - https://www.amazon.com/Compiling-Continuations-Andrew-W-Appel/dp/052103311X
  */
 
+/*
+ * Optimization passes:
+ * 1. Constant folding/Beta-contraction
+ * 2. Beta-expansion (inlining)
+ * 3. Eta-reduction
+ * 4. Hoisting
+ * 5. Common subexpression elimination
+ */
+
 #define CAR(val) (syntax_p(val) ? car(syntax_to_datum(val)) : car(val))
 #define CDR(val) (syntax_p(val) ? cdr(syntax_to_datum(val)) : cdr(val))
 #define CPS_CONSTANT()													\
@@ -450,6 +459,14 @@ cps_gensym_label_name(Sly_State *ss)
 	return gensym_from_cstr(ss, "$k");
 }
 
+UNUSED_ATTR static CPS_Expr *
+cps_copy_expr(CPS_Expr *expr)
+{
+	CPS_Expr *new = cps_new_expr();
+	memcpy(new, expr, sizeof(*expr));
+	return new;
+}
+
 static CPS_Kont *
 cps_copy_kont(CPS_Kont *k)
 {
@@ -685,12 +702,22 @@ _cps_translate(Sly_State *ss, CPS_Expr *fix, sly_value cc,
 				sly_value kt, kf;
 				kt = _cps_translate(ss, fix, cc, graph, tform);
 				kf = _cps_translate(ss, fix, cc, graph, fform);
+				{ /* Branch term does not pass values to it's continuations,
+				   * so their bindings start dead. Let's just remove them here.
+				   */
+					CPS_Kont *tmp = cps_graph_ref(graph, kt);
+					sly_assert(tmp->type == tt_cps_kargs, "Error expected kargs");
+					tmp->u.kargs.vars = SLY_NULL;
+					tmp = cps_graph_ref(graph, kf);
+					sly_assert(tmp->type == tt_cps_kargs, "Error expected kargs");
+					tmp->u.kargs.vars = SLY_NULL;
+				}
 				t = cps_new_term();
 				sly_value tl = cps_gensym_label_name(ss);
 				sly_value tv = cps_gensym_temporary_name(ss);
 				k = cps_make_kargs(ss, tl, t, make_list(ss, 1, tv));
 				t->type = tt_cps_branch;
-				t->u.branch.arg  = car(k->u.kargs.vars);
+				t->u.branch.arg = car(k->u.kargs.vars);
 				t->u.branch.kt = kt;
 				t->u.branch.kf = kf;
 				cc = k->name;
@@ -1102,6 +1129,7 @@ cps_collect_var_info(Sly_State *ss, sly_value graph, sly_value global_tbl,
 static int
 var_is_dead(sly_value var_info, sly_value var)
 {
+	sly_displayln(var);
 	if (void_p(var_info)) {
 		return 0;
 	}
@@ -1344,6 +1372,10 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 				} else {
 					new_kont->u.kargs.term->u.cont.k = nk;
 				}
+				sly_value tmp =
+					cps_opt_constant_folding(ss, graph, global_var_info,
+											 var_info, term->u.cont.k);
+				return dictionary_union(ss, new_graph, tmp);
 				CLICK();
 			}
 			if (expr->type == tt_cps_proc) {
@@ -1352,6 +1384,7 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 											 var_info, expr->u.proc.k);
 				new_graph = dictionary_union(ss, new_graph, tmp);
 			}
+			dictionary_set(ss, new_graph, k, (sly_value)new_kont);
 			CPS_Kont *next = cps_graph_ref(graph, nk);
 			if (expr->type == tt_cps_fix) {
 				sly_value names = expr->u.fix.names;
@@ -1388,7 +1421,6 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 					}
 				}
 			}
-			dictionary_set(ss, new_graph, k, (sly_value)new_kont);
 			nk = new_kont->u.kargs.term->u.cont.k;
 			next = cps_graph_ref(graph, nk);
 			int try = 1;
@@ -1399,16 +1431,56 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 				if (var_is_dead(global_var_info, car(next->u.kargs.vars))) {
 					new_kont->u.kargs.term = next->u.kargs.term;
 					term = new_kont->u.kargs.term;
+					expr = term->u.cont.expr;
 					CLICK();
 					try = 0;
-					if (term->type == tt_cps_continue
-						&& term->u.cont.expr->type == tt_cps_proc) {
-						sly_value k = term->u.cont.expr->u.proc.k;
+					if (term->type == tt_cps_branch) {
+						kont = new_kont;
+						goto handle_branch;
+					} else if (expr->type == tt_cps_proc) {
+						sly_value k = expr->u.proc.k;
 						sly_value tmp =
 							cps_opt_constant_folding(ss, graph, global_var_info,
 													 var_info, k);
 						new_graph = dictionary_union(ss, new_graph, tmp);
+					} else if (expr->type == tt_cps_fix) {
+						sly_value names = expr->u.fix.names;
+						sly_value procs = expr->u.fix.procs;
+						sly_value name;
+						CPS_Expr *p;
+						int idx = 0;
+						if (null_p(names)) {
+							CLICK();
+							*term = *next->u.kargs.term;
+						} else {
+							while (!null_p(names)) {
+								name = car(names);
+								if (var_is_dead(global_var_info, name)) {
+									CLICK();
+									expr->u.fix.names =
+										list_remove_idx(ss, expr->u.fix.names, idx);
+									expr->u.fix.procs =
+										list_remove_idx(ss, expr->u.fix.procs, idx);
+									next->u.kargs.vars =
+										list_remove_idx(ss, next->u.kargs.vars, idx);
+									idx--;
+								} else {
+									p = GET_PTR(car(procs));
+									sly_value tmp =
+										cps_opt_constant_folding(ss, graph,
+																 global_var_info,
+																 var_info, p->u.proc.k);
+									new_graph = dictionary_union(ss, new_graph, tmp);
+								}
+								idx++;
+								names = cdr(names);
+								procs = cdr(procs);
+							}
+						}
 					}
+					sly_value tmp = cps_opt_constant_folding(ss, graph, global_var_info,
+															 var_info, term->u.cont.k);
+					return dictionary_union(ss, new_graph, tmp);
 				}
 			}
 			if (try
@@ -1419,10 +1491,14 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 				sly_value tmp =
 					dictionary_ref(info, car(expr->u.values.args), SLY_VOID);
 				CPS_Var_Info *vi = GET_PTR(tmp);
-				if (expr_has_no_possible_side_effect(vi->binding)) {
+				if (vi->binding
+					&& expr_has_no_possible_side_effect(vi->binding)) {
 					CLICK();
 					try = 0;
 					*expr = *vi->binding;
+					tmp = cps_opt_constant_folding(ss, graph, global_var_info,
+												   var_info, new_kont->name);
+					return dictionary_union(ss, new_graph, tmp);
 				}
 			}
 			if (try
@@ -1438,22 +1514,64 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 				try = 0;
 				new_kont->u.kargs.vars = next->u.kargs.vars;
 				new_kont->u.kargs.term = next->u.kargs.term;
-			}
-			if (try
-				&& next->type == tt_cps_kreceive
-				&& list_len(next->u.kreceive.arity.req) == 1
-				&& next->u.kreceive.arity.rest == SLY_FALSE) {
-				CPS_Kont *kn = cps_graph_ref(graph, next->u.kreceive.k);
-				if (var_is_dead(global_var_info, car(kn->u.kargs.vars))) {
-					CLICK();
-					kn->u.kargs.vars = SLY_NULL;
-					term->u.cont.k = next->u.kreceive.k;
+				term = new_kont->u.kargs.term;
+				if (term->type == tt_cps_branch) {
+					kont = new_kont;
+					goto handle_branch;
+				} else if (expr->type == tt_cps_proc) {
+					sly_value k = expr->u.proc.k;
+					sly_value tmp =
+						cps_opt_constant_folding(ss, graph, global_var_info,
+												 var_info, k);
+					new_graph = dictionary_union(ss, new_graph, tmp);
+				} else if (expr->type == tt_cps_fix) {
+					sly_value names = expr->u.fix.names;
+					sly_value procs = expr->u.fix.procs;
+					sly_value name;
+					CPS_Expr *p;
+					int idx = 0;
+					if (null_p(names)) {
+						CLICK();
+						*term = *next->u.kargs.term;
+					} else {
+						while (!null_p(names)) {
+							name = car(names);
+							if (var_is_dead(global_var_info, name)) {
+								CLICK();
+								expr->u.fix.names =
+									list_remove_idx(ss, expr->u.fix.names, idx);
+								expr->u.fix.procs =
+									list_remove_idx(ss, expr->u.fix.procs, idx);
+								next->u.kargs.vars =
+									list_remove_idx(ss, next->u.kargs.vars, idx);
+								idx--;
+							} else {
+								p = GET_PTR(car(procs));
+								sly_value tmp =
+									cps_opt_constant_folding(ss, graph,
+															 global_var_info,
+															 var_info, p->u.proc.k);
+								new_graph = dictionary_union(ss, new_graph, tmp);
+							}
+							idx++;
+							names = cdr(names);
+							procs = cdr(procs);
+						}
+					}
 				}
+				if (list_len(new_kont->u.kargs.vars) == 1
+					&& var_is_dead(global_var_info, car(new_kont->u.kargs.vars))) {
+					CLICK();
+					new_kont->u.kargs.vars = SLY_NULL;
+				}
+				sly_value tmp = cps_opt_constant_folding(ss, graph, global_var_info,
+														 var_info, term->u.cont.k);
+				return dictionary_union(ss, new_graph, tmp);
 			}
 			sly_value tmp = cps_opt_constant_folding(ss, graph, global_var_info,
 													 var_info, term->u.cont.k);
 			return dictionary_union(ss, new_graph, tmp);
-		} else if (term->type == tt_cps_branch) {
+		} else if (term->type == tt_cps_branch) handle_branch: {
 			sly_value arg = cps_get_const(info, term->u.branch.arg);
 			if (void_p(arg)) {
 				sly_value tmp =
@@ -1501,6 +1619,103 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 	} break;
 	}
 	return new_graph;
+}
+
+static sly_value
+cps_get_alias(sly_value info, sly_value name)
+{
+	CPS_Var_Info *vi = GET_PTR(dictionary_ref(info, name, SLY_VOID));
+	if (vi && vi->isalias) {
+		sly_assert(vi->binding->type == tt_cps_values, "Error expected values");
+		return cps_get_alias(info, list_ref(vi->binding->u.values.args,
+											vi->which));
+	}
+	return name;
+}
+
+static sly_value
+cps_map_aliases(Sly_State *ss, sly_value info, sly_value lst)
+{
+	if (null_p(lst)) {
+		return lst;
+	}
+	return cons(ss, cps_get_alias(info, car(lst)),
+				cps_map_aliases(ss, info, cdr(lst)));
+}
+
+static void
+cps_opt_resolve_aliases(Sly_State *ss,
+						sly_value graph,
+						sly_value global_var_info,
+						sly_value var_info,
+						sly_value k)
+{
+	CPS_Kont *kont = cps_graph_ref(graph, k);
+	switch (kont->type) {
+	case tt_cps_kargs: {
+		CPS_Term *term = kont->u.kargs.term;
+		sly_value info = dictionary_ref(var_info, k, SLY_VOID);
+		sly_assert(!void_p(info), "No var info found for continuation");
+		if (term->type == tt_cps_continue) {
+			CPS_Expr *expr = term->u.cont.expr;
+			switch (expr->type) {
+			case tt_cps_call: {
+				expr->u.call.proc = cps_get_alias(info, expr->u.call.proc);
+				expr->u.call.args = cps_map_aliases(ss, info, expr->u.call.args);
+			} break;
+			case tt_cps_kcall: {
+				sly_assert(0, "unimplemented");
+			} break;
+			case tt_cps_const: break;
+			case tt_cps_proc: {
+				cps_opt_resolve_aliases(ss, graph, global_var_info,
+										var_info, expr->u.proc.k);
+			} break;
+			case tt_cps_prim: break;
+			case tt_cps_primcall: {
+				expr->u.primcall.args =
+					cps_map_aliases(ss, info, expr->u.primcall.args);
+			} break;
+			case tt_cps_values: {
+				expr->u.values.args =
+					cps_map_aliases(ss, info, expr->u.values.args);
+			} break;
+			case tt_cps_set: {
+				expr->u.set.val = cps_get_alias(info, expr->u.set.val);
+				expr->u.set.var = cps_get_alias(info, expr->u.set.var);
+			} break;
+			case tt_cps_fix: {
+				sly_value procs = expr->u.fix.procs;
+				CPS_Expr *p;
+				while (!null_p(procs)) {
+					p = GET_PTR(car(procs));
+					cps_opt_resolve_aliases(ss, graph, global_var_info,
+											var_info, p->u.proc.k);
+					procs = cdr(procs);
+				}
+			} break;
+			}
+			cps_opt_resolve_aliases(ss, graph, global_var_info,
+									var_info, term->u.cont.k);
+		} else if (term->type == tt_cps_branch) {
+			term->u.branch.arg = cps_get_alias(info, term->u.branch.arg);
+			cps_opt_resolve_aliases(ss, graph, global_var_info,
+									var_info, term->u.branch.kt);
+			cps_opt_resolve_aliases(ss, graph, global_var_info,
+										  var_info, term->u.branch.kf);
+		} else {
+			sly_assert(0, "Unreachable");
+		}
+	} break;
+	case tt_cps_kreceive: {
+		cps_opt_resolve_aliases(ss, graph, global_var_info,
+								var_info, kont->u.kreceive.k);
+	} break;
+	case tt_cps_kproc: {
+		cps_opt_resolve_aliases(ss, graph, global_var_info,
+								var_info, kont->u.kproc.body);
+	} break;
+	}
 }
 
 static sly_value
@@ -1671,17 +1886,13 @@ cps_alpha_rename_visit_expr(Sly_State *ss, sly_value graph, sly_value new_graph,
 	case tt_cps_fix: {
 		expr->u.fix.names =
 			cps_alpha_rename_map(ss, replacements, expr->u.fix.names);
-		sly_value nlst = SLY_NULL;
 		sly_value procs = expr->u.fix.procs;
 		while (!null_p(procs)) {
-			sly_value proc = car(proc);
-			sly_value tmp =
-				cons(ss, cps_alpha_rename(ss, graph, new_graph,
-										  proc, replacements), SLY_NULL);
-			nlst = list_append(ss, nlst, tmp);
+			CPS_Expr *proc = GET_PTR(car(procs));
+			proc->u.proc.k = cps_alpha_rename(ss, graph, new_graph,
+											  proc->u.proc.k, replacements);
 			procs = cdr(procs);
 		}
-		expr->u.fix.procs = nlst;
 	} break;
 	default: sly_assert(0, "Unreachable");
 	}
@@ -1766,7 +1977,7 @@ cps_inline_kproc(Sly_State *ss, sly_value graph, sly_value new_graph,
 	}
 	replace_ktails(ss, graph,
 				   kproc->u.kproc.tail, kk, body);
-	dictionary_set(ss, graph, kont->name, (sly_value)kont);
+	dictionary_set(ss, new_graph, kont->name, (sly_value)kont);
 	CPS_Kont *kbody = cps_graph_ref(new_graph, body);
 	sly_assert(kbody->type == tt_cps_kargs, "Error expected kargs");
 	sly_value vars = kbody->u.kargs.vars;
@@ -1813,6 +2024,10 @@ cps_opt_beta_contraction(Sly_State *ss,
 					new_graph = dictionary_union(ss, new_graph, tmp);
 					procs = cdr(procs);
 				}
+				sly_value tmp =
+					cps_opt_beta_contraction(ss, graph, global_var_info,
+											 var_info, term->u.cont.k);
+				return dictionary_union(ss, new_graph, tmp);
 			}
 			if (expr->type != tt_cps_call) {
 				sly_value tmp =
@@ -1828,7 +2043,9 @@ cps_opt_beta_contraction(Sly_State *ss,
 				printf("; proc = ");
 				sly_displayln(expr->u.call.proc);
 				CLICK();
-				return dictionary_union(ss, new_graph, graph);
+				sly_displayln(kont->u.kargs.vars);
+				sly_assert(0, "STOP HERE");
+				return graph;
 			}
 			CPS_Var_Info *vi = GET_PTR(dictionary_ref(info, expr->u.call.proc,
 													  SLY_VOID));
@@ -1846,6 +2063,7 @@ cps_opt_beta_contraction(Sly_State *ss,
 				CLICK();
 				cps_inline_kproc(ss, graph, new_graph, new_kont, kproc);
 				knext = new_kont->name;
+				return dictionary_union(ss, new_graph, graph);
 			}
 			sly_value tmp = cps_opt_beta_contraction(ss, graph, global_var_info,
 													 var_info, knext);
@@ -1885,8 +2103,20 @@ cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug
 								  gvi,
 								  make_dictionary(ss),
 								  make_dictionary(ss), NULL, k);
+		cps_opt_resolve_aliases(ss, graph, gvi, vi, k);
+		if (debug) {
+			printf("RESOLVE_ALIASES:\n");
+			cps_display(ss, graph, k);
+			printf("================================================\n");
+		}
+		gvi = make_dictionary(ss);
+		vi = cps_collect_var_info(ss, graph,
+								  gvi,
+								  make_dictionary(ss),
+								  make_dictionary(ss), NULL, k);
 		graph = cps_opt_constant_folding(ss, graph, gvi, vi, k);
 		if (debug) {
+			printf("CONSTANT_FOLDING:\n");
 			cps_display(ss, graph, k);
 			printf("================================================\n");
 		}
@@ -1897,6 +2127,7 @@ cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug
 								  make_dictionary(ss), NULL, k);
 		graph = cps_opt_beta_contraction(ss, graph, gvi, vi, k);
 		if (debug) {
+			printf("BETA_CONTRACTION:\n");
 			cps_display(ss, graph, k);
 			printf("================================================\n");
 		}
@@ -1964,7 +2195,11 @@ display_expr(Sly_State *ss, sly_value graph, sly_value visited, CPS_Expr *expr)
 				sly_display(p->u.proc.k, 1);
 				printf(")");
 			} else {
-				printf("*VALUE*");
+				printf(" TYPE %d", p->type);
+				if (p->type == tt_cps_prim) {
+					printf(" ");
+					sly_display(p->u.prim.name, 1);
+				}
 			}
 			printf("]");
 			names = cdr(names);
