@@ -1129,7 +1129,6 @@ cps_collect_var_info(Sly_State *ss, sly_value graph, sly_value global_tbl,
 static int
 var_is_dead(sly_value var_info, sly_value var)
 {
-	sly_displayln(var);
 	if (void_p(var_info)) {
 		return 0;
 	}
@@ -1191,6 +1190,7 @@ cps_opt_constant_folding_visit_expr(Sly_State *ss, sly_value var_info,
 									   cons(ss, val, SLY_NULL));
 				args = cdr(args);
 			}
+			sly_displayln(val_list);
 		} break;
 		case tt_prim_mod: {
 			sly_assert(list_len(args) == 2, "Error arity mismatch");
@@ -1316,6 +1316,7 @@ cps_opt_constant_folding_visit_expr(Sly_State *ss, sly_value var_info,
 			expr = cps_new_expr();
 			expr->type = tt_cps_const;
 			expr->u.constant.value = primops[op].fn(ss, val_list);
+			sly_displayln(expr->u.constant.value);
 		}
 	}
 	return expr;
@@ -1361,22 +1362,24 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 			CPS_Expr *expr =
 				cps_opt_constant_folding_visit_expr(ss, info, term->u.cont.expr);
 			CPS_Kont *new_kont = cps_copy_kont(kont);
+			dictionary_set(ss, new_graph, k, (sly_value)new_kont);
 			sly_value nk = term->u.cont.k;
 			if (expr != term->u.cont.expr) {
+				CLICK();
 				new_kont->u.kargs.term = cps_new_term();
-				new_kont->u.kargs.term->u.cont.expr = expr;
+				term = new_kont->u.kargs.term;
+				term->u.cont.expr = expr;
 				CPS_Kont *receive = cps_graph_ref(graph, nk);
 				if (receive->type == tt_cps_kreceive) {
 					 // expression folded, don't need receive
-					new_kont->u.kargs.term->u.cont.k = receive->u.kreceive.k;
+					term->u.cont.k = receive->u.kreceive.k;
 				} else {
-					new_kont->u.kargs.term->u.cont.k = nk;
+					term->u.cont.k = nk;
 				}
 				sly_value tmp =
 					cps_opt_constant_folding(ss, graph, global_var_info,
 											 var_info, term->u.cont.k);
 				return dictionary_union(ss, new_graph, tmp);
-				CLICK();
 			}
 			if (expr->type == tt_cps_proc) {
 				sly_value tmp =
@@ -1384,7 +1387,6 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 											 var_info, expr->u.proc.k);
 				new_graph = dictionary_union(ss, new_graph, tmp);
 			}
-			dictionary_set(ss, new_graph, k, (sly_value)new_kont);
 			CPS_Kont *next = cps_graph_ref(graph, nk);
 			if (expr->type == tt_cps_fix) {
 				sly_value names = expr->u.fix.names;
