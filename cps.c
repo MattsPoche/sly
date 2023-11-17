@@ -433,13 +433,14 @@ cps_make_fix(void)
 }
 
 CPS_Var_Info *
-cps_new_var_info(CPS_Expr *binding, int isalias, int which)
+cps_new_var_info(CPS_Expr *binding, int isarg, int isalias, int which)
 {
 	CPS_Var_Info *vi = GC_MALLOC(sizeof(*vi));
 	vi->used = 0;
 	vi->escapes = 0;
 	vi->updates = 0;
 	vi->binding = binding;
+	vi->isarg = isarg;
 	vi->isalias = isalias;
 	vi->which = which;
 	vi->alt = NULL;
@@ -716,10 +717,12 @@ _cps_translate(Sly_State *ss, CPS_Expr *fix, sly_value cc,
 				   * so their bindings start dead. Let's just remove them here.
 				   */
 					CPS_Kont *tmp = cps_graph_ref(graph, kt);
-					sly_assert(tmp->type == tt_cps_kargs, "Error expected kargs");
+					sly_assert(tmp->type == tt_cps_kargs,
+							   "Error expected kargs");
 					tmp->u.kargs.vars = SLY_NULL;
 					tmp = cps_graph_ref(graph, kf);
-					sly_assert(tmp->type == tt_cps_kargs, "Error expected kargs");
+					sly_assert(tmp->type == tt_cps_kargs,
+							   "Error expected kargs");
 					tmp->u.kargs.vars = SLY_NULL;
 				}
 				t = cps_new_term();
@@ -870,13 +873,14 @@ cps_get_const_number(sly_value var_info, sly_value var)
 
 static CPS_Var_Info *
 cps_var_def_info(Sly_State *ss, sly_value tbl, sly_value name, CPS_Expr *expr,
-				 int isalias, int which)
+				 int isarg, int isalias, int which)
 {
 	CPS_Var_Info *vi = GET_PTR(dictionary_ref(tbl, name, SLY_VOID));
 	if (vi == NULL) {
-		vi = cps_new_var_info(expr, isalias, which);
+		vi = cps_new_var_info(expr, isarg, isalias, which);
 		dictionary_set(ss, tbl, name, (sly_value)vi);
 	} else {
+		vi->isarg = isarg;
 		vi->isalias = isalias;
 		vi->which = which;
 		vi->binding = expr;
@@ -899,7 +903,7 @@ cps_var_info_inc_used(Sly_State *ss, sly_value tbl, sly_value name)
 {
 	CPS_Var_Info *vi = GET_PTR(dictionary_ref(tbl, name, SLY_VOID));
 	if (vi == NULL) {
-		vi = cps_var_def_info(ss, tbl, name, NULL, 0, 0);
+		vi = cps_var_def_info(ss, tbl, name, NULL, 0, 0, 0);
 	}
 	vi->used++;
 }
@@ -909,7 +913,7 @@ cps_var_info_inc_updates(Sly_State *ss, sly_value tbl, sly_value name)
 {
 	CPS_Var_Info *vi = GET_PTR(dictionary_ref(tbl, name, SLY_VOID));
 	if (vi == NULL) {
-		vi = cps_var_def_info(ss, tbl, name, NULL, 0, 0);
+		vi = cps_var_def_info(ss, tbl, name, NULL, 0, 0, 0);
 	}
 	vi->updates++;
 }
@@ -919,7 +923,7 @@ cps_var_info_inc_escapes(Sly_State *ss, sly_value tbl, sly_value name)
 {
 	CPS_Var_Info *vi = GET_PTR(dictionary_ref(tbl, name, SLY_VOID));
 	if (vi == NULL) {
-		vi = cps_var_def_info(ss, tbl, name, NULL, 0, 0);
+		vi = cps_var_def_info(ss, tbl, name, NULL, 0, 0, 0);
 	}
 	vi->escapes++;
 }
@@ -992,8 +996,8 @@ cps_var_info_visit_expr(Sly_State *ss, sly_value global_tbl, sly_value tbl,
 		while (!null_p(names)) {
 			n = car(names);
 			e = GET_PTR(car(procs));
-			cps_var_def_info(ss, tbl, n, e, 0, 0);
-			cps_var_def_info(ss, global_tbl, n, e, 0, 0);
+			cps_var_def_info(ss, tbl, n, e, 0, 0, 0);
+			cps_var_def_info(ss, global_tbl, n, e, 0, 0, 0);
 			names = cdr(names);
 			procs = cdr(procs);
 		}
@@ -1068,8 +1072,8 @@ cps_collect_var_info(Sly_State *ss, sly_value graph, sly_value global_tbl,
 		CPS_Term *term = kont->u.kargs.term;
 		if (expr && expr->type != tt_cps_fix) {
 			while (!null_p(vlist)) {
-				cps_var_def_info(ss, var_tbl, car(vlist), expr, isalias, w);
-				cps_var_def_info(ss, global_tbl, car(vlist), expr, isalias, w);
+				cps_var_def_info(ss, var_tbl, car(vlist), expr, 0, isalias, w);
+				cps_var_def_info(ss, global_tbl, car(vlist), expr, 0, isalias, w);
 				w++;
 				vlist = cdr(vlist);
 			}
@@ -1124,13 +1128,13 @@ cps_collect_var_info(Sly_State *ss, sly_value graph, sly_value global_tbl,
 		sly_value rest = kont->u.kproc.arity.rest;
 		sly_value var_tbl = copy_dictionary(ss, prev_tbl);
 		while (!null_p(req)) {
-			cps_var_def_info(ss, var_tbl, car(req), NULL, 0, 0);
-			cps_var_def_info(ss, global_tbl, car(req), NULL, 0, 0);
+			cps_var_def_info(ss, var_tbl, car(req), NULL, 1, 0, 0);
+			cps_var_def_info(ss, global_tbl, car(req), NULL, 1, 0, 0);
 			req = cdr(req);
 		}
 		if (rest != SLY_FALSE) {
-			cps_var_def_info(ss, var_tbl, rest, NULL, 0, 0);
-			cps_var_def_info(ss, global_tbl, rest, NULL, 0, 0);
+			cps_var_def_info(ss, var_tbl, rest, NULL, 1, 0, 0);
+			cps_var_def_info(ss, global_tbl, rest, NULL, 1, 0, 0);
 		}
 		state = cps_collect_var_info(ss, graph, global_tbl, state, var_tbl,
 									 NULL, kont->u.kproc.body);
@@ -1142,6 +1146,24 @@ cps_collect_var_info(Sly_State *ss, sly_value graph, sly_value global_tbl,
 	}
 	return state;
 }
+
+#if 0
+static int
+var_get_updates(sly_value var_info, sly_value var)
+{
+	sly_value s = dictionary_ref(var_info, var, SLY_VOID);
+	if (void_p(s)) {
+		return 0;  // No info. Variable may be imported
+	}
+	CPS_Var_Info *vi = GET_PTR(s);
+	int updates = 0;
+	while (vi) {
+		updates = vi->updates;
+		vi = vi->alt;
+	}
+	return updates;
+}
+#endif
 
 static int
 var_is_dead(sly_value var_info, sly_value var)
@@ -1454,8 +1476,14 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 					sly_value tmp =
 						cps_opt_constant_folding(ss, graph, global_var_info,
 												 var_info, term->u.cont.k);
-					new_graph = dictionary_union(ss, new_graph, tmp);
+					return dictionary_union(ss, new_graph, tmp);
 				}
+			} else if (expr->type == tt_cps_set
+					   && next->type == tt_cps_kargs
+					   && list_len(next->u.kargs.vars) == 1
+					   && var_is_dead(global_var_info, car(next->u.kargs.vars))) {
+				CLICK();
+				next->u.kargs.vars = SLY_NULL;
 			} else if (expr_has_no_possible_side_effect(expr)
 					   && next->type == tt_cps_kargs
 					   && list_len(next->u.kargs.vars) == 1) {
@@ -2158,6 +2186,132 @@ cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug
 		}
 	} while (CLICK_RESET());
 	return graph;
+}
+
+static sly_value
+cps_collect_free_variables_visit_expr(Sly_State *ss, CPS_Expr *expr)
+{
+	switch (expr->type) {
+	case tt_cps_const: break;
+	case tt_cps_call: {
+		return cons(ss, expr->u.call.proc, expr->u.call.args);
+	} break;
+	case tt_cps_kcall: {
+		sly_assert(0, "unimplemented");
+	} break;
+	case tt_cps_proc: break;
+	case tt_cps_prim: {
+		return make_list(ss, 1, expr->u.prim.name);
+	} break;
+	case tt_cps_primcall: {
+		return cons(ss, expr->u.primcall.prim,
+					expr->u.primcall.args);
+	} break;
+	case tt_cps_values: {
+		return expr->u.values.args;
+	} break;
+	case tt_cps_box: { sly_assert(0, "unimplemented"); } break;
+	case tt_cps_unbox: { sly_assert(0, "unimplemented"); } break;
+	case tt_cps_set: {
+		return make_list(ss, 2,
+						 expr->u.set.val,
+						 expr->u.set.var);
+	} break;
+	case tt_cps_fix: break;
+	default: sly_assert(0, "unreachable");
+	}
+	return SLY_NULL;
+}
+
+sly_value
+cps_collect_free_variables(Sly_State *ss, sly_value graph,
+						   sly_value var_info,
+						   sly_value total_vars,
+						   sly_value local_vars,
+						   sly_value visited,
+						   sly_value k)
+{
+	if (!void_p(dictionary_ref(visited, k, SLY_VOID))) {
+		return SLY_NULL;
+	}
+	CPS_Kont *kont = cps_graph_ref(graph, k);
+	dictionary_set(ss, visited, k, SLY_TRUE);
+	switch (kont->type) {
+	case tt_cps_kargs: {
+		CPS_Term *term = kont->u.kargs.term;
+		total_vars = list_union(ss, total_vars, kont->u.kargs.vars);
+		local_vars = list_union(ss, local_vars, kont->u.kargs.vars);
+		if (term->type == tt_cps_continue) {
+			CPS_Expr *expr = term->u.cont.expr;
+			total_vars = list_union(ss, total_vars,
+									cps_collect_free_variables_visit_expr(ss, expr));
+			sly_value free_vars = cps_collect_free_variables(ss, graph,
+															 var_info,
+															 total_vars,
+															 local_vars,
+															 visited,
+															 term->u.cont.k);
+			if (expr->type == tt_cps_call) {
+				sly_value info = dictionary_ref(var_info, k, SLY_VOID);
+				CPS_Var_Info *vi = GET_PTR(dictionary_ref(info, expr->u.call.proc, SLY_VOID));
+				if (vi && vi->binding) {
+					sly_assert(vi->binding->type == tt_cps_proc, "Error expected proc");
+					CPS_Expr *proc = vi->binding;
+					if (void_p(dictionary_ref(visited, proc->u.proc.k, SLY_VOID))) {
+						dictionary_set(ss, visited, proc->u.proc.k, SLY_TRUE);
+						sly_value tmp = cps_collect_free_variables(ss,
+																   graph,
+																   var_info,
+																   SLY_NULL,
+																   SLY_NULL,
+																   make_dictionary(ss),
+																   proc->u.proc.k);
+						sly_display(expr->u.call.proc, 1);
+						printf(" = ");
+						sly_displayln(tmp);
+						free_vars = list_union(ss, free_vars, tmp);
+					}
+				}
+			}
+			return free_vars;
+		} else if (term->type == tt_cps_branch) {
+			total_vars = cons(ss, term->u.branch.arg, total_vars);
+			return list_union(ss, cps_collect_free_variables(ss, graph,
+															 var_info,
+															 total_vars,
+															 local_vars,
+															 visited,
+															 term->u.branch.kt),
+							  cps_collect_free_variables(ss, graph,
+														 var_info,
+														 total_vars,
+														 local_vars,
+														 visited,
+														 term->u.branch.kf));
+		} else {
+			sly_assert(0, "unreachable");
+		}
+	} break;
+	case tt_cps_kreceive: {
+		return cps_collect_free_variables(ss, graph,
+										  var_info,
+										  total_vars,
+										  local_vars,
+										  visited,
+										  kont->u.kreceive.k);
+	} break;
+	case tt_cps_kproc: {
+		return cps_collect_free_variables(ss, graph,
+										  var_info,
+										  total_vars,
+										  local_vars,
+										  visited,
+										  kont->u.kproc.body);
+	} break;
+	case tt_cps_ktail: break;
+	default: sly_assert(0, "unreachable");
+	}
+	return list_subtract(ss, total_vars, local_vars);
 }
 
 static void _cps_display(Sly_State *ss, sly_value graph,

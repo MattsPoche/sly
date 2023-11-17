@@ -484,6 +484,7 @@ list_append(Sly_State *ss, sly_value p, sly_value v)
 	} else if (pair_p(p)){
 		return cons(ss, car(p), list_append(ss, cdr(p), v));
 	} else {
+		sly_displayln(p);
 		sly_assert(0, "Type Error expected list");
 	}
 	return SLY_NULL;
@@ -546,6 +547,36 @@ list_eq(sly_value o1, sly_value o2)
 	return sly_equal(o1, o2);
 }
 
+int
+list_member(sly_value v, sly_value xs)
+{
+	if (null_p(xs)) {
+		return 0;
+	}
+	if (sly_equal(v, car(xs))) {
+		return 1;
+	}
+	return list_member(v, cdr(xs));
+}
+
+sly_value
+list_nub(Sly_State *ss, sly_value xs)
+{
+	if (null_p(xs)) {
+		return xs;
+	} else if (list_member(car(xs), cdr(xs))) {
+		return list_nub(ss, cdr(xs));
+	} else {
+		return cons(ss, car(xs), list_nub(ss, cdr(xs)));
+	}
+}
+
+sly_value
+list_union(Sly_State *ss, sly_value xs, sly_value ys)
+{
+	return list_nub(ss, list_append(ss, xs, ys));
+}
+
 size_t
 list_len(sly_value list)
 {
@@ -579,6 +610,28 @@ list_contains(sly_value list, sly_value value)
 		list = cdr(list);
 	}
 	return 0;
+}
+
+sly_value
+list_remove(Sly_State *ss, sly_value xs, sly_value value)
+{
+	if (null_p(xs)) {
+		return SLY_NULL;
+	} else if (sly_equal(car(xs), value)) {
+		return list_remove(ss, cdr(xs), value);
+	} else {
+		return cons(ss, car(xs), list_remove(ss, cdr(xs), value));
+	}
+}
+
+sly_value
+list_subtract(Sly_State *ss, sly_value xs, sly_value ys)
+{
+	if (null_p(xs) || null_p(ys)) {
+		return xs;
+	}
+	xs = list_remove(ss, xs, car(ys));
+	return list_subtract(ss, xs, cdr(ys));
 }
 
 sly_value

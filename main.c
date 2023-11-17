@@ -45,6 +45,19 @@ main(int argc, char *argv[])
 				printf("========================================================\n");
 				graph = cps_opt_contraction_phase(&ss, graph, entry, 1);
 				cps_display(&ss, graph, entry);
+				printf("\n");
+				sly_value var_info = cps_collect_var_info(&ss, graph,
+														  make_dictionary(&ss),
+														  make_dictionary(&ss),
+														  make_dictionary(&ss), NULL, entry);
+				sly_value free_vars = cps_collect_free_variables(&ss, graph,
+																 var_info,
+																 SLY_NULL,
+																 SLY_NULL,
+																 make_dictionary(&ss),
+																 entry);
+				printf("free vars = ");
+				sly_displayln(free_vars);
 			} else {
 				printf("Running file %s ...\n", arg);
 				sly_do_file(arg, debug_info);

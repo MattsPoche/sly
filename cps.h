@@ -9,6 +9,11 @@ enum cps_type {
 	tt_cps_prim,
 	tt_cps_primcall,
 	tt_cps_values,
+	tt_cps_record,
+	tt_cps_select,
+	tt_cps_offset,
+	tt_cps_box,
+	tt_cps_unbox,
 	tt_cps_set,
 	tt_cps_fix,
 	tt_cps_branch,
@@ -147,6 +152,28 @@ typedef struct _cps_kcall {
 	sly_value args;
 } CPS_Kcall;
 
+typedef struct _cps_record { // used for closure creation
+	sly_value values;
+} CPS_Record;
+
+typedef struct _cps_select {
+	int field;
+	sly_value record;
+} CPS_Select;
+
+typedef struct _cps_offset {
+	int off;
+	sly_value record;
+} CPS_Offset;
+
+typedef struct _cps_box {
+	sly_value val;
+} CPS_Box;
+
+typedef struct _cps_unbox {
+	sly_value var;
+} CPS_Unbox;
+
 typedef struct _cps_set {
 	sly_value var;
 	sly_value val;
@@ -167,6 +194,11 @@ typedef struct _cps_expr {
 		CPS_Prim prim;
 		CPS_Primcall primcall;
 		CPS_Values values;
+		CPS_Record record;
+		CPS_Select select;
+		CPS_Offset offset;
+		CPS_Box box;
+		CPS_Unbox unbox;
 		CPS_Set set;
 		CPS_Fix fix;
 	} u;
@@ -176,6 +208,7 @@ typedef struct _var_info {
 	int used;     /* Number of times a variable is referenced */
 	int escapes;  /* number of times a variable is loaded into a datastructure or passed as a parameter */
 	int updates;  /* number of times a variable is set! */
+	int isarg;
 	int isalias;
 	int which;
 	CPS_Expr *binding;
@@ -189,13 +222,16 @@ CPS_Term *cps_new_term(void);
 CPS_Expr *cps_make_constant(sly_value value);
 CPS_Expr *cps_new_expr(void);
 CPS_Expr *cps_make_fix(void);
-CPS_Var_Info *cps_new_var_info(CPS_Expr *binding, int isalias, int which);
+CPS_Var_Info * cps_new_var_info(CPS_Expr *binding, int isarg, int isalias, int which);
 sly_value cps_gensym_temporary_name(Sly_State *ss);
 sly_value cps_gensym_label_name(Sly_State *ss);
 CPS_Kont *cps_make_kargs(Sly_State *ss, sly_value name, CPS_Term *term, sly_value vars);
 CPS_Kont *cps_make_ktail(Sly_State *ss, int genname);
 sly_value cps_collect_var_info(Sly_State *ss, sly_value graph, sly_value global_tbl,
 							   sly_value state, sly_value prev_tbl, CPS_Expr *expr, sly_value k);
+sly_value cps_collect_free_variables(Sly_State *ss, sly_value graph, sly_value var_info,
+									 sly_value total_vars, sly_value local_vars,
+									 sly_value visited, sly_value k);
 sly_value cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug);
 void cps_init_primops(Sly_State *ss);
 sly_value cps_translate(Sly_State *ss, sly_value cc, sly_value graph, sly_value form);
