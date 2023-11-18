@@ -38,10 +38,6 @@ main(int argc, char *argv[])
 				cps_init_primops(&ss);
 				sly_value entry = cps_translate(&ss, name, graph, ast);
 				cps_display(&ss, graph, entry);
-				/* cps_display_var_info(&ss, graph, */
-				/* 					 cps_collect_var_info(&ss, graph, */
-				/* 										  make_dictionary(&ss), */
-				/* 										  make_dictionary(&ss), NULL, entry)); */
 				printf("========================================================\n");
 				graph = cps_opt_contraction_phase(&ss, graph, entry, 1);
 				cps_display(&ss, graph, entry);
@@ -50,14 +46,23 @@ main(int argc, char *argv[])
 														  make_dictionary(&ss),
 														  make_dictionary(&ss),
 														  make_dictionary(&ss), NULL, entry);
-				sly_value free_vars = cps_collect_free_variables(&ss, graph,
-																 var_info,
-																 SLY_NULL,
-																 SLY_NULL,
-																 make_dictionary(&ss),
-																 entry);
-				printf("free vars = ");
-				sly_displayln(free_vars);
+				sly_value free_var_lookup = cps_collect_free_variables(&ss, graph, var_info, entry);
+				printf("free vars:\n");
+				vector *vec = GET_PTR(free_var_lookup);
+				for (size_t i = 0; i < vec->cap; ++i) {
+					sly_value entry = vec->elems[i];
+					if (!slot_is_free(entry)) {
+						sly_display(car(entry), 1);
+						printf(" = ");
+						sly_displayln(cdr(entry));
+					}
+				}
+				printf("\n");
+				sly_value free_vars = dictionary_ref(free_var_lookup, entry, SLY_VOID);
+				entry = cps_opt_closure_convert(&ss, graph, free_var_lookup,
+												free_vars, entry);
+				printf("CLOSURE-CONVERSION:\n");
+				cps_display(&ss, graph, entry);
 			} else {
 				printf("Running file %s ...\n", arg);
 				sly_do_file(arg, debug_info);

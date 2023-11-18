@@ -601,15 +601,16 @@ list_ref(sly_value list, size_t idx)
 }
 
 int
-list_contains(sly_value list, sly_value value)
+list_index_of(sly_value list, sly_value value)
 {
-	while (!null_p(list)) {
+	int i;
+	for (i = 0; !null_p(list); ++i) {
 		if (sly_equal(car(list), value)) {
-			return 1;
+			return i;
 		}
 		list = cdr(list);
 	}
-	return 0;
+	return -1;
 }
 
 sly_value

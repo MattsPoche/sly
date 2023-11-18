@@ -12,6 +12,7 @@ enum cps_type {
 	tt_cps_record,
 	tt_cps_select,
 	tt_cps_offset,
+	tt_cps_code,    // code ptr
 	tt_cps_box,
 	tt_cps_unbox,
 	tt_cps_set,
@@ -25,7 +26,7 @@ enum cps_type {
 };
 
 enum prim {
-	tt_prim_null = 0,
+	tt_prim_void = 0,
 	tt_prim_add,
 	tt_prim_sub,
 	tt_prim_mul,
@@ -48,7 +49,6 @@ enum prim {
 	tt_prim_gr,           // >
 	tt_prim_leq,          // <=
 	tt_prim_geq,          // >=
-	tt_prim_void,
 	tt_prim_apply,
 	tt_prim_cons,
 	tt_prim_car,
@@ -87,6 +87,9 @@ typedef struct _cps_Kproc {
 	struct arity_t arity;
 	sly_value tail;
 	sly_value body;
+	sly_value clos_shares;
+	sly_value clos_def;
+	int offset;
 } CPS_Kproc;
 
 typedef struct _cps_cont {
@@ -157,14 +160,18 @@ typedef struct _cps_record { // used for closure creation
 } CPS_Record;
 
 typedef struct _cps_select {
-	int field;
 	sly_value record;
+	int field;
 } CPS_Select;
 
 typedef struct _cps_offset {
-	int off;
 	sly_value record;
+	int off;
 } CPS_Offset;
+
+typedef struct _cps_code {
+	sly_value label;
+} CPS_Code;
 
 typedef struct _cps_box {
 	sly_value val;
@@ -197,6 +204,7 @@ typedef struct _cps_expr {
 		CPS_Record record;
 		CPS_Select select;
 		CPS_Offset offset;
+		CPS_Code code;
 		CPS_Box box;
 		CPS_Unbox unbox;
 		CPS_Set set;
@@ -229,10 +237,12 @@ CPS_Kont *cps_make_kargs(Sly_State *ss, sly_value name, CPS_Term *term, sly_valu
 CPS_Kont *cps_make_ktail(Sly_State *ss, int genname);
 sly_value cps_collect_var_info(Sly_State *ss, sly_value graph, sly_value global_tbl,
 							   sly_value state, sly_value prev_tbl, CPS_Expr *expr, sly_value k);
-sly_value cps_collect_free_variables(Sly_State *ss, sly_value graph, sly_value var_info,
-									 sly_value total_vars, sly_value local_vars,
-									 sly_value visited, sly_value k);
+sly_value cps_collect_free_variables(Sly_State *ss, sly_value graph,
+									 sly_value var_info, sly_value k);
 sly_value cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug);
+sly_value cps_opt_closure_convert(Sly_State *ss, sly_value graph,
+								  sly_value free_var_lookup,
+								  sly_value free_vars, sly_value k);
 void cps_init_primops(Sly_State *ss);
 sly_value cps_translate(Sly_State *ss, sly_value cc, sly_value graph, sly_value form);
 void cps_display(Sly_State *ss, sly_value graph, sly_value k);

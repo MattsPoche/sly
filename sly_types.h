@@ -257,7 +257,7 @@ sly_value list_append(Sly_State *ss, sly_value p, sly_value v);
 void append(sly_value p, sly_value v);
 size_t list_len(sly_value list);
 sly_value list_ref(sly_value list, size_t idx);
-int list_contains(sly_value list, sly_value value);
+int list_index_of(sly_value list, sly_value value);
 sly_value list_remove(Sly_State *ss, sly_value xs, sly_value value);
 sly_value list_subtract(Sly_State *ss, sly_value xs, sly_value ys);
 sly_value list_reverse(Sly_State *ss, sly_value list);
