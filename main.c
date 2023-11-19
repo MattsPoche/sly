@@ -59,7 +59,9 @@ main(int argc, char *argv[])
 				}
 				printf("\n");
 				sly_value free_vars = dictionary_ref(free_var_lookup, entry, SLY_VOID);
-				entry = cps_opt_closure_convert(&ss, graph, free_var_lookup,
+				entry = cps_opt_closure_convert(&ss, graph,
+												NULL,
+												free_var_lookup,
 												free_vars, entry);
 				printf("CLOSURE-CONVERSION:\n");
 				cps_display(&ss, graph, entry);

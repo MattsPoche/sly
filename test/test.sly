@@ -14,30 +14,26 @@
 
 ;; (display f)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define (foo)
-  (+ 5 n))
+(define (main)
+  (define (foo)
+	(+ 5 n))
 
-(define (bar x)
-  (* (foo) x))
+  (define (bar x)
+	(* (foo) x))
 
-(define (baz x y)
-  (+ x y))
+  (define (baz x y)
+	(+ x y))
 
-(define n 69)
+  (define n 69)
 
-(display (foo))
-(display (bar 420))
-(display (bar 360))
-(display (baz 7 4))
-(display (baz 3 4))
+  (display (foo))
+  (display (bar 420))
+  (display (bar 360))
+  (display (baz 7 4))
+  (display (baz 3 4)))
 
-;; (display main)
-;; (main)
-
-#;(define main
-	(record
-	 (code $k31) ; label
-	 display foo7 * + n16)) ; free variables
+(display main)
+(main)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; (define x 69)

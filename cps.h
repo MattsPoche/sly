@@ -10,6 +10,7 @@ enum cps_type {
 	tt_cps_primcall,
 	tt_cps_values,
 	tt_cps_record,
+	tt_cps_record_set,
 	tt_cps_select,
 	tt_cps_offset,
 	tt_cps_code,    // code ptr
@@ -159,6 +160,12 @@ typedef struct _cps_record { // used for closure creation
 	sly_value values;
 } CPS_Record;
 
+typedef struct _cps_record_set { // initialize member of record after record creation
+	sly_value record;
+	sly_value val;
+	int field;
+} CPS_Record_Set;
+
 typedef struct _cps_select {
 	sly_value record;
 	int field;
@@ -202,6 +209,7 @@ typedef struct _cps_expr {
 		CPS_Primcall primcall;
 		CPS_Values values;
 		CPS_Record record;
+		CPS_Record_Set record_set;
 		CPS_Select select;
 		CPS_Offset offset;
 		CPS_Code code;
@@ -241,6 +249,7 @@ sly_value cps_collect_free_variables(Sly_State *ss, sly_value graph,
 									 sly_value var_info, sly_value k);
 sly_value cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug);
 sly_value cps_opt_closure_convert(Sly_State *ss, sly_value graph,
+								  CPS_Kont *cur_kproc,
 								  sly_value free_var_lookup,
 								  sly_value free_vars, sly_value k);
 void cps_init_primops(Sly_State *ss);
