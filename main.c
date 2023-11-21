@@ -59,8 +59,15 @@ main(int argc, char *argv[])
 				}
 				printf("\n");
 				sly_value free_vars = dictionary_ref(free_var_lookup, entry, SLY_VOID);
-				entry = cps_opt_closure_convert(&ss, graph,
-												NULL,
+				struct kclosure_t clos = {
+					.clos_def = SLY_NULL,
+					.clos_shares = SLY_NULL,
+					.cc_name = SLY_FALSE,
+					.kr_name = SLY_FALSE,
+					.offset = 0,
+					.kr_size = 0,
+				};
+				entry = cps_opt_closure_convert(&ss, graph, &clos,
 												free_var_lookup,
 												free_vars, entry);
 				printf("CLOSURE-CONVERSION:\n");

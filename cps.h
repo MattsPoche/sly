@@ -9,6 +9,7 @@ enum cps_type {
 	tt_cps_prim,
 	tt_cps_primcall,
 	tt_cps_values,
+	tt_cps_make_record,
 	tt_cps_record,
 	tt_cps_record_set,
 	tt_cps_select,
@@ -88,10 +89,16 @@ typedef struct _cps_Kproc {
 	struct arity_t arity;
 	sly_value tail;
 	sly_value body;
+} CPS_Kproc;
+
+struct kclosure_t {
 	sly_value clos_shares;
 	sly_value clos_def;
+	sly_value cc_name;
+	sly_value kr_name;
 	int offset;
-} CPS_Kproc;
+	int kr_size;
+};
 
 typedef struct _cps_cont {
 	int type;
@@ -156,6 +163,10 @@ typedef struct _cps_kcall {
 	sly_value args;
 } CPS_Kcall;
 
+typedef struct _cps_make_record { // allocate record of n fields
+	int nfields;
+} CPS_Make_Record;
+
 typedef struct _cps_record { // used for closure creation
 	sly_value values;
 } CPS_Record;
@@ -208,6 +219,7 @@ typedef struct _cps_expr {
 		CPS_Prim prim;
 		CPS_Primcall primcall;
 		CPS_Values values;
+		CPS_Make_Record make_record;
 		CPS_Record record;
 		CPS_Record_Set record_set;
 		CPS_Select select;
@@ -239,8 +251,6 @@ CPS_Expr *cps_make_constant(sly_value value);
 CPS_Expr *cps_new_expr(void);
 CPS_Expr *cps_make_fix(void);
 CPS_Var_Info * cps_new_var_info(CPS_Expr *binding, int isarg, int isalias, int which);
-sly_value cps_gensym_temporary_name(Sly_State *ss);
-sly_value cps_gensym_label_name(Sly_State *ss);
 CPS_Kont *cps_make_kargs(Sly_State *ss, sly_value name, CPS_Term *term, sly_value vars);
 CPS_Kont *cps_make_ktail(Sly_State *ss, int genname);
 sly_value cps_collect_var_info(Sly_State *ss, sly_value graph, sly_value global_tbl,
@@ -248,10 +258,8 @@ sly_value cps_collect_var_info(Sly_State *ss, sly_value graph, sly_value global_
 sly_value cps_collect_free_variables(Sly_State *ss, sly_value graph,
 									 sly_value var_info, sly_value k);
 sly_value cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug);
-sly_value cps_opt_closure_convert(Sly_State *ss, sly_value graph,
-								  CPS_Kont *cur_kproc,
-								  sly_value free_var_lookup,
-								  sly_value free_vars, sly_value k);
+sly_value cps_opt_closure_convert(Sly_State *ss, sly_value graph, struct kclosure_t *clos,
+								  sly_value free_var_lookup, sly_value free_vars, sly_value k);
 void cps_init_primops(Sly_State *ss);
 sly_value cps_translate(Sly_State *ss, sly_value cc, sly_value graph, sly_value form);
 void cps_display(Sly_State *ss, sly_value graph, sly_value k);

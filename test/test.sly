@@ -1,3 +1,14 @@
+
+(define (g x) (* x x))
+(define (h x) (+ x x))
+(define (f x y)
+  (/ (g x) (h y)))
+(display g)
+(display h)
+(display f)
+(f 5 6)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; (define (f g x y)
 ;;   (+ (g x) y))
 
@@ -14,26 +25,26 @@
 
 ;; (display f)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define (main)
-  (define (foo)
-	(+ 5 n))
+;; (define (main)
+;;   (define (foo)
+;; 	(+ 5 n))
 
-  (define (bar x)
-	(* (foo) x))
+;;   (define (bar x)
+;; 	(* (foo) x))
 
-  (define (baz x y)
-	(+ x y))
+;;   (define (baz x y)
+;; 	(+ x y))
 
-  (define n 69)
+;;   (define n 69)
 
-  (display (foo))
-  (display (bar 420))
-  (display (bar 360))
-  (display (baz 7 4))
-  (display (baz 3 4)))
+;;   (display (foo))
+;;   (display (bar 420))
+;;   (display (bar 360))
+;;   (display (baz 7 4))
+;;   (display (baz 3 4)))
 
-(display main)
-(main)
+;; (display main)
+;; (main)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; (define x 69)
