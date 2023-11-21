@@ -3,24 +3,22 @@
 #include "sly_types.h"
 #include "cps.h"
 
-/*
- * CPS intermediate language
+/* CPS intermediate language
  */
 
-/*
- * References:
- * Guiles "CPS Soup"
+/* References:
+ * Guile's "CPS Soup"
  * - https://www.gnu.org/software/guile/manual/html_node/CPS-in-Guile.html
  * Blog from a guile dev
  * - https://wingolog.org/
  * - https://wingolog.org/archives/2023/05/20/approaching-cps-soup
- * Compiling with continuations.
- * Lots of good general compiler stuff with emphasis on GC functional languages.
+ * Book "Compiling with continuations"
+ * - Lots of good functional compiler stuff.
+ * - Uses Standard ML as example language.
  * - https://www.amazon.com/Compiling-Continuations-Andrew-W-Appel/dp/052103311X
  */
 
-/*
- * Optimization passes:
+/* Optimization passes:
  * 1. Constant folding/Beta-contraction
  * 2. Beta-expansion (inlining)
  * 3. Eta-reduction
@@ -28,7 +26,13 @@
  * 5. Common subexpression elimination
  */
 
-/* rax, rcx, rdx, rbx, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15
+/* Phases: (discribed in "Compiling with continuations")
+ * - Convert source program into CPS representation
+ * - Optimization passes
+ * - Closure conversion
+ * - Register Spilling
+ * - Translate into `abstract-continuation-machine' instructions
+ * - Translate into target language. (ie. x86-64)
  */
 
 #define CAR(val) (syntax_p(val) ? car(syntax_to_datum(val)) : car(val))
@@ -2579,6 +2583,7 @@ _cps_opt_closure_convert(Sly_State *ss, sly_value graph,
 				k = cps_save_free_vars(ss, graph, clos->kr_name, 0, kdef, k);
 				CPS_Kont *new_kont = cps_graph_ref(graph, k);
 				CPS_Kont *code_kont;
+				kont->u.kargs.vars = SLY_NULL;
 				{
 					CPS_Expr *expr = cps_new_expr();
 					expr->type = tt_cps_code;
@@ -2592,8 +2597,11 @@ _cps_opt_closure_convert(Sly_State *ss, sly_value graph,
 					k = code_kont->name;
 				}
 				new_kont->u.kargs.vars = make_list(ss, 1, code_name);
-				kont->u.kargs.vars = SLY_NULL;
 				CPS_Kont *krec = cps_graph_ref(graph, kcode);
+				/* NOTE: `Standard' function calls should always be followed by a
+				 * kreceive. The kreceive is used to receive the continuation closure,
+				 * which is unpacked to restore the calling environment.
+				 */
 				if (krec->type == tt_cps_kreceive) {
 					struct arity_t *arity = &krec->u.kreceive.arity;
 					size_t len = list_len(arity->req);
