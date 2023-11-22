@@ -263,6 +263,6 @@ sly_value cps_opt_closure_convert(Sly_State *ss, sly_value graph, struct kclosur
 void cps_init_primops(Sly_State *ss);
 sly_value cps_translate(Sly_State *ss, sly_value cc, sly_value graph, sly_value form);
 void cps_display(Sly_State *ss, sly_value graph, sly_value k);
-void cps_display_var_info(Sly_State *ss, sly_value graph, sly_value var_info);
+void cps_display_var_info(Sly_State *ss, sly_value var_info);
 
 #endif /* SLY_CPS_H_ */

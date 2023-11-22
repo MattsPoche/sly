@@ -2754,11 +2754,10 @@ cps_opt_closure_convert(Sly_State *ss, sly_value graph,
 	return nk;
 }
 
-static void _cps_display(Sly_State *ss, sly_value graph,
-						 sly_value visited, sly_value k);
+static sly_value _cps_display(Sly_State *ss, sly_value graph, sly_value k);
 
-static void
-display_expr(Sly_State *ss, sly_value graph, sly_value visited, CPS_Expr *expr)
+static sly_value
+cps_display_visit_expr(Sly_State *ss, CPS_Expr *expr)
 {
 	switch (expr->type) {
 	case tt_cps_call: {
@@ -2777,11 +2776,10 @@ display_expr(Sly_State *ss, sly_value graph, sly_value visited, CPS_Expr *expr)
 	} break;
 	case tt_cps_proc: {
 		printf("(proc ");
-		CPS_Kont *kont = cps_graph_ref(graph, expr->u.proc.k);
-		sly_display(kont->name, 1);
-		printf(");\n");
-		_cps_display(ss, graph, visited, expr->u.proc.k);
-		printf(";");
+		sly_value k = expr->u.proc.k;
+		sly_display(k, 1);
+		printf(")");
+		return make_list(ss, 1, k);
 	} break;
 	case tt_cps_prim: {
 		printf("(prim ");
@@ -2819,9 +2817,10 @@ display_expr(Sly_State *ss, sly_value graph, sly_value visited, CPS_Expr *expr)
 	} break;
 	case tt_cps_code: {
 		printf("(code ");
-		sly_display(expr->u.code.label, 1);
-		printf(");\n");
-		_cps_display(ss, graph, visited, expr->u.code.label);
+		sly_value label = expr->u.code.label; 
+		sly_display(label, 1);
+		printf(")");
+		return make_list(ss, 1, label);
 	} break;
 	case tt_cps_box: {
 		printf("(box ");
@@ -2869,65 +2868,23 @@ display_expr(Sly_State *ss, sly_value graph, sly_value visited, CPS_Expr *expr)
 		}
 		printf(");\n");
 		procs = expr->u.fix.procs;
-		while (!null_p(procs)) {
-			p = GET_PTR(car(procs));
-			if (p->type == tt_cps_proc) {
-				_cps_display(ss, graph, visited, p->u.proc.k);
-			}
-			procs = cdr(procs);
-		}
+		return unwrap_kprocs(ss, procs);
 	} break;
 	default: {
 		printf("\ntt = %d\n", expr->type);
 		sly_assert(0, "Error not a cps expression");
 	}
 	}
+	return SLY_NULL;
 }
 
-static void
-display_term(Sly_State *ss, sly_value graph, sly_value visited, CPS_Term *term)
+static sly_value
+_cps_display(Sly_State *ss, sly_value graph, sly_value k)
 {
-	switch (term->type) {
-	case tt_cps_continue: {
-		sly_value k = term->u.cont.k;
-		CPS_Kont *kont = cps_graph_ref(graph, k);
-		sly_display(kont->name, 1);
-		printf(" ");
-		display_expr(ss, graph, visited, term->u.cont.expr);
-		printf(";\n");
-		_cps_display(ss, graph, visited, term->u.cont.k);
-	} break;
-	case tt_cps_branch: {
-		sly_value kt = term->u.branch.kt;
-		sly_value kf = term->u.branch.kf;
-		printf("if ");
-		sly_display(term->u.branch.arg, 1);
-		printf(" then ");
-		CPS_Kont *k = cps_graph_ref(graph, kt);
-		sly_display(k->name, 1);
-		k = cps_graph_ref(graph, kf);
-		printf(" else ");
-		sly_display(k->name, 1);
-		printf(";\n");
-		_cps_display(ss, graph, visited, kt);
-		_cps_display(ss, graph, visited, kf);
-	} break;
-	default: sly_assert(0, "Error not a cps continuation");
-	}
-}
-
-static void
-_cps_display(Sly_State *ss, sly_value graph, sly_value visited, sly_value k)
-{
-begin:
-	if (cps_graph_is_member(visited, k)) {
-		return;
-	}
 	CPS_Kont *kont = cps_graph_ref(graph, k);
-	cps_graph_set(ss, visited, k, kont);
 	switch (kont->type) {
 	case tt_cps_ktail: {
-		return;
+		return SLY_NULL;
 	} break;
 	case tt_cps_kargs: {
 		printf("let ");
@@ -2935,8 +2892,30 @@ begin:
 		printf(" = kargs ");
 		sly_display(kont->u.kargs.vars, 1);
 		printf(" -> ");
-		display_term(ss, graph, visited, kont->u.kargs.term);
-		return;
+		CPS_Term *term = kont->u.kargs.term;
+		if (term->type == tt_cps_continue) {
+			sly_value k = term->u.cont.k;
+			CPS_Kont *kont = cps_graph_ref(graph, k);
+			sly_display(kont->name, 1);
+			printf(" ");
+			sly_value l1 = cps_display_visit_expr(ss, term->u.cont.expr);
+			printf(";\n");
+			sly_value l2 = _cps_display(ss, graph, k);
+			return list_union(ss, l1, l2);
+		} else if (term->type == tt_cps_branch) {
+			sly_value kt = term->u.branch.kt;
+			sly_value kf = term->u.branch.kf;
+			printf("if ");
+			sly_display(term->u.branch.arg, 1);
+			printf(" then ");
+			sly_display(kt, 1);
+			printf(" else ");
+			sly_display(kf, 1);
+			printf(";\n");
+			sly_value k = _cps_display(ss, graph, kt);
+			sly_value j = _cps_display(ss, graph, kf);
+			return list_union(ss, k, j);
+		} 
 	} break;
 	case tt_cps_kreceive: {
 		printf("let ");
@@ -2947,9 +2926,7 @@ begin:
 		CPS_Kont *tmp = cps_graph_ref(graph, kont->u.kreceive.k);
 		sly_display(tmp->name, 1);
 		printf(";\n");
-		cps_graph_set(ss, visited, k, kont);
 		k = kont->u.kreceive.k;
-		goto begin;
 	} break;
 	case tt_cps_kproc: {
 		printf("let ");
@@ -2972,23 +2949,33 @@ begin:
 		sly_display(kont->u.kproc.body, 1);
 		printf(" : ");
 		sly_display(kont->u.kproc.tail, 1);
-		cps_graph_set(ss, visited, k, kont);
 		k = kont->u.kproc.body;
 		printf(";\n");
-		goto begin;
 	} break;
 	default: sly_assert(0, "Error not a cps continuation");
 	}
+	return _cps_display(ss, graph, k);
 }
 
 void
 cps_display(Sly_State *ss, sly_value graph, sly_value k)
 {
-	_cps_display(ss, graph, make_dictionary(ss), k);
+	sly_value ks = _cps_display(ss, graph, k);
+	sly_value lst = ks;
+	sly_value js = SLY_NULL;
+	do {
+		while (!null_p(lst)) {
+			k = car(lst);
+			ks = cons(ss, k, ks);
+			js = list_union(ss, _cps_display(ss, graph, k), js);
+			lst = cdr(lst);
+		}
+		lst = list_subtract(ss, js, ks);
+	} while (!null_p(lst));
 }
 
 void
-cps_display_var_info(Sly_State *ss, sly_value graph, sly_value var_info)
+cps_display_var_info(Sly_State *ss, sly_value var_info)
 {
 	vector *v = GET_PTR(var_info);
 	for (size_t i = 0; i < v->cap; ++i) {
@@ -3010,8 +2997,7 @@ cps_display_var_info(Sly_State *ss, sly_value graph, sly_value var_info)
 									   "updates = %d, binding = ",
 									   info->used, info->escapes,
 									   info->updates);
-								display_expr(ss, graph, make_dictionary(ss),
-											 info->binding);
+								cps_display_visit_expr(ss, info->binding);
 								printf(" }");
 							}
 							printf("\n");
