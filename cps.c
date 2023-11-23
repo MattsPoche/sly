@@ -2443,6 +2443,9 @@ cps_unpack_closure(Sly_State *ss, sly_value graph, sly_value clos_name,
 	kont = cps_unpack_closure(ss, graph, clos_name, clos_shares,
 							  clos_def, cdr(free_vars), kont);
 	sly_value var = car(free_vars);
+	if (!booltoc(var)) {
+		return kont;
+	}
 	CPS_Expr *expr = cps_new_expr();
 	int off = list_index_of(clos_shares, var);
 	if (off >= 0) {
@@ -2575,6 +2578,17 @@ _cps_opt_closure_convert(Sly_State *ss, sly_value graph,
 				CPS_Kont *kcall = cps_make_kargs(ss, cps_gensym_label_name(ss),
 												 new_term, make_list(ss, 1, kptr));
 				cps_graph_set(ss, graph, kcall->name, kcall);
+				{
+					CPS_Kont *next = cps_graph_ref(graph, new_term->u.cont.k);
+					if (next->type == tt_cps_ktail) {
+						expr->u.call.args = cons(ss, proc,
+												 cons(ss, clos->cc_name,
+													  args));
+						expr->u.call.proc = kptr;
+						term->u.cont.k = kcall->name;
+						return k;
+					}
+				}
 				expr->u.call.args = cons(ss, proc,
 										 cons(ss, clos->kr_name,
 											  args));
@@ -2583,6 +2597,7 @@ _cps_opt_closure_convert(Sly_State *ss, sly_value graph,
 				k = cps_save_free_vars(ss, graph, clos->kr_name, 0, kdef, k);
 				CPS_Kont *new_kont = cps_graph_ref(graph, k);
 				CPS_Kont *code_kont;
+				sly_value vars = kont->u.kargs.vars;
 				kont->u.kargs.vars = SLY_NULL;
 				{
 					CPS_Expr *expr = cps_new_expr();
@@ -2592,7 +2607,7 @@ _cps_opt_closure_convert(Sly_State *ss, sly_value graph,
 					term->u.cont.expr = expr;
 					term->u.cont.k = k;
 					code_kont = cps_make_kargs(ss, cps_gensym_label_name(ss),
-											   term, kont->u.kargs.vars);
+											   term, vars);
 					cps_graph_set(ss, graph, code_kont->name, code_kont);
 					k = code_kont->name;
 				}
