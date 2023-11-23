@@ -2769,7 +2769,7 @@ cps_opt_closure_convert(Sly_State *ss, sly_value graph,
 	return nk;
 }
 
-static sly_value _cps_display(Sly_State *ss, sly_value graph, sly_value k);
+static sly_value _cps_display(Sly_State *ss, sly_value graph, sly_value visited, sly_value k);
 
 static sly_value
 cps_display_visit_expr(Sly_State *ss, CPS_Expr *expr)
@@ -2832,7 +2832,7 @@ cps_display_visit_expr(Sly_State *ss, CPS_Expr *expr)
 	} break;
 	case tt_cps_code: {
 		printf("(code ");
-		sly_value label = expr->u.code.label; 
+		sly_value label = expr->u.code.label;
 		sly_display(label, 1);
 		printf(")");
 		return make_list(ss, 1, label);
@@ -2894,8 +2894,13 @@ cps_display_visit_expr(Sly_State *ss, CPS_Expr *expr)
 }
 
 static sly_value
-_cps_display(Sly_State *ss, sly_value graph, sly_value k)
+_cps_display(Sly_State *ss, sly_value graph, sly_value visited, sly_value k)
 {
+	if (booltoc(dictionary_ref(visited, k, SLY_FALSE))) {
+		return SLY_NULL;
+	} else {
+		dictionary_set(ss, visited, k, SLY_TRUE);
+	}
 	CPS_Kont *kont = cps_graph_ref(graph, k);
 	switch (kont->type) {
 	case tt_cps_ktail: {
@@ -2915,7 +2920,7 @@ _cps_display(Sly_State *ss, sly_value graph, sly_value k)
 			printf(" ");
 			sly_value l1 = cps_display_visit_expr(ss, term->u.cont.expr);
 			printf(";\n");
-			sly_value l2 = _cps_display(ss, graph, k);
+			sly_value l2 = _cps_display(ss, graph, visited, k);
 			return list_union(ss, l1, l2);
 		} else if (term->type == tt_cps_branch) {
 			sly_value kt = term->u.branch.kt;
@@ -2927,10 +2932,10 @@ _cps_display(Sly_State *ss, sly_value graph, sly_value k)
 			printf(" else ");
 			sly_display(kf, 1);
 			printf(";\n");
-			sly_value k = _cps_display(ss, graph, kt);
-			sly_value j = _cps_display(ss, graph, kf);
+			sly_value k = _cps_display(ss, graph, visited, kt);
+			sly_value j = _cps_display(ss, graph, visited, kf);
 			return list_union(ss, k, j);
-		} 
+		}
 	} break;
 	case tt_cps_kreceive: {
 		printf("let ");
@@ -2969,23 +2974,24 @@ _cps_display(Sly_State *ss, sly_value graph, sly_value k)
 	} break;
 	default: sly_assert(0, "Error not a cps continuation");
 	}
-	return _cps_display(ss, graph, k);
+	return _cps_display(ss, graph, visited, k);
 }
 
 void
 cps_display(Sly_State *ss, sly_value graph, sly_value k)
 {
-	sly_value ks = _cps_display(ss, graph, k);
+	sly_value visited = make_dictionary(ss);
+	sly_value ks = _cps_display(ss, graph, visited, k);
 	sly_value lst = ks;
 	sly_value js = SLY_NULL;
 	do {
 		while (!null_p(lst)) {
 			k = car(lst);
-			ks = cons(ss, k, ks);
-			js = list_union(ss, _cps_display(ss, graph, k), js);
+			js = list_union(ss, _cps_display(ss, graph, visited, k), js);
 			lst = cdr(lst);
 		}
-		lst = list_subtract(ss, js, ks);
+		lst = js;
+		js = SLY_NULL;
 	} while (!null_p(lst));
 }
 
