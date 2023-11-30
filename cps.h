@@ -243,6 +243,69 @@ typedef struct _var_info {
 	struct _var_info *alt;
 } CPS_Var_Info;
 
+#define ADDR_MODE_NA    0  // unused
+#define ADDR_MODE_REG   1  // Register Direct
+#define ADDR_MODE_INT   2  // Immediate Integer
+#define ADDR_MODE_LABEL 3  // Immediate Label
+
+#define ARG_GET_MODE(modes, arg) \
+	(((modes) >> (2 * (arg))) & 3)
+#define ARG_SET_MODE(modes, arg, m) \
+	(((modes) ^ ((modes) & (3 << (2 * (arg))))) | ((m) << (2 * (arg))))
+
+enum ami_opcodes {
+	ami_nop = 0,
+	ami_check_limit,
+	ami_move,
+	ami_jump,
+	ami_record,
+	ami_make_record,
+	ami_select,
+	ami_offset,
+	ami_fetchindexb,
+	ami_storeindexb,
+	ami_fetchindexl,
+	ami_storeindexl,
+	ami_ashl,
+	ami_ashr,
+	ami_orb,
+	ami_andb,
+	ami_xorb,
+	ami_notb,
+	ami_add,
+	ami_sub,
+	ami_divi,
+	ami_muli,
+	ami_addf,
+	ami_subf,
+	ami_mulf,
+	ami_divf,
+	ami_fbranch,
+	ami_loadfloat,
+	ami_storefloat,
+	// Pseudo-ops
+	ami_align,
+	ami_mark,
+	ami_emit_long,
+	ami_define_label,
+	ami_emit_label,
+	ami_emit_string,
+	ami_emit_float,
+};
+
+typedef struct _ami_inst {
+	union {
+		struct {
+			u8 op;
+			u8 modes;
+			u8 __pad[2];
+			u8 args[4];
+		} inst;
+		i64 imm;
+		u64 label;
+	} u;
+} AMI_Inst;
+
 CPS_Kont *cps_graph_ref(sly_value graph, sly_value k);
 void cps_graph_set(Sly_State *ss, sly_value graph, sly_value k, CPS_Kont *kont);
 int cps_graph_is_member(sly_value graph, sly_value k);
@@ -264,5 +327,8 @@ void cps_init_primops(Sly_State *ss);
 sly_value cps_translate(Sly_State *ss, sly_value cc, sly_value graph, sly_value form);
 void cps_display(Sly_State *ss, sly_value graph, sly_value k);
 void cps_display_var_info(Sly_State *ss, sly_value var_info);
+sly_value cps_free_vars_in_k(Sly_State *ss, sly_value graph, sly_value k);
+void cps_display_free_vars_foreach_k(Sly_State *ss, sly_value graph, sly_value k);
+sly_value ami_convert(Sly_State *ss);
 
 #endif /* SLY_CPS_H_ */

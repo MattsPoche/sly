@@ -1,3 +1,17 @@
+;; (define (first x y) x)
+;; (define (second x y) y)
+;; (display (first 'foo 'bar))
+;; (display (second 'foo 'bar))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; (define (+ x y)
+;;   (if (integer? x)
+;; 	  (if (integer? y)
+;; 		  (prim-add x y)
+;; 		  (void))
+;; 	  (void)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (define (g x) (* x x))
 (define (h x) (+ x x))
 (define (f x y)

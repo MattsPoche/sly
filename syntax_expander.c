@@ -31,6 +31,8 @@ enum core_form {
 	cf_apply,
 	cf_require,
 	cf_provide,
+	cf_prim_add,
+	cf_prim_addf,
 	CORE_FORM_COUNT,
 };
 
@@ -50,6 +52,8 @@ static char *core_form_names[CORE_FORM_COUNT] = {
 	[cf_apply] = "apply",
 	[cf_require] = "require",
 	[cf_provide] = "provide",
+	[cf_prim_add] = "prim-add",
+	[cf_prim_addf] = "prim-addf",
 };
 
 static sly_value core_forms = SLY_NULL;

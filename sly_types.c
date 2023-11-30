@@ -358,12 +358,11 @@ get_float(sly_value v)
 }
 
 sly_value
-make_int(Sly_State *ss, i64 i)
+make_int(UNUSED_ATTR Sly_State *ss, i64 i)
 {
-	UNUSED(ss);
 	if (i >= INT32_MIN && i <= INT32_MAX) {
 		/* small int */
-		union imm_value v;
+		union imm_value v = {0};
 		v.i.type = imm_int;
 		v.i.val.as_int = i;
 		return (v.v & ~TAG_MASK) | st_imm;
@@ -385,9 +384,8 @@ make_byte(Sly_State *ss, i8 i)
 }
 
 sly_value
-make_big_float(Sly_State *ss, f64 f)
+make_big_float(UNUSED_ATTR Sly_State *ss, f64 f)
 {
-	UNUSED(ss);
 	number *n = GC_MALLOC(sizeof(*n));
 	n->type = tt_float;
 	n->val.as_float = f;
@@ -395,10 +393,9 @@ make_big_float(Sly_State *ss, f64 f)
 }
 
 sly_value
-make_small_float(Sly_State *ss, f32 f)
+make_small_float(UNUSED_ATTR Sly_State *ss, f32 f)
 {
-	(void)ss;
-	union imm_value v;
+	union imm_value v = {0};
 	v.i.type = imm_float;
 	v.i.val.as_float = f;
 	sly_value n = v.v;
