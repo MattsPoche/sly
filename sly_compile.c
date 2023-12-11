@@ -61,6 +61,8 @@ union symbol_properties {
 	} p;
 };
 
+#define FLAG_ON(var, flag)  ((var)|(flag))
+#define FLAG_OFF(var, flag) ((var) & (flag) ? (var) ^ (flag) : (var))
 #define IS_GLOBAL(scope) ((scope)->parent == NULL)
 #define EMPTY_SYNTAX() make_syntax(ss, (token){0}, SLY_NULL)
 #define CAR(val) (syntax_p(val) ? car(syntax_to_datum(val)) : car(val))

@@ -3,6 +3,7 @@
 #include <gc.h>
 #include "sly_types.h"
 #include "cps.h"
+#include "cbackend.h"
 
 static char *
 next_arg(int *argc, char **argv[])
@@ -14,25 +15,6 @@ next_arg(int *argc, char **argv[])
 	(*argc)--;
 	(*argv)++;
 	return arg;
-}
-
-UNUSED_ATTR static AMI_Inst
-ami_make_inst(u8 op, u8 m0, u8 m1, u8 m2, u8 m3,
-			  u8 v0, u8 v1, u8 v2, u8 v3)
-{
-	u8 modes = 0;
-	modes = ARG_SET_MODE(modes, 0, m0);
-	modes = ARG_SET_MODE(modes, 1, m1);
-	modes = ARG_SET_MODE(modes, 2, m2);
-	modes = ARG_SET_MODE(modes, 3, m3);
-	AMI_Inst inst = {0};
-	inst.u.inst.args[0] = v0;
-	inst.u.inst.args[1] = v1;
-	inst.u.inst.args[2] = v2;
-	inst.u.inst.args[3] = v3;
-	inst.u.inst.modes = modes;
-	inst.u.inst.op = op;
-	return inst;
 }
 
 int
@@ -48,8 +30,6 @@ main(int argc, char *argv[])
 			} else if (strcmp(arg, "--expand") == 0) {
 				Sly_State ss = {0};
 				sly_value ast = sly_expand_only(&ss, next_arg(&argc, &argv));
-				printf("69 := 0x%lx\n", make_int(&ss, 69) & 0xffffffff);
-				printf("69.0 := 0x%lx\n", make_float(&ss, 69.0f) & 0xffffffff);
 				sly_value graph = make_dictionary(&ss);
 				sly_value name = make_symbol(&ss, "$tkexit", 7);
 				CPS_Kont *kont = cps_make_ktail(&ss, 0);
@@ -78,23 +58,11 @@ main(int argc, char *argv[])
 						sly_displayln(cdr(entry));
 					}
 				}
-				printf("\n");
-				sly_value free_vars = dictionary_ref(free_var_lookup, entry, SLY_VOID);
-				struct kclosure_t clos = {
-					.clos_def = SLY_NULL,
-					.clos_shares = SLY_NULL,
-					.cc_name = SLY_FALSE,
-					.kr_name = SLY_FALSE,
-					.offset = 0,
-					.kr_size = 0,
-				};
-				entry = cps_opt_closure_convert(&ss, graph, &clos,
-												free_var_lookup,
-												free_vars, entry);
-				printf("CLOSURE-CONVERSION:\n");
-				cps_display(&ss, graph, entry);
-				cps_display_free_vars_foreach_k(&ss, graph, entry);
-				sly_displayln(ami_convert(&ss));
+				printf("file = %s\n", ss.file_path);
+				// gcc -o test_prg test.sly.c
+				FILE *file = fopen("test.sly.c", "w");
+				cps_emit_c(&ss, graph, entry, free_var_lookup, file);
+				fclose(file);
 			} else {
 				printf("Running file %s ...\n", arg);
 				sly_do_file(arg, debug_info);

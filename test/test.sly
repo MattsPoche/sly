@@ -1,7 +1,55 @@
-;; (define (first x y) x)
-;; (define (second x y) y)
-;; (display (first 'foo 'bar))
-;; (display (second 'foo 'bar))
+(define (f x)
+  (- 420 x))
+
+(f 69)
+(f 69)
+
+;; (define (loop x)
+;;   (if (< x 10)
+;; 	  (loop (+ x 1))
+;; 	  x))
+
+;; (loop 0)
+
+;; (define (thunk)
+;;   (define (inc)
+;; 	(set! x (+ x y)))
+;;   (inc)
+;;   (inc))
+;; (define x 69)
+;; (define y 420)
+;; (define z 33)
+;; (thunk)
+;; (thunk)
+;; x
+
+;; (define (thunk)
+;;   (define x 0)
+;;   (define (inc) (set! x (+ x 1)))
+;;   (define (get-x) x)
+;;   (list inc get-x))
+
+;; (define (thunk2)
+;;   (inc)
+;;   (display get-x))
+
+;; (define fs (thunk))
+;; (define inc (car fs))
+;; (define get-x (car (cdr fs)))
+;; (display (get-x))
+;; (inc)
+;; (inc)
+;; (display (get-x))
+;; (thunk2)
+;; (thunk2)
+
+;; (define (foo x)
+;;   (define (bar y)
+;; 	(+ x y))
+;;   (bar 5)
+;;   (bar 6))
+;; (foo 69)
+;; (foo 420)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; (define (+ x y)
@@ -12,14 +60,14 @@
 ;; 	  (void)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(define (g x) (* x x))
-(define (h x) (+ x x))
-(define (f x y)
-  (/ (g x) (h y)))
-(display g)
-(display h)
-(display f)
-(f 5 6)
+;; (define (g x) (* x x))
+;; (define (h x) (+ x x))
+;; (define (f x y)
+;;   (/ (g x) (h y)))
+;; (display g)
+;; (display h)
+;; (display f)
+;; (f 5 6)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; (define (f g x y)
@@ -54,7 +102,8 @@
 ;;   (display (bar 420))
 ;;   (display (bar 360))
 ;;   (display (baz 7 4))
-;;   (display (baz 3 4)))
+;;   (display (baz 3 4))
+;;   baz)
 
 ;; (display main)
 ;; (main)
