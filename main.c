@@ -1,6 +1,8 @@
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 #include <gc.h>
+#include <dlfcn.h>
 #include "sly_types.h"
 #include "cps.h"
 #include "cbackend.h"
@@ -58,11 +60,23 @@ main(int argc, char *argv[])
 						sly_displayln(cdr(entry));
 					}
 				}
-				printf("file = %s\n", ss.file_path);
-				// gcc -o test_prg test.sly.c
-				FILE *file = fopen("test.sly.c", "w");
-				cps_emit_c(&ss, graph, entry, free_var_lookup, file);
-				fclose(file);
+				{
+					// gcc -fPIC -shared -ggdb -o test.so test.sly.c
+					FILE *file = fopen("test.sly.c", "w");
+					cps_emit_c(&ss, graph, entry, free_var_lookup, file, 1);
+					fclose(file);
+					system("gcc -fPIC -shared -ggdb -o test.so test.sly.c");
+					void *handle = dlopen("./test.so", RTLD_NOW);
+					assert(handle != NULL);
+					typedef void * __attribute__((__may_alias__)) pvoid_may_alias;
+					u64 (*init_top_level)(void);
+					*(pvoid_may_alias *)(&init_top_level) = dlsym(handle, "init_top_level");
+					void (*trampoline)(u64);
+					*(pvoid_may_alias *)(&trampoline) = dlsym(handle, "trampoline");
+					printf("BEGIN-FILE:\n");
+					trampoline(init_top_level());
+					dlclose(handle);
+				}
 			} else {
 				printf("Running file %s ...\n", arg);
 				sly_do_file(arg, debug_info);

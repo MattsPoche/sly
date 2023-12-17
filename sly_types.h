@@ -264,6 +264,7 @@ sly_value list_reverse(Sly_State *ss, sly_value list);
 sly_value list_to_vector(Sly_State *ss, sly_value list);
 sly_value vector_to_list(Sly_State *ss, sly_value vec);
 sly_value make_byte_vector(Sly_State *ss, size_t len, size_t cap);
+sly_value list_to_byte_vector(Sly_State *ss, sly_value lst);
 sly_value byte_vector_ref(Sly_State *ss, sly_value v, size_t idx);
 void byte_vector_set(sly_value v, size_t idx, sly_value value);
 size_t byte_vector_len(sly_value v);

@@ -159,6 +159,13 @@ sly_display(sly_value v, int lit)
 			byte_vector *s = GET_PTR(v);
 			printf("%.*s", (int)s->len, (char *)s->elems);
 		}
+	} else if (byte_vector_p(v)) {
+		byte_vector *vec = GET_PTR(v);
+		printf("#vu8(");
+		for (size_t i = 0; i < vec->len; ++i) {
+			printf("%d ", vec->elems[i]);
+		}
+		printf("\b)");
 	} else if (syntax_p(v)) {
 		printf("#<syntax ");
 		syntax *s = GET_PTR(v);
@@ -273,6 +280,10 @@ sly_hash(sly_value v)
 {
 	if (null_p(v)) {
 		return 0;
+	} else if (int_p(v)) {
+		return get_int(v);
+	} else if (float_p(v)) {
+		return get_float(v);
 	} else if (symbol_p(v)) {
 		symbol *sym = GET_PTR(v);
 		return sym->hash;
@@ -285,6 +296,9 @@ sly_hash(sly_value v)
 			len = bv->len;
 		}
 		return hash_str(bv->elems, len);
+	} else if (byte_vector_p(v)) {
+		byte_vector *bv = GET_PTR(v);
+		return hash_str(bv->elems, bv->len);
 	} else if (vector_p(v)) {
 		return hash_vector(v);
 	} else if (dictionary_p(v)) {
@@ -680,6 +694,23 @@ make_byte_vector(Sly_State *ss, size_t len, size_t cap)
 	vec->cap = cap;
 	vec->len = len;
 	return (sly_value)vec;
+}
+
+sly_value
+list_to_byte_vector(Sly_State *ss, sly_value lst)
+{
+	size_t len = list_len(lst);
+	sly_value bv = make_byte_vector(ss, len, len);
+	byte_vector *vec = GET_PTR(bv);
+	size_t i = 0;
+	while (!null_p(lst)) {
+		i64 c = get_int(car(lst));
+		sly_assert(c <= UINT8_MAX, "Value error value excedes byte max");
+		vec->elems[i] = c;
+		i++;
+		lst = cdr(lst);
+	}
+	return bv;
 }
 
 sly_value

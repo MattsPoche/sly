@@ -5,7 +5,7 @@ CFLAGS += $(WARNINGS)
 RELEASE=-O3 -std=c11
 RELEASE += $(WARNINGS)
 DEFS=-D _POSIX_C_SOURCE=200809L
-LFLAGS=-lm -lgc
+LFLAGS=-lm -lgc -ltcc
 TARGET=sly
 CSOURCE=$(shell find -name "*.c")
 OBJECTS=$(CSOURCE:%.c=%.o)

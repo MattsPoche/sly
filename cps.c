@@ -499,7 +499,7 @@ cps_make_ktail(Sly_State *ss, int genname)
 	return c;
 }
 
-static sly_value
+sly_value
 cps_gensym_temporary_name(Sly_State *ss)
 {
 	return gensym_from_cstr(ss, "_t");
@@ -1176,7 +1176,7 @@ cps_collect_var_info(Sly_State *ss, sly_value graph, sly_value global_tbl,
 		sly_value req = kont->u.kproc.arity.req;
 		sly_value rest = kont->u.kproc.arity.rest;
 		sly_value var_tbl = copy_dictionary(ss, prev_tbl);
-		while (!null_p(req)) {
+		while (pair_p(req)) {
 			cps_var_def_info(ss, var_tbl, car(req), NULL, 1, 0, 0);
 			cps_var_def_info(ss, global_tbl, car(req), NULL, 1, 0, 0);
 			req = cdr(req);
@@ -1288,7 +1288,7 @@ cps_opt_constant_folding_visit_expr(Sly_State *ss, sly_value var_info,
 				return expr;
 			}
 			sly_value v2 = cps_get_const(var_info, car(cdr(args)));
-			if (v1 == SLY_VOID) {
+			if (v2 == SLY_VOID) {
 				return expr;
 			}
 			expr = cps_new_expr();
@@ -1303,7 +1303,7 @@ cps_opt_constant_folding_visit_expr(Sly_State *ss, sly_value var_info,
 				return expr;
 			}
 			sly_value v2 = cps_get_const(var_info, car(cdr(args)));
-			if (v1 == SLY_VOID) {
+			if (v2 == SLY_VOID) {
 				return expr;
 			}
 			expr = cps_new_expr();
@@ -1318,7 +1318,7 @@ cps_opt_constant_folding_visit_expr(Sly_State *ss, sly_value var_info,
 				return expr;
 			}
 			sly_value v2 = cps_get_const(var_info, car(cdr(args)));
-			if (v1 == SLY_VOID) {
+			if (v2 == SLY_VOID) {
 				return expr;
 			}
 			expr = cps_new_expr();
@@ -1334,7 +1334,7 @@ cps_opt_constant_folding_visit_expr(Sly_State *ss, sly_value var_info,
 				return expr;
 			}
 			sly_value v2 = cps_get_const(var_info, car(cdr(args)));
-			if (v1 == SLY_VOID) {
+			if (v2 == SLY_VOID) {
 				return expr;
 			}
 			expr = cps_new_expr();
@@ -1366,7 +1366,6 @@ cps_opt_constant_folding_visit_expr(Sly_State *ss, sly_value var_info,
 		} break;
 		case tt_prim_vector_ref: break;
 		case tt_prim_vector_set: break;
-		case tt_prim_vector:
 		case tt_prim_list: {
 			while (!null_p(args)) {
 				sly_value val = cps_get_const(var_info, car(args));
@@ -1381,6 +1380,17 @@ cps_opt_constant_folding_visit_expr(Sly_State *ss, sly_value var_info,
 			expr->type = tt_cps_const;
 			expr->u.constant.value = val_list;
 			return expr;
+		} break;
+		case tt_prim_vector: {
+			while (!null_p(args)) {
+				sly_value val = cps_get_const(var_info, car(args));
+				if (void_p(val)) {
+					return expr;
+				}
+				val_list = list_append(ss, val_list,
+									   cons(ss, val, SLY_NULL));
+				args = cdr(args);
+			}
 		} break;
 		}
 		if (primops[op].fn) {
@@ -2347,6 +2357,8 @@ _cps_collect_free_variables(Sly_State *ss, sly_value graph,
 																visited,
 																kproc);
 						dictionary_set(ss, free_info, kproc, free_vars);
+					} else {
+						free_vars = list_union(ss, kfv, free_vars);
 					}
 				}
 				sly_value tmp = _cps_collect_free_variables(ss, graph,
@@ -2357,6 +2369,34 @@ _cps_collect_free_variables(Sly_State *ss, sly_value graph,
 															visited,
 															term->u.cont.k);
 				dictionary_set(ss, free_info, term->u.cont.k, tmp);
+			} else if (expr->type == tt_cps_proc) {
+				sly_value kproc = expr->u.proc.k;
+				free_vars = _cps_collect_free_variables(ss, graph,
+														var_info,
+														SLY_NULL,
+														SLY_NULL,
+														free_info,
+														visited,
+														kproc);
+				dictionary_set(ss, free_info, kproc, free_vars);
+			} else if (expr->type == tt_cps_fix) {
+				sly_value procs = expr->u.fix.procs;
+				while (!null_p(procs)) {
+					CPS_Expr *expr = GET_PTR(car(procs));
+					if (expr->type == tt_cps_proc) {
+						sly_value kproc = expr->u.proc.k;
+						sly_value tmp = _cps_collect_free_variables(ss, graph,
+																	var_info,
+																	total_vars,
+																	local_vars,
+																	free_info,
+																	visited,
+																	kproc);
+						dictionary_set(ss, free_info, kproc, tmp);
+						free_vars = list_union(ss, free_vars, tmp);
+					}
+					procs = cdr(procs);
+				}
 			}
 			sly_value tmp = _cps_collect_free_variables(ss, graph,
 														var_info,
@@ -2390,6 +2430,8 @@ _cps_collect_free_variables(Sly_State *ss, sly_value graph,
 		}
 	} break;
 	case tt_cps_kreceive: {
+		printf("kreceive = ");
+		sly_displayln(kont->name);
 		return _cps_collect_free_variables(ss, graph,
 										   var_info,
 										   total_vars,
@@ -2994,9 +3036,6 @@ cps_free_vars_in_k(Sly_State *ss, sly_value graph, sly_value k)
 void
 cps_display_free_vars_foreach_k(Sly_State *ss, sly_value graph, sly_value k)
 {
-	sly_display(k, 1);
-	printf(" = ");
-	sly_displayln(cps_free_vars_in_k(ss, graph, k));
 	CPS_Kont *kont = cps_graph_ref(graph, k);
 	switch (kont->type) {
 	case tt_cps_kargs: {
@@ -3202,16 +3241,9 @@ _cps_display(Sly_State *ss, sly_value graph, sly_value visited, sly_value k)
 		sly_display(kont->name, 1);
 		printf(" = λ ");
 		sly_value arity = kont->u.kproc.arity.req;
-		if (kont->u.kproc.arity.rest != SLY_FALSE) {
-			if (null_p(arity)) {
-				arity = kont->u.kproc.arity.rest;
-			} else {
-				sly_value a = arity;
-				while (!null_p(cdr(a))) {
-					a = cdr(a);
-				}
-				set_cdr(a, kont->u.kproc.arity.rest);
-			}
+		sly_value rest = kont->u.kproc.arity.rest;
+		if (rest != SLY_FALSE) {
+			arity = list_append(ss, arity, rest);
 		}
 		sly_display(arity, 1);
 		printf(" -> ");

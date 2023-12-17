@@ -11,6 +11,7 @@
 #define next_token() NEXT_TOKEN(tokens)
 
 static token_buff tokens;
+static sly_value parse_value(Sly_State *ss, char *cstr);
 
 static i8
 parse_char(Sly_State *ss, char *str, size_t len)
@@ -158,6 +159,34 @@ try_parse_dict_access(Sly_State *ss, token t)
 }
 
 static sly_value
+parse_list(Sly_State *ss, token t, sly_value list, char *cstr)
+{
+	token start_list = t;
+	for (;;) {
+		t = peek();
+		if (t.tag == tok_eof) {
+			sly_display(list, 1);
+			printf("\n");
+			sly_raise_exception(ss, EXC_COMPILE, "Parse Error unexpected end of file");
+		}
+		if (t.tag == tok_rbracket) {
+			next_token();
+			break;
+		}
+		if (t.tag == tok_dot) {
+			next_token();
+			append(list, parse_value(ss, cstr));
+			if (next_token().tag != tok_rbracket) {
+				sly_raise_exception(ss, EXC_COMPILE, "Parse Error expected closing bracket");
+			}
+			break;
+		}
+		append(list, cons(ss, parse_value(ss, cstr), SLY_NULL));
+	}
+	return make_syntax(ss, start_list, list);
+}
+
+static sly_value
 parse_value(Sly_State *ss, char *cstr)
 {
 	token t = next_token();
@@ -207,55 +236,45 @@ parse_value(Sly_State *ss, char *cstr)
 		return parse_value(ss, cstr);
 	} break;
 	case tok_lbracket: {
-		token start_list;
 		if (peek().tag == tok_rbracket) {
 			next_token();
 			return SLY_NULL;
 		}
 		list = cons(ss, parse_value(ss, cstr), SLY_NULL);
-build_list:
-		start_list = t;
-		for (;;) {
-			t = peek();
-			if (t.tag == tok_eof) {
-				sly_display(list, 1);
-				printf("\n");
-				sly_raise_exception(ss, EXC_COMPILE, "Parse Error unexpected end of file");
-			}
-			if (t.tag == tok_rbracket) {
-				next_token();
-				break;
-			}
-			if (t.tag == tok_dot) {
-				next_token();
-				append(list, parse_value(ss, cstr));
-				if (next_token().tag != tok_rbracket) {
-					sly_raise_exception(ss, EXC_COMPILE, "Parse Error expected closing bracket");
-				}
-				break;
-			}
-			append(list, cons(ss, parse_value(ss, cstr), SLY_NULL));
-		}
-		return make_syntax(ss, start_list, list);
+		return parse_list(ss, t, list, cstr);
 	} break;
 	case tok_rbracket: {
 		printf("DEBUG:%d:%d\n%s\n", t.ln, t.cn, cstr);
 		sly_raise_exception(ss, EXC_COMPILE, "Parse Error mismatched bracket");
 	} break;
 	case tok_vector: {
-		sly_value stx = make_syntax(ss, t, cstr_to_symbol("vector"));
-		list = cons(ss, stx, SLY_NULL);
-		goto build_list;
+		if (peek().tag == tok_rbracket) {
+			next_token();
+			return make_syntax(ss, t, make_vector(ss, 0, 0));
+		}
+		list = cons(ss, parse_value(ss, cstr), SLY_NULL);
+		sly_value stx = parse_list(ss, t, list, cstr);
+		syntax *s = GET_PTR(stx);
+		sly_value elems = strip_syntax(s->datum);
+		s->datum = list_to_vector(ss, elems);
+		return stx;
 	} break;
 	case tok_byte_vector: {
-		sly_value stx = make_syntax(ss, t, cstr_to_symbol("make-byte-vector"));
-		list = cons(ss, stx, SLY_NULL);
-		goto build_list;
+		if (peek().tag == tok_rbracket) {
+			next_token();
+			return make_syntax(ss, t, make_byte_vector(ss, 0, 0));
+		}
+		list = cons(ss, parse_value(ss, cstr), SLY_NULL);
+		sly_value stx = parse_list(ss, t, list, cstr);
+		syntax *s = GET_PTR(stx);
+		sly_value bytes = strip_syntax(s->datum);
+		s->datum = list_to_byte_vector(ss, bytes);
+		return stx;
 	} break;
 	case tok_dictionary: {
 		sly_value stx = make_syntax(ss, t, cstr_to_symbol("make-dictionary"));
 		list = cons(ss, stx, SLY_NULL);
-		goto build_list;
+		return parse_list(ss, t, list, cstr);
 	} break;
 	case tok_dot: {
 		sly_raise_exception(ss, EXC_COMPILE, "Parse Error bad dot");

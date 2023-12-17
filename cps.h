@@ -244,6 +244,7 @@ typedef struct _var_info {
 	struct _var_info *alt;
 } CPS_Var_Info;
 
+sly_value cps_gensym_temporary_name(Sly_State *ss);
 CPS_Kont *cps_graph_ref(sly_value graph, sly_value k);
 void cps_graph_set(Sly_State *ss, sly_value graph, sly_value k, CPS_Kont *kont);
 int cps_graph_is_member(sly_value graph, sly_value k);

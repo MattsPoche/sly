@@ -26,7 +26,7 @@ static char retok[] =
 	"|^([])}])"												// 11 right brace
 	"|^(\\.)"												// 12 dot
 	"|^(#\\()"												// 13 vector
-	"|^(#uv8\\()"											// 14 byte-vector
+	"|^(#vu8\\()"											// 14 byte-vector
 	"|^(#dict\\()"											// 15 dictionary
 	"|^(#t|#f)"												// 18 boolean
 	"|^(#;)"												// 19 sexp-comment
