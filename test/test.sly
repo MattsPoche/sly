@@ -1,1 +1,8 @@
-'(#(a a 0.69 a a) . #(a a 0.69 a a))
+(define (loop i)
+  (if (< i 10)
+	  (begin
+		(display i)
+		(newline)
+		(loop (+ i 1)))
+	  (display "END\n")))
+(loop 1)

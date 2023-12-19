@@ -5,7 +5,7 @@
 #include <string.h>
 #include <setjmp.h>
 #include <gc.h>
-#include "common_def.h"
+#include "../common/common_def.h"
 #include "lexer.h"
 
 typedef u64 sly_value;

@@ -7,7 +7,7 @@
 #include <sys/types.h>
 #include <regex.h>
 #include <gc.h>
-#include "common_def.h"
+#include "../common/common_def.h"
 #include "lexer.h"
 
 #define LINE_SIZE 1024
@@ -26,7 +26,7 @@ static char retok[] =
 	"|^([])}])"												// 11 right brace
 	"|^(\\.)"												// 12 dot
 	"|^(#\\()"												// 13 vector
-	"|^(#vu8\\()"											// 14 byte-vector
+	"|^(#v?u8\\()"											// 14 byte-vector
 	"|^(#dict\\()"											// 15 dictionary
 	"|^(#t|#f)"												// 18 boolean
 	"|^(#;)"												// 19 sexp-comment

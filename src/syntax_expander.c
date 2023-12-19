@@ -31,8 +31,33 @@ enum core_form {
 	cf_apply,
 	cf_require,
 	cf_provide,
-	cf_prim_add,
-	cf_prim_addf,
+	cf_add,
+	cf_sub,
+	cf_mul,
+	cf_div,
+	cf_cons,
+	cf_car,
+	cf_cdr,
+	cf_vector,
+	cf_void,
+	cf_boolean_p,
+	cf_char_p,
+	cf_null_p,
+	cf_pair_p,
+	cf_procedure_p,
+	cf_symbol_p,
+	cf_bytevector_p,
+	cf_number_p,
+	cf_string_p,
+	cf_vector_p,
+	cf_eq,
+	cf_num_eq,
+	cf_less,
+	cf_string_length,
+	cf_string_ref,
+	cf_string_eq,
+	cf_display,
+	cf_newline,
 	CORE_FORM_COUNT,
 };
 
@@ -52,8 +77,33 @@ static char *core_form_names[CORE_FORM_COUNT] = {
 	[cf_apply] = "apply",
 	[cf_require] = "require",
 	[cf_provide] = "provide",
-	[cf_prim_add] = "prim-add",
-	[cf_prim_addf] = "prim-addf",
+	[cf_add] = "+",
+	[cf_sub] = "-",
+	[cf_mul] = "*",
+	[cf_div] = "/",
+	[cf_cons] = "cons",
+	[cf_car] = "car",
+	[cf_cdr] = "cdr",
+	[cf_vector] = "vector",
+	[cf_void] = "void",
+	[cf_boolean_p] = "boolean?",
+	[cf_char_p] = "char?",
+	[cf_null_p] = "null?",
+	[cf_pair_p] = "pair?",
+	[cf_procedure_p] = "procedure?",
+	[cf_symbol_p] = "symbol?",
+	[cf_bytevector_p] = "bytevector?",
+	[cf_number_p] = "number?",
+	[cf_string_p] = "string?",
+	[cf_vector_p] = "vector?",
+	[cf_eq] = "eq?",
+	[cf_num_eq] = "=",
+	[cf_less] = "<",
+	[cf_string_length] = "string-length",
+	[cf_string_ref] = "string-ref",
+	[cf_string_eq] = "string=?",
+	[cf_display] = "display",
+	[cf_newline] = "newline",
 };
 
 static sly_value core_forms = SLY_NULL;
@@ -665,9 +715,6 @@ sly_expand(Sly_State *ss, sly_value env, sly_value ast)
 	ast = introduce(ss, syntax_to_list(ss, ast));
 	ast = add_scope(ss, ast, scope());
 	ast = expand(ss, ast, env);
-#if 0
-	sly_displayln(strip_syntax(ss, ast));
-#endif
 	ast = compile(ss, ast);
 	ast = datum_to_syntax(ss, before, ast);
 	return ast;

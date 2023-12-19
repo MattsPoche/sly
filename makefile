@@ -5,34 +5,35 @@ CFLAGS += $(WARNINGS)
 RELEASE=-O3 -std=c11
 RELEASE += $(WARNINGS)
 DEFS=-D _POSIX_C_SOURCE=200809L
-LFLAGS=-lm -lgc -ltcc
-TARGET=sly
-CSOURCE=$(shell find -name "*.c")
-OBJECTS=$(CSOURCE:%.c=%.o)
+LFLAGS=-lm -lgc
+TARGET=bin/sly
+CSOURCE=$(shell find src/ -name "*.c")
+OBJECTS=$(CSOURCE:src/%.c=bin/%.o)
+DEPENDANCIES=$(CSOURCE:src/%.c=bin/%.d)
 
-.PHONY: all deps test clean release release-test
+.PHONY: all test clean release
 
-all: deps $(TARGET)
+all: bin $(DEPENDANCIES) $(TARGET)
+
+bin:
+	@mkdir bin
 
 test: $(TARGET)
 	./$< test/*.sly
 
 clean:
-	rm -f $(OBJECTS) $(TARGET) $(TARGET).d
+	@rm -rf bin
 
-deps:
-	@$(CC) -MM *.c > $(TARGET).d
+$(DEPENDANCIES):
+	@$(CC) -MM $(@:bin/%.d=src/%.c) -MT $(@:%.d=%.o) > $@
 
 $(OBJECTS):
-	$(CC) -c $(CFLAGS) $(DEFS) -o $@ $(@:%.o=%.c)
-
-$(TARGET): $(OBJECTS)
-	$(CC) $(LFLAGS) -o $@ $^
+	$(CC) -c $(CFLAGS) $(DEFS) -o $@ $(@:bin/%.o=src/%.c)
 
 release:
 	$(CC) $(RELEASE) $(DEFS) -o $(TARGET) $(CSOURCE)
 
-release-test: release
-	./$(TARGET) test/*
+$(TARGET): $(OBJECTS)
+	$(CC) $(LFLAGS) -o $@ $^
 
--include $(TARGET).d
+-include bin/*.d

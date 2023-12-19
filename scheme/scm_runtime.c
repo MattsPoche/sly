@@ -2,263 +2,19 @@
 #include <stdio.h>
 #include <string.h>
 #include <setjmp.h>
-#include "common_def.h"
+#include "../common/common_def.h"
+#include "scm_types.h"
+#include "scm_runtime.h"
 
-/* NAN Boxing */
-#define NAN_BITS 0x7ff0LU
-#define NB_VOID			(NAN_BITS|tt_void) // bool
-#define NB_BOOL			(NAN_BITS|tt_bool) // bool
-#define NB_CHAR			(NAN_BITS|tt_char) // char
-#define NB_INT			(NAN_BITS|tt_int) // int
-#define NB_PAIR			(NAN_BITS|tt_pair) // pair
-#define NB_SYMBOL		(NAN_BITS|tt_symbol) // symbol
-#define NB_BYTEVECTOR	(NAN_BITS|tt_bytevector) // byte-vector
-#define NB_STRING		(NAN_BITS|tt_string) // string
-#define NB_VECTOR		(NAN_BITS|tt_vector) // vector
-#define NB_RECORD		(NAN_BITS|tt_record) // record
-#define NB_BOX		    (NAN_BITS|tt_box) // referance
-#define NB_CLOSURE	    (NAN_BITS|tt_closure) // closure
-#define SCM_NULL  (NB_PAIR << 48)
-#define SCM_FALSE (NB_BOOL << 48)
-#define SCM_TRUE  (SCM_FALSE + 1)
-#define SCM_VOID  (NB_VOID << 48)
-#define TAG_VALUE(type, val_bits) (((type) << 48)|(val_bits))
-#define TYPEOF(value) (value >> 48)
-#define GET_PTR(value) \
-	((void *)(((value) & ((1LU << 32) - 1)) + heap_working->start))
-#define GET_INTEGRAL(value)  ((i32)(value & ((1LU << 32) - 1)))
-#define NULL_P(value) (value == SCM_NULL)
-#define BOOLEAN_P(value) (TYPEOF(value) == NB_BOOL)
-#define INTEGER_P(value) (TYPEOF(value) == NB_INT)
-#define FLOAT_P(value) (((value >> 52) & 0x7ff) ^ 0x7ff)
-#define NUMBER_P(value) (INTEGER_P(value) || FLOAT_P(value))
-#define CHAR_P(value) (TYPEOF(value) == NB_CHAR)
-#define PAIR_P(value) (TYPEOF(value) == NB_PAIR && !NULL_P(value))
-#define SYMBOL_P(value) (TYPEOF(value) == NB_SYMBOL)
-#define BYTEVECTOR_P(value) (TYPEOF(value) == NB_BYTEVECTOR)
-#define STRING_P(value) (TYPEOF(value) == NB_STRING)
-#define VECTOR_P(value) (TYPEOF(value) == NB_VECTOR)
-#define RECORD_P(value) (TYPEOF(value) == NB_RECORD)
-#define BOX_P(value) (TYPEOF(value) == NB_BOX)
-#define CLOSURE_P(value) (TYPEOF(value) == NB_CLOSURE)
-#define PROCEDURE_P(value) CLOSURE_P(value)
-#define TAIL_CALL(proc) return _tail_call(proc)
-#define ITOBOOL(i) (i ? SCM_TRUE : SCM_FALSE)
-#define BOOLTOI(b) (b == SCM_FALSE ? 0 : 1)
-
-enum type_tag {
-	tt_inf = 0,
-	tt_void,
-	tt_bool,
-	tt_char,
-	tt_int,
-	tt_pair,
-	tt_symbol,
-	tt_bytevector,
-	tt_string,
-	tt_vector,
-	tt_record,
-	tt_box,
-	tt_closure,
-	TT_COUNT,
-	tt_float,
-};
-
-static_assert(TT_COUNT <= 0xf);
-
-typedef u64 scm_value;
-typedef struct _closure Closure;
-typedef scm_value (*klabel_t)(scm_value self);
-
-typedef struct _closure {
-	u32 fref;
-	u32 nfree_vars;
-	klabel_t code;
-	scm_value free_vars[];
-} Closure;
-
-typedef struct _pair {
-	u32 fref;
-	scm_value car;
-	scm_value cdr;
-} Pair;
-
-typedef struct _symbol {
-	u32 fref;
-	u32 len;
-	u64 hash;
-	u8 name[];
-} Symbol;
-
-typedef struct _string {
-	u32 fref;
-	u32 len;
-	u8 elems[];
-} String;
-
-typedef struct _bytevector {
-	u32 fref;
-	u32 len;
-	u8 elems[];
-} Bytevector;
-
-typedef struct _vector {
-	u32 fref;
-	u32 len;
-	scm_value elems[];
-} Vector;
-
-typedef struct _record {
-	u32 fref;
-	u32 len;
-	scm_value elems[];
-} Record;
-
-typedef struct _box {
-	u32 fref;
-	scm_value value;
-} Box;
-
-struct constant {
-	enum type_tag tt;
-	union {
-		u64 as_uint;
-		i64 as_int;
-		f64 as_float;
-		void *as_ptr;
-	} u;
-};
-
-typedef struct _static_string {
-	u32 len;
-	u8 elems[];
-} STATIC_String;
-
-typedef struct _static_symbol {
-	u64 hash;
-	u32 len;
-	u8 elems[];
-} STATIC_Symbol;
-
-typedef struct _static_bytevector {
-	u32 len;
-	u8 elems[];
-} STATIC_Bytevector;
-
-typedef struct _static_vector {
-	u32 len;
-	struct constant elems[];
-} STATIC_Vector;
-
-typedef struct _static_list {
-	u32 len;
-	struct constant elems[];
-} STATIC_List;
-
-typedef struct _mem_pool {
-	size_t sz;
-	size_t idx;
-	u8 *start;
-} Mem_Pool;
-
-union f2u {f64 f; u64 u;};
-
-int trampoline(scm_value cc);
-static inline scm_value _tail_call(scm_value proc);
-static inline void scm_heap_init(void);
-static inline size_t mem_align_offset(size_t addr);
-static inline size_t scm_heap_alloc(size_t sz);
-static inline void _scm_assert(int p, char *msg, const char *func_name);
-static inline scm_value cons_rest(void);
-static inline scm_value _cons(scm_value car, scm_value cdr);
-static inline scm_value init_constant(struct constant cnst);
-static inline scm_value make_constant(size_t idx);
-static inline scm_value load_interned_constant(size_t idx);
-static inline void scm_intern_constants(size_t len);
-static inline scm_value init_string(const STATIC_String *stc_str);
-static inline scm_value init_symbol(const STATIC_Symbol *stc_sym);
-static inline scm_value init_bytevector(const STATIC_Bytevector *stc_vu8);
-static inline scm_value init_vector(const STATIC_Vector *stc_vec);
-static inline scm_value init_list(const STATIC_List *stc_lst);
-static inline scm_value make_closure(void);
-static inline klabel_t closure_fn(scm_value value);
-static inline scm_value closure_ref(scm_value clos, i32 idx);
-static inline void push_arg(scm_value x);
-static inline void push_ref(scm_value x);
-static inline scm_value pop_arg(void);
-static inline scm_value make_box(void);
-static inline void box_set(scm_value b, scm_value value);
-static inline scm_value box_ref(scm_value b);
-static inline scm_value make_int(i64 x);
-static inline scm_value make_char(i64 x);
-static inline scm_value make_float(f64 x);
-static inline f64 get_float(scm_value x);
-static inline int chk_args(size_t req, int rest);
-static inline scm_value primop_cons(void);
-static inline scm_value prim_cons(scm_value self);
-static inline scm_value primop_car(void);
-static inline scm_value prim_car(scm_value self);
-static inline scm_value primop_cdr(void);
-static inline scm_value prim_cdr(scm_value self);
-/* type predicates */
-static inline scm_value prim_boolean_p(scm_value self);
-static inline scm_value prim_char_p(scm_value self);
-static inline scm_value prim_null_p(scm_value self);
-static inline scm_value prim_pair_p(scm_value self);
-static inline scm_value prim_procedure_p(scm_value self);
-static inline scm_value prim_symbol_p(scm_value self);
-static inline scm_value prim_bytevector_p(scm_value self);
-static inline scm_value prim_number_p(scm_value self);
-static inline scm_value prim_string_p(scm_value self);
-static inline scm_value prim_vector_p(scm_value self);
-#if 0
-// unimplemented
-static inline scm_value prim_eof_object_p(scm_value self);
-static inline scm_value prim_port_p(scm_value self);
-#endif
-/* Equivalence predicates */
-static inline scm_value primop_eq(void);
-static inline scm_value prim_eq(scm_value self);
-static inline scm_value primop_eqv(void);
-static inline scm_value prim_eqv(scm_value self);
-
-/* arithmetic procedures */
-static inline scm_value primop_add(void);
-static inline scm_value prim_add(scm_value self);
-static inline scm_value primop_sub(void);
-static inline scm_value prim_sub(scm_value self);
-static inline scm_value primop_mul(void);
-static inline scm_value prim_mul(scm_value self);
-static inline scm_value primop_div(void);
-static inline scm_value prim_div(scm_value self);
-static inline scm_value primop_num_eq(void);
-static inline scm_value prim_num_eq(scm_value self);
-static inline scm_value primop_less(void);
-static inline scm_value prim_less(scm_value self);
-//////////////////////////////////////////////////////////
-static inline scm_value primop_string_len(void);
-static inline scm_value prim_string_len(scm_value self);
-static inline scm_value primop_string_ref(void);
-static inline scm_value prim_string_ref(scm_value self);
-static inline scm_value primop_string_eq(void);
-static inline scm_value prim_string_eq(scm_value self);
-/* IO procedures */
-static inline scm_value primop_display(void);
-static inline scm_value prim_display(scm_value self);
-static inline scm_value primop_newline(void);
-static inline scm_value prim_newline(scm_value self);
-static inline void print_stk(void);
-
-#define scm_assert(p, msg) _scm_assert(p, msg, __func__)
 #define ARG_STACK_LEN 0xffLU
 static struct {
 	size_t top;
 	scm_value stk[ARG_STACK_LEN];
 } arg_stack;
 
+#define module_entry(name, fn) _cons((scm_value)(name), make_function(fn))
+
 #define HEAP_PAGE_SZ (1LU << 12)
-#define HEAP_USED() (heap.idx)
-#define HEAP_FREE() (heap.sz - HEAP_USED())
 static Mem_Pool mp0 = {0};
 static Mem_Pool mp1 = {0};
 static Mem_Pool *heap_working = &mp0;
@@ -266,8 +22,11 @@ static Mem_Pool *heap_free = &mp1;
 static size_t prev_saved = 0;
 static jmp_buf exit_point;
 static scm_value exception_handler;
-static struct constant constants[];
+static scm_value **intern_tbl;
+static size_t intern_tbl_len = 0;
 static scm_value *interned;
+static struct constant *constants;
+static size_t bytes_allocated = 0;
 
 scm_value
 _tail_call(scm_value proc)
@@ -300,6 +59,7 @@ mem_align_offset(size_t addr)
 size_t
 scm_heap_alloc(size_t sz)
 {
+	sz += mem_align_offset(sz);
 	if (sz >= (heap_working->sz - heap_working->idx)) {
 		heap_working->sz *= 2;
 		heap_working->start = realloc(heap_working->start,
@@ -307,7 +67,7 @@ scm_heap_alloc(size_t sz)
 	}
 	size_t i = heap_working->idx;
 	heap_working->idx += sz;
-	heap_working->idx += mem_align_offset(heap_working->idx);
+	bytes_allocated += sz;
 	return i;
 }
 
@@ -429,14 +189,19 @@ load_interned_constant(size_t idx)
 	return interned[idx];
 }
 
-void
-scm_intern_constants(size_t len)
+scm_value *
+scm_intern_constants(struct constant *c, size_t len)
 {
 	interned = calloc(len, sizeof(*interned));
+	constants = c;
+	intern_tbl_len++;
+	intern_tbl = realloc(intern_tbl, sizeof(*intern_tbl) * intern_tbl_len);
+	intern_tbl[intern_tbl_len-1] = interned;
 	scm_assert(interned != NULL, "malloc failed");
 	for (size_t i = 0; i < len; ++i) {
 		interned[i] = make_constant(i);
 	}
+	return interned;
 }
 
 scm_value
@@ -505,11 +270,18 @@ init_list(const STATIC_List *stc_lst)
 }
 
 scm_value
+make_function(klabel_t fn)
+{
+	return (NB_FUNCTION << 48)|((scm_value)fn);
+}
+
+scm_value
 make_closure(void)
 {
-	scm_value value = scm_heap_alloc(sizeof(Closure)
-									 + (sizeof(scm_value) * arg_stack.top));
-	Closure *clos = GET_PTR(value);
+	Closure *clos;
+	scm_value value =
+		scm_heap_alloc(sizeof(*clos) + (sizeof(scm_value) * arg_stack.top));
+	clos = GET_PTR(value);
 	clos->fref = 0;
 	clos->code = (klabel_t)pop_arg();
 	clos->nfree_vars = arg_stack.top;
@@ -517,6 +289,27 @@ make_closure(void)
 		clos->free_vars[i] = pop_arg();
 	}
 	return (NB_CLOSURE << 48)|value;
+}
+
+klabel_t
+procedure_fn(scm_value value)
+{
+	if (CLOSURE_P(value)) {
+		Closure *c = GET_PTR(value);
+		return c->code;
+	} else if (FUNCTION_P(value)) {
+		return GET_FN_PTR(value);
+	} else {
+		scm_assert(0, "type error expected <procedure");
+	}
+	return NULL;
+}
+
+klabel_t
+function_fn(scm_value value)
+{
+	scm_assert(FUNCTION_P(value), "type error expected <procedure>");
+	return GET_FN_PTR(value);
 }
 
 klabel_t
@@ -686,6 +479,37 @@ prim_cdr(scm_value self)
 }
 
 scm_value
+primop_vector(void)
+{
+	Vector *vec;
+	scm_value value =
+		scm_heap_alloc(sizeof(*vec) + (sizeof(scm_value) * arg_stack.top));
+	vec = GET_PTR(value);
+	vec->fref = 0;
+	vec->len = arg_stack.top;
+	for (size_t i = 0; arg_stack.top; ++i) {
+		vec->elems[i] = pop_arg();
+	}
+	return (NB_VECTOR << 48)|value;
+}
+
+scm_value
+prim_vector(scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_vector());
+	TAIL_CALL(k);
+}
+
+scm_value
+prim_void(scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(SCM_VOID);
+	TAIL_CALL(k);
+}
+
+scm_value
 prim_boolean_p(scm_value self)
 {
 	scm_assert(chk_args(2, 0), "arity error");
@@ -811,9 +635,6 @@ primop_eqv(void)
 	}
 	return primop_eq();
 }
-
-scm_value prim_eqv(scm_value self);
-
 
 static inline scm_value
 addfx(f64 x, scm_value y)
@@ -1052,7 +873,7 @@ primop_add(void)
 }
 
 scm_value
-prim_add(UNUSED_ATTR scm_value self)
+prim_add(scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_add());
@@ -1075,7 +896,7 @@ primop_sub(void)
 }
 
 scm_value
-prim_sub(UNUSED_ATTR scm_value self)
+prim_sub(scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_sub());
@@ -1094,7 +915,7 @@ primop_mul(void)
 }
 
 scm_value
-prim_mul(UNUSED_ATTR scm_value self)
+prim_mul(scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_mul());
@@ -1117,7 +938,7 @@ primop_div(void)
 }
 
 scm_value
-prim_div(UNUSED_ATTR scm_value self)
+prim_div(scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_div());
@@ -1254,10 +1075,14 @@ primop_display(void)
 {
 	scm_assert(chk_args(1, 0), "arity error");
 	scm_value value = pop_arg();
-	if (INTEGER_P(value)) {
+	if (VOID_P(value)) {
+		printf("#<void>");
+	} else if (INTEGER_P(value)) {
 		printf("%d", GET_INTEGRAL(value));
 	} else if (FLOAT_P(value)) {
 		printf("%g", get_float(value));
+	} else if (CHAR_P(value)) {
+		putchar(GET_INTEGRAL(value));
 	} else if (value == SCM_TRUE) {
 		printf("#t");
 	} else if (value == SCM_FALSE) {
@@ -1352,31 +1177,89 @@ prim_newline(scm_value self)
 }
 
 static scm_value
-tl_exit(UNUSED_ATTR scm_value self)
+tl_exit(scm_value self)
 {
-	primop_display();
-	primop_newline();
+	scm_assert(chk_args(1, 0), "arity error");
+	scm_value x = pop_arg();
+	if (!VOID_P(x)) {
+		push_arg(x);
+		primop_display();
+		primop_newline();
+	}
 	longjmp(exit_point, 1);
 }
 
 static scm_value
-default_excption_handler(UNUSED_ATTR scm_value self)
+default_excption_handler(scm_value self)
 {
 	exit(1);
 	return SCM_VOID;
 }
 
+scm_value
+scm_module_lookup(char *name, scm_value module)
+{
+	scm_assert(VECTOR_P(module), "type error expected <vector>");
+	Vector *vec = GET_PTR(module);
+	for (size_t i = 0; i < vec->len; ++i) {
+		Pair *entry = GET_PTR(vec->elems[i]);
+		if (strcmp(name, (char *)entry->car) == 0) {
+			return entry->cdr;
+		}
+	}
+	scm_assert(0, "error undefined identifier");
+	return SCM_VOID;
+}
+
+scm_value
+scm_runtime_load_dynamic(void)
+{
+	push_arg(module_entry("cons", prim_cons));
+	push_arg(module_entry("car", prim_car));
+	push_arg(module_entry("cdr", prim_cdr));
+	push_arg(module_entry("vector", prim_vector));
+	push_arg(module_entry("void", prim_void));
+	push_arg(module_entry("boolean?", prim_boolean_p));
+	push_arg(module_entry("char?", prim_char_p));
+	push_arg(module_entry("null?", prim_null_p));
+	push_arg(module_entry("pair?", prim_pair_p));
+	push_arg(module_entry("procedure?", prim_procedure_p));
+	push_arg(module_entry("symbol?", prim_symbol_p));
+	push_arg(module_entry("bytevector?", prim_bytevector_p));
+	push_arg(module_entry("number?", prim_number_p));
+	push_arg(module_entry("string?", prim_string_p));
+	push_arg(module_entry("vector?", prim_vector_p));
+	push_arg(module_entry("eq?", prim_eq));
+	//push_arg(module_entry("eqv?", prim_eqv));
+	push_arg(module_entry("+", prim_add));
+	push_arg(module_entry("-", prim_sub));
+	push_arg(module_entry("*", prim_mul));
+	push_arg(module_entry("/", prim_div));
+	push_arg(module_entry("=", prim_num_eq));
+	push_arg(module_entry("<", prim_less));
+
+	push_arg(module_entry("string-length", prim_string_len));
+	push_arg(module_entry("string-ref", prim_string_ref));
+	push_arg(module_entry("string=?", prim_string_eq));
+
+	push_arg(module_entry("display", prim_display));
+	push_arg(module_entry("newline", prim_newline));
+	return primop_vector();
+}
+
 int
 trampoline(scm_value cc)
 {
+	scm_value module = scm_runtime_load_dynamic();
 	push_arg((scm_value)tl_exit);
 	scm_value kexit = make_closure();
 	push_arg((scm_value)default_excption_handler);
 	exception_handler = make_closure();
+	push_arg(module);
 	push_arg(kexit);
 	int ext = setjmp(exit_point);
 	while (ext == 0) {
-		cc = closure_fn(cc)(cc);
+		cc = procedure_fn(cc)(cc);
 	}
 	return ext;
 }

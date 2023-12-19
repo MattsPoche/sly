@@ -13,17 +13,17 @@ static const char push_tmpl[] = "\tpush_arg(%s%s);\n";
 static const char pop_tmpl[] = "\t%s%s = pop_arg();\n";
 static const char tail_call_tmpl[] = "\tTAIL_CALL(%s);\n";
 static const char init_top_level_tmpl[] =
-	"scm_value init_top_level(void)\n"
+	"scm_value load_dynamic(void)\n"
 	"{\n"
-	"\tscm_heap_init();\n"
-	"\tscm_intern_constants(ARR_LEN(constants));\n"
+	"\tinterned = scm_intern_constants(constants, ARR_LEN(constants));\n"
 	"\tpush_arg((scm_value)%s);\n"
 	"\treturn make_closure();\n"
 	"}\n";
 static const char main_tmpl[] =
 	"int main(void)\n"
 	"{\n"
-	"\ttrampoline(init_top_level());\n"
+	"\tscm_heap_init();\n"
+	"\ttrampoline(load_dynamic());\n"
 	"\treturn 0;\n"
 	"}\n";
 
@@ -52,8 +52,13 @@ intern_constant(Sly_State *ss, sly_value constants, sly_value value)
 	if (null_p(value)) {
 		return "SCM_NULL";
 	}
-	printf("value = ");
-	sly_displayln(value);
+	if (void_p(value)) {
+		return "SCM_VOID";
+	}
+	if (byte_p(value)) {
+		snprintf(buf, sizeof(buf), "make_char(%d)", get_byte(value));
+		return buf;
+	}
 	size_t idx;
 	sly_value entry = dictionary_entry_ref(constants, value);
 	if (slot_is_free(entry)) {
@@ -77,7 +82,7 @@ intern_constant(Sly_State *ss, sly_value constants, sly_value value)
 	} else {
 		idx = (size_t)cdr(entry);
 	}
-	snprintf(buf, sizeof(buf), "load_interned_constant(%zu)", idx);
+	snprintf(buf, sizeof(buf), "interned[%zu]", idx);
 	return buf;
 }
 
@@ -305,6 +310,8 @@ _cps_emit_c(Sly_State *ss, sly_value graph, sly_value k,
 					fprintf(file, push_tmpl, "(scm_value)", symbol_to_cid(next->name));
 					fprintf(file, "\tk = make_closure();\n");
 				}
+				printf("k = ");
+				sly_displayln(k);
 				emit_c_push_list(SLY_VOID, expr->u.call.args, file);
 				fprintf(file, push_tmpl, "", "k");
 				fprintf(file, tail_call_tmpl, symbol_to_cid(expr->u.call.proc));
@@ -387,8 +394,6 @@ _cps_emit_c(Sly_State *ss, sly_value graph, sly_value k,
 		emit_c_pop_list(list_reverse(ss, next->u.kargs.vars), file);
 		sly_value vars = dictionary_ref(free_vars, k, SLY_NULL);
 		fprintf(file, "\tscm_value k = closure_ref(self, 0);\n");
-		printf("vars = ");
-		sly_displayln(vars);
 		emit_c_unpack_self(vars, 1, file);
 		_cps_emit_c(ss, graph, next->name, free_vars, constants, file);
 	} break;
@@ -460,8 +465,18 @@ cps_emit_c(Sly_State *ss, sly_value graph, sly_value start,
 	}
 	fprintf(buf_stream, "\n");
 	fprintf(buf_stream, closure_tmpl, "", symbol_to_cid(start), "entry");
-	fprintf(buf_stream, chk_args_tmpl, 1LU, 0);
+	fprintf(buf_stream, chk_args_tmpl, 2LU, 0);
 	fprintf(buf_stream, pop_tmpl, "scm_value ", "k");
+	fprintf(buf_stream, pop_tmpl, "scm_value ", "imports");
+	sly_value vars = dictionary_ref(free_vars, start, SLY_NULL);
+	if (list_len(vars) > 0) {
+		while (!null_p(vars)) {
+			sly_value id = car(vars);
+			fprintf(buf_stream, "\tscm_value %s = scm_module_lookup(\"%s\", imports);\n",
+					symbol_to_cid(id), symbol_to_cstr(id));
+			vars = cdr(vars);
+		}
+	}
 	sly_value constants = make_dictionary(ss);
 	_cps_emit_c(ss, graph, start, free_vars, constants, buf_stream);
 	fprintf(buf_stream, "}\n\n");
@@ -481,7 +496,9 @@ cps_emit_c(Sly_State *ss, sly_value graph, sly_value start,
 		fprintf(buf_stream, main_tmpl);
 	}
 	fclose(buf_stream);
-	fprintf(file, "#include \"sly_prelude.h\"\n\n");
+	fprintf(file, "#include \"scheme/scm_types.h\"\n");
+	fprintf(file, "#include \"scheme/scm_runtime.h\"\n\n");
+	fprintf(file, "static scm_value *interned;\n\n");
 	vec = GET_PTR(constants);
 	char *cbuf;
 	size_t cbuf_sz;

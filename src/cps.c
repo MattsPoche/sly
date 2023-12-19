@@ -393,7 +393,7 @@ prim_vector(Sly_State *ss, sly_value arg_list)
 void
 cps_init_primops(Sly_State *ss)
 {
-	for (size_t i = 1; i < ARR_LEN(primops); ++i) {
+	for (size_t i = 0; i < ARR_LEN(primops); ++i) {
 		char *cstr = primops[i].cstr;
 		primops[i].name = make_symbol(ss, cstr, strlen(cstr));
 	}
@@ -405,14 +405,14 @@ primop_p(sly_value name)
 	if (identifier_p(name)) {
 		name = strip_syntax(name);
 	} else if (!symbol_p(name)) {
-		return 0;
+		return -1;
 	}
-	for (size_t i = 1; i < ARR_LEN(primops); ++i) {
+	for (size_t i = 0; i < ARR_LEN(primops); ++i) {
 		if (symbol_eq(name, primops[i].name)) {
 			return i;
 		}
 	}
-	return 0;
+	return -1;
 }
 
 CPS_Kont *
@@ -642,7 +642,7 @@ _cps_translate(Sly_State *ss, CPS_Expr *fix, sly_value cc,
 				cc = k->name;
 				cps_graph_set(ss, graph, cc, k);
 				if ((identifier_p(e) || symbol_p(e))
-					&& !primop_p(e)) {
+					&& primop_p(e) == -1) {
 					proc = strip_syntax(e);
 				} else {
 					cc = _cps_translate(ss, fix, cc, graph, CAR(rest));
@@ -838,7 +838,7 @@ _cps_translate(Sly_State *ss, CPS_Expr *fix, sly_value cc,
 		}
 		sly_value name = car(vlist);
 		vlist = cdr(vlist);
-		if (primop_p(name)) {
+		if (primop_p(name) != -1) {
 			t->u.cont.expr->type = tt_cps_primcall;
 		} else {
 			t->u.cont.expr->type = tt_cps_call;
@@ -851,7 +851,7 @@ _cps_translate(Sly_State *ss, CPS_Expr *fix, sly_value cc,
 		t = cps_new_term();
 		t->type = tt_cps_continue;
 		t->u.cont.expr = cps_new_expr();
-		if (primop_p(s)) {
+		if (primop_p(s) != -1) {
 			t->u.cont.expr->type = tt_cps_prim;
 			t->u.cont.expr->u.prim.name = s;
 		} else {
