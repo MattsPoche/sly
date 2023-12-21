@@ -8,6 +8,7 @@ scm_value scm_module_lookup(char *name, scm_value module);
 int trampoline(scm_value cc);
 scm_value _tail_call(scm_value proc);
 void scm_heap_init(void);
+void scm_chk_heap(scm_value *cc);
 size_t mem_align_offset(size_t addr);
 size_t scm_heap_alloc(size_t sz);
 void _scm_assert(int p, char *msg, const char *func_name);

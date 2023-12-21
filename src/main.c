@@ -55,7 +55,8 @@ main(int argc, char *argv[])
 					sly_displayln(cdr(entry));
 				}
 			}
-			{
+			int compile = 1;
+			if (compile) {
 #if 1
 				// ./cbuild.sh --clean && make -k && ./sly --expand test/test.sly
 				// gcc -fPIC -shared -ggdb -o test.so test.sly.c

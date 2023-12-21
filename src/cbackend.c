@@ -118,6 +118,19 @@ emit_c_push_list(sly_value name, sly_value lst, FILE *file)
 }
 
 static void
+emit_c_push_refs(sly_value name, sly_value lst, FILE *file)
+{
+	if (null_p(lst)) {
+		return;
+	}
+	sly_value elem = car(lst);
+	emit_c_push_list(name, cdr(lst), file);
+	if (!sly_eq(name, elem)) {
+		fprintf(file, "\tpush_ref(%s);\n", symbol_to_cid(elem));
+	}
+}
+
+static void
 emit_c_pop_list(sly_value lst, FILE *file)
 {
 	if (!pair_p(lst)) {
@@ -167,11 +180,7 @@ emit_c_visit_expr(Sly_State *ss, CPS_Expr *expr, sly_value graph,
 	} break;
 	case tt_cps_primcall: {
 		sly_value args = expr->u.primcall.args;
-		while (!null_p(args)) {
-			fprintf(file, "\tpush_ref(%s);\n", symbol_to_cid(car(args)));
-			args = cdr(args);
-		}
-		//emit_c_push_list(SLY_VOID, , file);
+		emit_c_push_refs(SLY_VOID, args, file);
 		switch (primop_p(expr->u.primcall.prim)) {
 		case tt_prim_void: sly_assert(0, "unimplemented"); break;
 		case tt_prim_add: {
@@ -305,14 +314,14 @@ _cps_emit_c(Sly_State *ss, sly_value graph, sly_value k,
 			if (expr->type == tt_cps_call) {
 				if (next->type != tt_cps_ktail) {
 					sly_value vars = dictionary_ref(free_vars, next->name, SLY_NULL);
-					emit_c_push_list(SLY_VOID, vars, file);
+					emit_c_push_refs(SLY_VOID, vars, file);
 					fprintf(file, push_tmpl, "", "k");
 					fprintf(file, push_tmpl, "(scm_value)", symbol_to_cid(next->name));
 					fprintf(file, "\tk = make_closure();\n");
 				}
 				printf("k = ");
 				sly_displayln(k);
-				emit_c_push_list(SLY_VOID, expr->u.call.args, file);
+				emit_c_push_refs(SLY_VOID, expr->u.call.args, file);
 				fprintf(file, push_tmpl, "", "k");
 				fprintf(file, tail_call_tmpl, symbol_to_cid(expr->u.call.proc));
 				return;
@@ -349,6 +358,7 @@ _cps_emit_c(Sly_State *ss, sly_value graph, sly_value k,
 		sly_value name = symbol_p(kont->u.kproc.binding)
 			? symbol_get_alias(kont->u.kproc.binding) : kont->name;
 		fprintf(file, closure_tmpl, "", symbol_to_cid(k), symbol_to_cstr(name));
+		fprintf(file, "\tscm_chk_heap(&self);\n");
 		struct arity_t arity = kont->u.kproc.arity;
 		fprintf(file, chk_args_tmpl, list_len(arity.req) + 1, booltoc(arity.rest));
 		fprintf(file, pop_tmpl, "scm_value ", "k");
@@ -387,6 +397,7 @@ _cps_emit_c(Sly_State *ss, sly_value graph, sly_value k,
 	} break;
 	case tt_cps_kreceive: {
 		fprintf(file, closure_tmpl, "", symbol_to_cid(k), "");
+		fprintf(file, "\tscm_chk_heap(&self);\n");
 		struct arity_t arity = kont->u.kreceive.arity;
 		fprintf(file, chk_args_tmpl, list_len(arity.req), booltoc(arity.rest));
 		sly_assert(!booltoc(arity.rest), "unimplemented");
@@ -465,6 +476,7 @@ cps_emit_c(Sly_State *ss, sly_value graph, sly_value start,
 	}
 	fprintf(buf_stream, "\n");
 	fprintf(buf_stream, closure_tmpl, "", symbol_to_cid(start), "entry");
+	fprintf(buf_stream, "\tscm_chk_heap(&self);\n");
 	fprintf(buf_stream, chk_args_tmpl, 2LU, 0);
 	fprintf(buf_stream, pop_tmpl, "scm_value ", "k");
 	fprintf(buf_stream, pop_tmpl, "scm_value ", "imports");

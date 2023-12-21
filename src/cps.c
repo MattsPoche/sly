@@ -511,18 +511,6 @@ cps_gensym_label_name(Sly_State *ss)
 	return gensym_from_cstr(ss, "_k");
 }
 
-static sly_value
-cps_gensym_continuation_name(Sly_State *ss)
-{
-	return gensym_from_cstr(ss, "_c");
-}
-
-static sly_value
-cps_gensym_record_name(Sly_State *ss)
-{
-	return gensym_from_cstr(ss, "_r");
-}
-
 static CPS_Kont *
 cps_copy_kont(CPS_Kont *k)
 {
@@ -2192,39 +2180,6 @@ cps_opt_beta_contraction(Sly_State *ss,
 	return new_graph;
 }
 
-#if 0
-static void
-cps_box_variables(Sly_State *ss, sly_value graph, sly_value k, sly_value gvi)
-{
-	CPS_Kont *kont = cps_graph_ref(graph, k);
-	switch (kont->type) {
-	case tt_cps_kargs: {
-		CPS_Term *term = kont->u.kargs.term;
-		if (term->type == tt_cps_continue) {
-			if (list_len(kont->u.kargs.vars) == 1) {
-				sly_value var = car(kont->u.kargs.vars);
-				CPS_Var_Info *vi = GET_PTR(dictionary_ref(gvi, var, SLY_VOID));
-				if (vi && vi->updates) {
-					sly_displayln(var);
-				}
-			}
-			cps_box_variables(ss, graph, term->u.cont.k, gvi);
-		} else if (term->type == tt_cps_branch) {
-				sly_assert(0, "unimplemented");
-		} else {
-			sly_assert(0, "Error Unreachable");
-		}
-	} break;
-	case tt_cps_kreceive: {
-			cps_box_variables(ss, graph, kont->u.kreceive.k, gvi);
-	} break;
-	case tt_cps_kproc: {
-		sly_assert(0, "unimplemented");
-	} break;
-	}
-}
-#endif
-
 sly_value
 cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug)
 {
@@ -2280,6 +2235,52 @@ cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug
 	} while (CLICK_RESET());
 	return graph;
 }
+
+#if 0
+sly_value
+cps_make_tail_calls_explicit(Sly_State *ss, sly_value graph, sly_value k)
+{
+	CPS_Kont *kont = cps_graph_ref(graph, start);
+	sly_value new_graph = make_dictionary(ss);
+	switch (kont->type) {
+	case tt_cps_kargs: {
+		CPS_Term *term = kont->u.kargs.term;
+		switch (term->type) {
+		case tt_cps_continue: {
+			CPS_Expr *expr = term->u.cont.expr;
+			if (expr->type == tt_cps_call) {
+				sly_assert(0, "unimplemented");
+			} else {
+				cps_graph_set(ss, new_graph, k, kont);
+				sly_value j = cps_make_tail_calls_explicit(ss, graph, term->u.cont.k);
+				return dictionary_union(ss, new_graph, j);
+			}
+		} break;
+		case tt_cps_branch: {
+			sly_value t = cps_make_tail_calls_explicit(ss, graph, term->u.branch.kt);
+			sly_value f = cps_make_tail_calls_explicit(ss, graph, term->u.branch.kf);
+			return dictionary_union(ss, t, f);
+		} break;
+		default: sly_assert(0, "unreachable");
+		}
+	} break;
+	case tt_cps_kproc: {
+		sly_assert(0, "unimplemented");
+	} break;
+	case tt_cps_kcall: {
+		sly_assert(0, "unimplemented");
+	} break;
+	case tt_cps_kreceive: {
+		sly_assert(0, "unimplemented");
+	} break;
+	case tt_cps_ktail: {
+		sly_assert(0, "unimplemented");
+	} break;
+	default: sly_assert(0, "unreachable");
+	}
+	return graph;
+}
+#endif
 
 static sly_value
 cps_collect_free_variables_visit_expr(Sly_State *ss, CPS_Expr *expr)
@@ -2339,6 +2340,7 @@ _cps_collect_free_variables(Sly_State *ss, sly_value graph,
 			total_vars = list_union(ss, total_vars,
 									cps_collect_free_variables_visit_expr(ss, expr));
 			sly_value free_vars = SLY_NULL;
+			sly_value cont_vars = SLY_NULL;
 			if (expr->type == tt_cps_call) {
 				sly_value info = dictionary_ref(var_info, k, SLY_VOID);
 				CPS_Var_Info *vi = GET_PTR(dictionary_ref(info, expr->u.call.proc, SLY_VOID));
@@ -2361,14 +2363,16 @@ _cps_collect_free_variables(Sly_State *ss, sly_value graph,
 						free_vars = list_union(ss, kfv, free_vars);
 					}
 				}
-				sly_value tmp = _cps_collect_free_variables(ss, graph,
-															var_info,
-															SLY_NULL,
-															SLY_NULL,
-															free_info,
-															visited,
-															term->u.cont.k);
-				dictionary_set(ss, free_info, term->u.cont.k, tmp);
+				cont_vars = _cps_collect_free_variables(ss, graph,
+														var_info,
+														SLY_NULL,
+														SLY_NULL,
+														free_info,
+														visited,
+														term->u.cont.k);
+				dictionary_set(ss, free_info, term->u.cont.k, cont_vars);
+				return list_union(ss, list_subtract(ss, total_vars, local_vars),
+								  cont_vars);
 			} else if (expr->type == tt_cps_proc) {
 				sly_value kproc = expr->u.proc.k;
 				free_vars = _cps_collect_free_variables(ss, graph,
@@ -2380,6 +2384,7 @@ _cps_collect_free_variables(Sly_State *ss, sly_value graph,
 														kproc);
 				dictionary_set(ss, free_info, kproc, free_vars);
 			} else if (expr->type == tt_cps_fix) {
+				local_vars = list_union(ss, local_vars, expr->u.fix.names);
 				sly_value procs = expr->u.fix.procs;
 				while (!null_p(procs)) {
 					CPS_Expr *expr = GET_PTR(car(procs));
@@ -2387,8 +2392,8 @@ _cps_collect_free_variables(Sly_State *ss, sly_value graph,
 						sly_value kproc = expr->u.proc.k;
 						sly_value tmp = _cps_collect_free_variables(ss, graph,
 																	var_info,
-																	total_vars,
-																	local_vars,
+																	SLY_NULL,
+																	SLY_NULL,
 																	free_info,
 																	visited,
 																	kproc);
@@ -2398,15 +2403,17 @@ _cps_collect_free_variables(Sly_State *ss, sly_value graph,
 					procs = cdr(procs);
 				}
 			}
-			sly_value tmp = _cps_collect_free_variables(ss, graph,
+			if (null_p(cont_vars)) {
+				cont_vars = _cps_collect_free_variables(ss, graph,
 														var_info,
 														total_vars,
 														local_vars,
 														free_info,
 														visited,
 														term->u.cont.k);
+			}
 			free_vars = list_subtract(ss,
-									  list_union(ss, free_vars, tmp),
+									  list_union(ss, free_vars, cont_vars),
 									  local_vars);
 			return free_vars;
 		} else if (term->type == tt_cps_branch) {
@@ -2430,15 +2437,14 @@ _cps_collect_free_variables(Sly_State *ss, sly_value graph,
 		}
 	} break;
 	case tt_cps_kreceive: {
-		printf("kreceive = ");
-		sly_displayln(kont->name);
-		return _cps_collect_free_variables(ss, graph,
-										   var_info,
-										   total_vars,
-										   local_vars,
-										   free_info,
-										   visited,
-										   kont->u.kreceive.k);
+		sly_value free_vars = _cps_collect_free_variables(ss, graph,
+														  var_info,
+														  total_vars,
+														  local_vars,
+														  free_info,
+														  visited,
+														  kont->u.kreceive.k);
+		return free_vars;
 	} break;
 	case tt_cps_kproc: {
 		return _cps_collect_free_variables(ss, graph,
@@ -2472,18 +2478,6 @@ cps_collect_free_variables(Sly_State *ss, sly_value graph,
 }
 
 static sly_value
-gen_names(Sly_State *ss, sly_value lst)
-{
-	if (null_p(lst)) {
-		return SLY_NULL;
-	} else {
-		sly_value name = cps_gensym_temporary_name(ss);
-		sly_value rest = gen_names(ss, cdr(lst));
-		return cons(ss, name, rest);
-	}
-}
-
-static sly_value
 unwrap_kprocs(Sly_State *ss, sly_value procs)
 {
 	if (null_p(procs)) {
@@ -2498,410 +2492,6 @@ unwrap_kprocs(Sly_State *ss, sly_value procs)
 			return unwrap_kprocs(ss, cdr(procs));
 		}
 	}
-}
-
-static sly_value
-common_free_vars(Sly_State *ss, sly_value free_var_lookup, sly_value ks)
-{
-	if (null_p(ks)) {
-		return SLY_NULL;
-	} else {
-		sly_value vs = dictionary_ref(free_var_lookup, car(ks), SLY_NULL);
-		sly_value rest = common_free_vars(ss, free_var_lookup, cdr(ks));
-		return list_union(ss, vs, rest);
-	}
-}
-
-static CPS_Kont *
-cps_convert_fix_to_labels(Sly_State *ss, sly_value graph,
-						  struct kclosure_t *clos, sly_value clos_def,
-						  sly_value names,
-						  sly_value ks, CPS_Kont *kont)
-{
-	if (null_p(names)) {
-		return kont;
-	}
-	kont = cps_convert_fix_to_labels(ss, graph, clos,
-									 cdr(clos_def), cdr(names),
-									 null_p(ks) ? ks : cdr(ks),
-									 kont);
-	CPS_Expr *expr = cps_new_expr();
-	if (null_p(ks)) {
-		expr->type = tt_cps_values;
-		expr->u.values.args = make_list(ss, 1, car(clos_def));
-	} else {
-		expr->type = tt_cps_code;
-		expr->u.code.label = car(ks);
-	}
-	CPS_Term *term = cps_new_term();
-	term->u.cont.expr = expr;
-	term->u.cont.k = kont->name;
-	CPS_Kont *cc = cps_make_kargs(ss, cps_gensym_label_name(ss), term, SLY_NULL);
-	cps_graph_set(ss, graph, cc->name, cc);
-	kont->u.kargs.vars = make_list(ss, 1, car(names));
-	return cc;
-}
-
-static CPS_Kont *
-cps_fix_closure_offsets(Sly_State *ss, sly_value graph, sly_value record,
-						sly_value names, int offset, CPS_Kont *kont)
-{
-	if (null_p(names)) {
-		return kont;
-	}
-	kont = cps_fix_closure_offsets(ss, graph, record,
-								   cdr(names), offset+1, kont);
-	CPS_Expr *expr = cps_new_expr();
-	expr->type = tt_cps_offset;
-	expr->u.offset.record = record;
-	expr->u.offset.off = offset;
-	CPS_Term *term = cps_new_term();
-	term->u.cont.expr = expr;
-	term->u.cont.k = kont->name;
-	CPS_Kont *cc = cps_make_kargs(ss, cps_gensym_label_name(ss), term, SLY_NULL);
-	cps_graph_set(ss, graph, cc->name, cc);
-	kont->u.kargs.vars = make_list(ss, 1, car(names));
-	return cc;
-}
-
-static CPS_Kont *
-cps_unpack_closure(Sly_State *ss, sly_value graph, sly_value clos_name,
-				   sly_value clos_shares, sly_value clos_def,
-				   sly_value free_vars, CPS_Kont *kont)
-{
-	if (null_p(free_vars)) {
-		return kont;
-	}
-	kont = cps_unpack_closure(ss, graph, clos_name, clos_shares,
-							  clos_def, cdr(free_vars), kont);
-	sly_value var = car(free_vars);
-	if (!booltoc(var)) {
-		return kont;
-	}
-	CPS_Expr *expr = cps_new_expr();
-	int off = list_index_of(clos_shares, var);
-	if (off >= 0) {
-		expr->type = tt_cps_offset;
-		expr->u.offset.off = off;
-		expr->u.offset.record = clos_name;
-	} else {
-		expr->type = tt_cps_select;
-		expr->u.select.field = list_index_of(clos_def, var);
-		expr->u.select.record = clos_name;
-	}
-	CPS_Term *term = cps_new_term();
-	term->u.cont.expr = expr;
-	term->u.cont.k = kont->name;
-	CPS_Kont *cc = cps_make_kargs(ss, cps_gensym_label_name(ss), term, SLY_NULL);
-	cps_graph_set(ss, graph, cc->name, cc);
-	kont->u.kargs.vars = make_list(ss, 1, var);
-	return cc;
-}
-
-static sly_value
-cps_save_free_vars(Sly_State *ss, sly_value graph, sly_value rec_name,
-				   int field, sly_value vars, sly_value k)
-{
-	if (null_p(vars)) {
-		return k;
-	}
-	k = cps_save_free_vars(ss, graph, rec_name, field + 1, cdr(vars), k);
-	sly_value var = car(vars);
-	if (!booltoc(var)) {
-		return k;
-	}
-	CPS_Expr *expr = cps_new_expr();
-	expr->type = tt_cps_record_set;
-	expr->u.record_set.field = field;
-	expr->u.record_set.record = rec_name;
-	expr->u.record_set.val = var;
-	CPS_Term *term = cps_new_term();
-	term->u.cont.k = k;
-	term->u.cont.expr = expr;
-	CPS_Kont *kont = cps_make_kargs(ss, cps_gensym_label_name(ss), term, SLY_NULL);
-	cps_graph_set(ss, graph, kont->name, kont);
-	return kont->name;
-}
-
-static sly_value
-_cps_opt_closure_convert(Sly_State *ss, sly_value graph,
-						 struct kclosure_t *clos,
-						 sly_value free_var_lookup,
-						 sly_value free_vars, sly_value k)
-{
-	CPS_Kont *kont = cps_graph_ref(graph, k);
-	switch (kont->type) {
-	case tt_cps_kargs: {
-		CPS_Term *term = kont->u.kargs.term;
-		if (term->type == tt_cps_continue) {
-			CPS_Expr *expr = term->u.cont.expr;
-			if (expr->type == tt_cps_fix) {
-				sly_value names = expr->u.fix.names;
-				sly_value ks = unwrap_kprocs(ss, expr->u.fix.procs);
-				sly_value cfree_vars = common_free_vars(ss, free_var_lookup, ks);
-				sly_displayln(cfree_vars);
-				sly_value clos_def = list_subtract(ss, cfree_vars, names);
-				clos_def = list_append(ss, names, clos_def);
-				sly_value label_names = gen_names(ss, clos_def);
-				sly_value vars = kont->u.kargs.vars;
-				{
-					sly_value klst = ks;
-					for (int off = 0; !null_p(klst); ++off) {
-						sly_value k = car(klst);
-						struct kclosure_t c = {
-							.clos_def = clos_def,
-							.clos_shares = names,
-							.offset = off,
-							.cc_name = SLY_FALSE,
-							.kr_name = SLY_FALSE,
-							.kr_size = 0,
-						};
-						_cps_opt_closure_convert(ss, graph, &c, free_var_lookup,
-												 dictionary_ref(free_var_lookup, k, SLY_NULL),
-												 k);
-						klst = cdr(klst);
-					}
-				}
-				CPS_Kont *next = cps_graph_ref(graph, term->u.cont.k);
-				CPS_Kont *koff = cps_fix_closure_offsets(ss, graph, car(names),
-														 cdr(names), 1, next);
-				CPS_Expr *rec_expr = cps_new_expr();
-				rec_expr->type = tt_cps_record;
-				rec_expr->u.record.values = label_names;
-				CPS_Term *rec_term = cps_new_term();
-				rec_term->u.cont.expr = rec_expr;
-				rec_term->u.cont.k = koff->name;
-				koff->u.kargs.vars = make_list(ss, 1, car(names));
-				CPS_Kont *krecord = cps_make_kargs(ss, cps_gensym_label_name(ss),
-												   rec_term, SLY_NULL);
-				cps_graph_set(ss, graph, krecord->name, krecord);
-				CPS_Kont *klabels =
-					cps_convert_fix_to_labels(ss, graph, clos, clos_def,
-											  label_names, ks, krecord);
-				klabels->u.kargs.vars = vars;
-				k = klabels->name;
-				term = koff->u.kargs.term;
-			} else if (expr->type == tt_cps_proc) {
-				sly_assert(0, "unimplemented");
-			} else if (expr->type == tt_cps_call) {
-				sly_value kcode = term->u.cont.k;
-				sly_value code_name = cps_gensym_temporary_name(ss);
-				sly_value k_free_vars = dictionary_ref(free_var_lookup, kcode, SLY_NULL);
-				if (!booltoc(clos->kr_name)) {
-					clos->kr_name = cps_gensym_record_name(ss);
-				}
-				sly_value kdef = cons(ss, code_name, cons(ss, clos->cc_name, k_free_vars));
-				{
-					int len = list_len(kdef);
-					if (len > clos->kr_size) {
-						clos->kr_size = len;
-					}
-				}
-				sly_value proc = expr->u.call.proc;
-				sly_value args = expr->u.call.args;
-				CPS_Expr *select = cps_new_expr();
-				select->type = tt_cps_select;
-				select->u.select.record = proc;
-				select->u.select.field = 0;
-				term->u.cont.expr = select;
-				CPS_Term *new_term = cps_new_term();
-				new_term->u.cont.expr = expr;
-				new_term->u.cont.k = term->u.cont.k;
-				sly_value kptr = cps_gensym_temporary_name(ss);
-				CPS_Kont *kcall = cps_make_kargs(ss, cps_gensym_label_name(ss),
-												 new_term, make_list(ss, 1, kptr));
-				cps_graph_set(ss, graph, kcall->name, kcall);
-				{
-					CPS_Kont *next = cps_graph_ref(graph, new_term->u.cont.k);
-					if (next->type == tt_cps_ktail) {
-						expr->u.call.args = cons(ss, proc,
-												 cons(ss, clos->cc_name,
-													  args));
-						expr->u.call.proc = kptr;
-						term->u.cont.k = kcall->name;
-						return k;
-					}
-				}
-				expr->u.call.args = cons(ss, proc,
-										 cons(ss, clos->kr_name,
-											  args));
-				expr->u.call.proc = kptr;
-				term->u.cont.k = kcall->name;
-				k = cps_save_free_vars(ss, graph, clos->kr_name, 0, kdef, k);
-				CPS_Kont *new_kont = cps_graph_ref(graph, k);
-				CPS_Kont *code_kont;
-				sly_value vars = kont->u.kargs.vars;
-				kont->u.kargs.vars = SLY_NULL;
-				{
-					CPS_Expr *expr = cps_new_expr();
-					expr->type = tt_cps_code;
-					expr->u.code.label = kcode;
-					CPS_Term *term = cps_new_term();
-					term->u.cont.expr = expr;
-					term->u.cont.k = k;
-					code_kont = cps_make_kargs(ss, cps_gensym_label_name(ss),
-											   term, vars);
-					cps_graph_set(ss, graph, code_kont->name, code_kont);
-					k = code_kont->name;
-				}
-				new_kont->u.kargs.vars = make_list(ss, 1, code_name);
-				CPS_Kont *krec = cps_graph_ref(graph, kcode);
-				/* NOTE: `Standard' function calls should always be followed by a
-				 * kreceive. The kreceive is used to receive the continuation closure,
-				 * which is unpacked to restore the calling environment.
-				 */
-				if (krec->type == tt_cps_kreceive) {
-					struct arity_t *arity = &krec->u.kreceive.arity;
-					size_t len = list_len(arity->req);
-					if (len > 1) {
-						arity->req = cons(ss, car(arity->req),
-										  cons(ss, clos->kr_name,
-											   cdr(arity->req)));
-					} else {
-						arity->req = make_list(ss, 2, car(arity->req), clos->kr_name);
-					}
-					CPS_Kont *next = cps_graph_ref(graph, krec->u.kreceive.k);
-					next = cps_unpack_closure(ss, graph, clos->kr_name,
-											  SLY_NULL, kdef, cdr(kdef), next);
-					next->u.kargs.vars = arity->req;
-					krec->u.kreceive.k = next->name;
-				}
-				term = new_term;
-			} else if (expr->type != tt_cps_select
-					   && expr->type != tt_cps_offset) {
-				CPS_Kont *next = cps_graph_ref(graph, term->u.cont.k);
-				if (next->type == tt_cps_kargs
-					&& list_len(next->u.kargs.vars) == 1
-					&& list_member(car(next->u.kargs.vars), free_vars)) {
-					sly_value var = car(next->u.kargs.vars);
-					sly_value tmp = cps_gensym_temporary_name(ss);
-					next->u.kargs.vars = make_list(ss, 1, tmp);
-					CPS_Expr *expr = cps_new_expr();
-					expr->type = tt_cps_set;
-					expr->u.set.var = var;
-					expr->u.set.val = tmp;
-					CPS_Term *next_term = next->u.kargs.term;
-					next->u.kargs.term = cps_new_term();
-					next->u.kargs.term->u.cont.expr = expr;
-					CPS_Kont *knew = cps_make_kargs(ss, cps_gensym_label_name(ss),
-													next_term, SLY_NULL);
-					cps_graph_set(ss, graph, knew->name, knew);
-					next->u.kargs.term->u.cont.k = knew->name;
-				}
-			}
-			term->u.cont.k =
-				_cps_opt_closure_convert(ss, graph, clos,
-										 free_var_lookup,
-										 free_vars, term->u.cont.k);
-		} else if (term->type == tt_cps_branch) {
-			term->u.branch.kt =
-				_cps_opt_closure_convert(ss, graph, clos,
-										 free_var_lookup,
-										 free_vars, term->u.branch.kt);
-			term->u.branch.kf =
-				_cps_opt_closure_convert(ss, graph, clos,
-										 free_var_lookup,
-										 free_vars, term->u.branch.kf);
-		}
-	} break;
-	case tt_cps_kreceive: {
-		kont->u.kreceive.k =
-			_cps_opt_closure_convert(ss, graph, clos,
-									 free_var_lookup,
-									 free_vars, kont->u.kreceive.k);
-	} break;
-	case tt_cps_kproc: {
-		struct arity_t *a = &kont->u.kproc.arity;
-		sly_value clos_name = cps_gensym_record_name(ss);
-		sly_value cc_name = cps_gensym_continuation_name(ss);
-		clos->cc_name = cc_name;
-		sly_value clos_shares = clos->clos_shares;
-		sly_value clos_def = clos->clos_def;
-		int offset = clos->offset;
-		a->req = cons(ss, clos_name,
-					  cons(ss, cc_name,
-						   a->req));
-		CPS_Kont *kargs = cps_graph_ref(graph, kont->u.kproc.body);
-		kargs->u.kargs.vars = cons(ss, clos_name,
-								   cons(ss, cc_name,
-										kargs->u.kargs.vars));
-		CPS_Term *term = kargs->u.kargs.term;
-		CPS_Expr *expr = term->u.cont.expr;
-		if (!null_p(free_vars)) {
-			if (offset > 0) {
-				CPS_Expr *off_clos = cps_new_expr();
-				off_clos->type = tt_cps_offset;
-				off_clos->u.offset.off = -offset;
-				off_clos->u.offset.record = clos_name;
-				CPS_Term *new_term = cps_new_term();
-				new_term->u.cont.expr = expr;
-				new_term->u.cont.k = term->u.cont.k;
-				term->u.cont.expr = off_clos;
-				clos_name = cps_gensym_record_name(ss);
-				CPS_Kont *koff = cps_make_kargs(ss, cps_gensym_label_name(ss),
-												new_term, make_list(ss, 1, clos_name));
-				term->u.cont.k = koff->name;
-				cps_graph_set(ss, graph, koff->name, koff);
-				if (!null_p(free_vars)) {
-					CPS_Kont *next = cps_graph_ref(graph, term->u.cont.k);
-					sly_value vars = next->u.kargs.vars;
-					next = cps_unpack_closure(ss, graph, clos_name, clos_shares,
-											  clos_def, free_vars, next);
-					next->u.kargs.vars = vars;
-					term->u.cont.k = next->name;
-				}
-			} else {
-				sly_value vars = kargs->u.kargs.vars;
-				CPS_Kont *next = cps_unpack_closure(ss, graph, clos_name, clos_shares,
-													clos_def, free_vars, kargs);
-				next->u.kargs.vars = vars;
-				kont->u.kproc.body = next->name;
-			}
-		}
-		kont->u.kproc.body =
-			_cps_opt_closure_convert(ss, graph, clos,
-									 free_var_lookup,
-									 free_vars, kont->u.kproc.body);
-		if (clos->kr_size > 0) {
-			CPS_Kont *kr = cps_make_kargs(ss, cps_gensym_label_name(ss), term,
-										  make_list(ss, 1, clos->kr_name));
-			cps_graph_set(ss, graph, kr->name, kr);
-			CPS_Term *new_term = cps_new_term();
-			new_term->u.cont.k = kr->name;
-			kargs->u.kargs.term = new_term;
-			CPS_Expr *rec = cps_new_expr();
-			rec->type = tt_cps_make_record;
-			rec->u.make_record.nfields = clos->kr_size;
-			new_term->u.cont.expr = rec;
-		}
-	} break;
-	case tt_cps_ktail: break;
-	default: sly_assert(0, "Unreachable");
-	}
-	return k;
-}
-
-sly_value
-cps_opt_closure_convert(Sly_State *ss, sly_value graph,
-						struct kclosure_t *clos,
-						sly_value free_var_lookup,
-						sly_value free_vars, sly_value k)
-{
-	sly_value nk = _cps_opt_closure_convert(ss, graph, clos, free_var_lookup, free_vars, k);
-	if (clos->kr_size) {
-		CPS_Expr *expr = cps_new_expr();
-		expr->type = tt_cps_make_record;
-		expr->u.make_record.nfields = clos->kr_size;
-		CPS_Term *term = cps_new_term();
-		term->u.cont.expr = expr;
-		term->u.cont.k = nk;
-		CPS_Kont *kont = cps_make_kargs(ss, cps_gensym_label_name(ss), term, SLY_NULL);
-		cps_graph_set(ss, graph, kont->name, kont);
-		CPS_Kont *next = cps_graph_ref(graph, nk);
-		next->u.kargs.vars = make_list(ss, 1, clos->kr_name);
-		return kont->name;
-	}
-	return nk;
 }
 
 static void

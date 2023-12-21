@@ -19,14 +19,15 @@ static Mem_Pool mp0 = {0};
 static Mem_Pool mp1 = {0};
 static Mem_Pool *heap_working = &mp0;
 static Mem_Pool *heap_free = &mp1;
-static size_t prev_saved = 0;
+static size_t gc_threashold = 0;
+static size_t bytes_allocated = 0;
+static size_t gc_cycles = 0;
 static jmp_buf exit_point;
 static scm_value exception_handler;
 static scm_value **intern_tbl;
 static size_t intern_tbl_len = 0;
 static scm_value *interned;
 static struct constant *constants;
-static size_t bytes_allocated = 0;
 
 scm_value
 _tail_call(scm_value proc)
@@ -34,7 +35,10 @@ _tail_call(scm_value proc)
 	if (BOX_P(proc)) {
 		proc = box_ref(proc);
 	}
-	scm_assert(PROCEDURE_P(proc), "type error, expected procedure");
+	if (!PROCEDURE_P(proc)) {
+		printf("\n#x%lx\n", proc);
+		scm_assert(PROCEDURE_P(proc), "type error, expected procedure");
+	}
 	if (arg_stack.top == 0) {
 		push_arg(SCM_VOID);
 	}
@@ -45,9 +49,9 @@ void
 scm_heap_init(void)
 {
 	mp0.sz = HEAP_PAGE_SZ;
-	mp0.start = malloc(HEAP_PAGE_SZ);
-	scm_assert(mp0.start != NULL, "OS is too greedy :(");
-	mp0.idx += sizeof(scm_value);
+	mp0.buf = malloc(HEAP_PAGE_SZ);
+	scm_assert(mp0.buf != NULL, "OS is too greedy :(");
+	mp0.idx = sizeof(scm_value);
 }
 
 size_t
@@ -62,13 +66,142 @@ scm_heap_alloc(size_t sz)
 	sz += mem_align_offset(sz);
 	if (sz >= (heap_working->sz - heap_working->idx)) {
 		heap_working->sz *= 2;
-		heap_working->start = realloc(heap_working->start,
-									  heap_working->sz);
+		heap_working->buf = realloc(heap_working->buf,
+									heap_working->sz);
 	}
 	size_t i = heap_working->idx;
 	heap_working->idx += sz;
 	bytes_allocated += sz;
 	return i;
+}
+
+static void
+scm_collect_value(scm_value *vptr)
+{
+	if (NUMBER_P(*vptr) || BOOLEAN_P(*vptr)
+		|| CHAR_P(*vptr) || NULL_P(*vptr)
+		|| VOID_P(*vptr) || FUNCTION_P(*vptr)) {
+		return;
+	}
+	u32 fref;
+	if ((fref = *((u32 *)GET_WORKING_PTR(*vptr)))) {
+		*vptr = (*vptr ^ (*vptr & ((1LU << 32) - 1))) | fref;
+		return;
+	}
+	size_t sz = 0;
+	fref = heap_free->idx;
+	switch ((enum type_tag)(TYPEOF(*vptr) & 0xf)) {
+	case tt_bigint: {
+		scm_assert(0, "unimplemented");
+	} break;
+	case tt_pair: {
+		Pair *p = GET_WORKING_PTR(*vptr);
+		sz = sizeof(*p);
+		heap_free->idx += sz;
+		scm_collect_value(&p->car);
+		scm_collect_value(&p->cdr);
+	} break;
+	case tt_symbol: {
+		Symbol *s = GET_WORKING_PTR(*vptr);
+		sz = sizeof(*s) + s->len;
+		sz += mem_align_offset(sz);
+		heap_free->idx += sz;
+	} break;
+	case tt_bytevector: {
+		Bytevector *b = GET_WORKING_PTR(*vptr);
+		sz = sizeof(*b) + b->len;
+		sz += mem_align_offset(sz);
+		heap_free->idx += sz;
+	} break;
+	case tt_string: {
+		String *s = GET_WORKING_PTR(*vptr);
+		sz = sizeof(*s) + s->len;
+		sz += mem_align_offset(sz);
+		heap_free->idx += sz;
+	} break;
+	case tt_vector: {
+		Vector *v = GET_WORKING_PTR(*vptr);
+		sz = sizeof(*v) + (v->len * sizeof(scm_value));
+		heap_free->idx += sz;
+		for (u32 i = 0; i < v->len; ++i) {
+			scm_collect_value(&v->elems[i]);
+		}
+	} break;
+	case tt_record: {
+		Record *rec = GET_WORKING_PTR(*vptr);
+		sz = sizeof(*rec) + (rec->len * sizeof(scm_value));
+		heap_free->idx += sz;
+		scm_collect_value(&rec->type);
+		for (u32 i = 0; i < rec->len; ++i) {
+			scm_collect_value(&rec->elems[i]);
+		}
+	} break;
+	case tt_box: {
+		Box *box = GET_WORKING_PTR(*vptr);
+		sz = sizeof(*box);
+		heap_free->idx += sz;
+		scm_collect_value(&box->value);
+	} break;
+	case tt_closure: {
+		Closure *clos = GET_WORKING_PTR(*vptr);
+		sz = sizeof(*clos) + (clos->nfree_vars * sizeof(scm_value));
+		heap_free->idx += sz;
+		for (u32 i = 0; i < clos->nfree_vars; ++i) {
+			scm_collect_value(&clos->free_vars[i]);
+		}
+	} break;
+	default: {
+		scm_assert(0, "unimplemented");
+	} break;
+	}
+	memcpy(&heap_free->buf[fref],
+		   GET_WORKING_PTR(*vptr),
+		   sz);
+	*((u32 *)GET_WORKING_PTR(*vptr)) = fref;
+	*vptr = (*vptr ^ (*vptr & ((1LU << 32) - 1))) | fref;
+}
+
+static void
+scm_gc(scm_value *cc)
+{
+	/* ROOTS:
+	 * intern_tbl
+	 * cc
+	 * arg_stack
+	 */
+	heap_free->idx = sizeof(scm_value);
+	heap_free->sz = heap_working->sz;
+	heap_free->buf = malloc(heap_free->sz);
+	for (size_t i = 0; i < intern_tbl_len; ++i) {
+		scm_value *interned = intern_tbl[i];
+		size_t len = interned[0];
+		for (size_t j = 1; j < len+1; ++j) {
+			scm_collect_value(&interned[j]);
+		}
+	}
+	for (size_t i = 0; i < arg_stack.top; ++i) {
+		scm_collect_value(&arg_stack.stk[i]);
+	}
+	scm_collect_value(cc);
+	void *tmp = heap_working;
+	heap_working = heap_free;
+	heap_free = tmp;
+	free(heap_free->buf);
+	heap_free->buf = NULL;
+	heap_free->idx = 0;
+	heap_free->sz = 0;
+	gc_threashold = heap_working->idx;
+}
+
+void
+scm_chk_heap(scm_value *cc)
+{
+	if (gc_threashold == 0) {
+		gc_threashold = heap_working->idx;
+	} else if (heap_working->idx > (gc_threashold + (gc_threashold / 2))) {
+		gc_cycles++;
+		scm_gc(cc);
+	}
 }
 
 void
@@ -178,7 +311,7 @@ make_constant(size_t idx)
 	if ((c = interned[idx])) {
 		return c;
 	}
-	c = init_constant(constants[idx]);
+	c = init_constant(constants[idx-1]);
 	interned[idx] = c;
 	return c;
 }
@@ -192,16 +325,16 @@ load_interned_constant(size_t idx)
 scm_value *
 scm_intern_constants(struct constant *c, size_t len)
 {
-	interned = calloc(len, sizeof(*interned));
+	interned = calloc(len+1, sizeof(*interned));
+	interned[0] = len;
 	constants = c;
 	intern_tbl_len++;
 	intern_tbl = realloc(intern_tbl, sizeof(*intern_tbl) * intern_tbl_len);
 	intern_tbl[intern_tbl_len-1] = interned;
-	scm_assert(interned != NULL, "malloc failed");
-	for (size_t i = 0; i < len; ++i) {
+	for (size_t i = 1; i < len+1; ++i) {
 		interned[i] = make_constant(i);
 	}
-	return interned;
+	return interned+1;
 }
 
 scm_value
@@ -1261,5 +1394,10 @@ trampoline(scm_value cc)
 	while (ext == 0) {
 		cc = procedure_fn(cc)(cc);
 	}
+	printf("\n====================================\n");
+	printf("DEBUG:\n");
+	printf("bytes-allocated = %zu\n", bytes_allocated);
+	printf("bytes-used = %zu\n", heap_working->idx);
+	printf("gc-cycles = %zu\n", gc_cycles);
 	return ext;
 }

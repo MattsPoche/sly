@@ -27,7 +27,10 @@
 #define TYPEOF(value) (value >> 48)
 #define GET_FN_PTR(value) ((klabel_t)((value) & ((1LU << 48) - 1)))
 #define GET_PTR(value) \
-	((void *)(((value) & ((1LU << 32) - 1)) + heap_working->start))
+	((void *)(((value) & ((1LU << 32) - 1)) + heap_working->buf))
+#define GET_WORKING_PTR(value) GET_PTR(value)
+#define GET_FREE_PTR(value) \
+	((void *)(((value) & ((1LU << 32) - 1)) + heap_free->buf))
 #define GET_INTEGRAL(value)  ((i32)(value & ((1LU << 32) - 1)))
 #define NULL_P(value) ((value) == SCM_NULL)
 #define VOID_P(value) ((value) == SCM_VOID)
@@ -165,7 +168,7 @@ typedef struct _static_list {
 typedef struct _mem_pool {
 	size_t sz;
 	size_t idx;
-	u8 *start;
+	u8 *buf;
 } Mem_Pool;
 
 union f2u {f64 f; u64 u;};

@@ -260,8 +260,6 @@ sly_value cps_collect_var_info(Sly_State *ss, sly_value graph, sly_value global_
 sly_value cps_collect_free_variables(Sly_State *ss, sly_value graph,
 									 sly_value var_info, sly_value k);
 sly_value cps_opt_contraction_phase(Sly_State *ss, sly_value graph, sly_value k, int debug);
-sly_value cps_opt_closure_convert(Sly_State *ss, sly_value graph, struct kclosure_t *clos,
-								  sly_value free_var_lookup, sly_value free_vars, sly_value k);
 void cps_init_primops(Sly_State *ss);
 sly_value cps_translate(Sly_State *ss, sly_value cc, sly_value graph, sly_value form);
 void cps_display(Sly_State *ss, sly_value graph, sly_value k);
