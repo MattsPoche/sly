@@ -569,25 +569,32 @@ _cps_translate(Sly_State *ss, CPS_Expr *fix, sly_value cc,
 				sly_value value = CAR(CDR(rest));
 				sly_value kname = cps_gensym_label_name(ss);
 				sly_value kk = _cps_translate(ss, fix, kname, graph, value);
-				/* if ((syntax_pair_p(value) || pair_p(value)) */
-				/* 	&& identifier_p(CAR(value)) */
-				/* 	&& symbol_eq(strip_syntax(CAR(value)), SYM_LAMBDA)) { */
+				if ((syntax_pair_p(value) || pair_p(value))
+					&& identifier_p(CAR(value))
+					&& symbol_eq(strip_syntax(CAR(value)), SYM_LAMBDA)) {
 					CPS_Kont *kont = cps_graph_ref(graph, kk);
 					fix->u.fix.names = cons(ss, name, fix->u.fix.names);
 					CPS_Expr *expr = kont->u.kargs.term->u.cont.expr;
 					fix->u.fix.procs = cons(ss, (sly_value)expr, fix->u.fix.procs);
 					return cc;
-				/* } */
-				/* t = cps_new_term(); */
-				/* t->type = tt_cps_continue; */
-				/* t->u.cont.expr = cps_new_expr(); */
-				/* t->u.cont.expr->type = tt_cps_values; */
-				/* sly_value args = make_list(ss, 1, name); */
-				/* t->u.cont.expr->u.values.args = args; */
-				/* t->u.cont.k = cc; */
-				/* k = cps_make_kargs(ss, kname, t, args); */
-				/* cps_graph_set(ss, graph, kname, k); */
-				/* return kk; */
+				}
+				{
+					CPS_Expr *expr = cps_new_expr();
+					expr->type = tt_cps_box;
+					expr->u.box.val = SLY_VOID;
+					fix->u.fix.names = cons(ss, name, fix->u.fix.names);
+					fix->u.fix.procs = cons(ss, (sly_value)expr, fix->u.fix.procs);
+				}
+				t = cps_new_term();
+				t->type = tt_cps_continue;
+				t->u.cont.expr = cps_new_expr();
+				t->u.cont.expr->type = tt_cps_values;
+				sly_value args = make_list(ss, 1, name);
+				t->u.cont.expr->u.values.args = args;
+				t->u.cont.k = cc;
+				k = cps_make_kargs(ss, kname, t, args);
+				cps_graph_set(ss, graph, kname, k);
+				return kk;
 			} else if (symbol_eq(strip_syntax(fst), SYM_SET)) {
 				sly_value name = strip_syntax(CAR(rest));
 				sly_value kname = cps_gensym_label_name(ss);
@@ -1504,6 +1511,21 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 			}
 			nk = new_kont->u.kargs.term->u.cont.k;
 			next = cps_graph_ref(graph, nk);
+			/* if (expr->type == tt_cps_values */
+			/* 	&& list_len(expr->u.values.args) == 1 */
+			/* 	&& next->type == tt_cps_kargs */
+			/* 	&& list_len(next->u.kargs.vars) == 1) { */
+			/* 	sly_value var = car(next->u.kargs.vars); */
+			/* 	CPS_Var_Info *vi = GET_PTR(dictionary_ref(info, var, SLY_VOID)); */
+			/* 	if (vi == NULL) { */
+			/* 		printf("vi is null ("); */
+			/* 		sly_display(var, 1); */
+			/* 		printf(")\n"); */
+			/* 	} */
+			/* 	if (vi && vi->binding->type == tt_cps_box) { */
+			/* 		printf("HELLO\n"); */
+			/* 	} */
+			/* } */
 			if (next->type == tt_cps_kreceive
 				&& list_len(next->u.kreceive.arity.req) == 1
 				&& next->u.kreceive.arity.rest == SLY_FALSE
@@ -1770,6 +1792,27 @@ cps_opt_resolve_aliases(Sly_State *ss,
 					cps_map_aliases(ss, info, expr->u.primcall.args);
 			} break;
 			case tt_cps_values: {
+				CPS_Kont *next = cps_graph_ref(graph, term->u.cont.k);
+				if (next->type == tt_cps_kargs
+					&& list_len(next->u.kargs.vars) == 1
+					&& list_len(expr->u.values.args) == 1) {
+					sly_value val = car(expr->u.values.args);
+					sly_value var = car(next->u.kargs.vars);
+					CPS_Var_Info *vi_val = GET_PTR(dictionary_ref(info, val, SLY_VOID));
+					CPS_Var_Info *vi_var = GET_PTR(dictionary_ref(info, var, SLY_VOID));
+					printf("HERE\n");
+					sly_displayln(val);
+					sly_displayln(var);
+					printf("vi not null (%d, %d)\n",
+						   vi_val->binding->type,
+						   vi_var->binding->type);
+
+					/* if (vi && vi->binding->type == tt_cps_box) { */
+					/* 	printf("HERE\n"); */
+					/* } */
+				}
+
+
 				expr->u.values.args =
 					cps_map_aliases(ss, info, expr->u.values.args);
 			} break;
@@ -2747,6 +2790,10 @@ cps_display_visit_expr(Sly_State *ss, CPS_Expr *expr)
 			} else if (p->type == tt_cps_const) {
 				printf(" (const ");
 				sly_display(p->u.constant.value, 1);
+				printf(")");
+			} else if (p->type == tt_cps_box) {
+				printf(" (box ");
+				sly_display(p->u.box.val, 1);
 				printf(")");
 			} else {
 				printf(" TYPE %d", p->type);
