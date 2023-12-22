@@ -57,6 +57,7 @@ enum core_form {
 	cf_string_ref,
 	cf_string_eq,
 	cf_display,
+	cf_write,
 	cf_newline,
 	CORE_FORM_COUNT,
 };
@@ -103,6 +104,7 @@ static char *core_form_names[CORE_FORM_COUNT] = {
 	[cf_string_ref] = "string-ref",
 	[cf_string_eq] = "string=?",
 	[cf_display] = "display",
+	[cf_write] = "write",
 	[cf_newline] = "newline",
 };
 

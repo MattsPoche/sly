@@ -1,8 +1,17 @@
-(define (loop i)
-  (if (< i 10)
-	  (begin
-		(display i)
-		(newline)
-		(loop (+ i 1)))
-	  (display "END\n")))
-(loop 1)
+(define (pair x y)
+  (lambda (f) (f x y)))
+
+(define (fst p)
+  (p (lambda (x y) x)))
+
+(define (snd p)
+  (p (lambda (x y) y)))
+
+(define p1 (pair 'hello 'world))
+(define p2 (pair 'foo 'bar))
+
+(display (fst p1)) (newline)
+(display (snd p1)) (newline)
+
+(display (fst p2)) (newline)
+(display (snd p2)) (newline)

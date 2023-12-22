@@ -55,15 +55,14 @@ main(int argc, char *argv[])
 					sly_displayln(cdr(entry));
 				}
 			}
-			int compile = 1;
-			if (compile) {
+			{
 #if 1
 				// ./cbuild.sh --clean && make -k && ./sly --expand test/test.sly
 				// gcc -fPIC -shared -ggdb -o test.so test.sly.c
 				FILE *file = fopen("test.sly.c", "w");
 				cps_emit_c(&ss, graph, entry, free_var_lookup, file, 1);
 				fclose(file);
-				int r = system("gcc -fPIC -c -ggdb -o scheme/scm_runtime.o scheme/scm_runtime.c");
+				int r = system("./scheme/build_runtime.sh -s");
 				sly_assert(r == 0, "compile error");
 				r = system("gcc -fPIC -shared -ggdb -o test.so test.sly.c scheme/scm_runtime.o");
 				sly_assert(r == 0, "compile error");
@@ -87,7 +86,7 @@ main(int argc, char *argv[])
 				FILE *file = fopen("test.sly.c", "w");
 				cps_emit_c(&ss, graph, entry, free_var_lookup, file, 0);
 				fclose(file);
-				int r = system("gcc -c -ggdb -o scheme/scm_runtime.o scheme/scm_runtime.c");
+				int r = system("./scheme/build_runtime.sh");
 				sly_assert(r == 0, "compile error");
 				r = system("gcc -o test.e test.sly.c scheme/scm_runtime.o");
 				sly_assert(r == 0, "compile error");

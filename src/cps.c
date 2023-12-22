@@ -578,16 +578,16 @@ _cps_translate(Sly_State *ss, CPS_Expr *fix, sly_value cc,
 					fix->u.fix.procs = cons(ss, (sly_value)expr, fix->u.fix.procs);
 					return cc;
 				/* } */
-				t = cps_new_term();
-				t->type = tt_cps_continue;
-				t->u.cont.expr = cps_new_expr();
-				t->u.cont.expr->type = tt_cps_values;
-				sly_value args = make_list(ss, 1, name);
-				t->u.cont.expr->u.values.args = args;
-				t->u.cont.k = cc;
-				k = cps_make_kargs(ss, kname, t, args);
-				cps_graph_set(ss, graph, kname, k);
-				return kk;
+				/* t = cps_new_term(); */
+				/* t->type = tt_cps_continue; */
+				/* t->u.cont.expr = cps_new_expr(); */
+				/* t->u.cont.expr->type = tt_cps_values; */
+				/* sly_value args = make_list(ss, 1, name); */
+				/* t->u.cont.expr->u.values.args = args; */
+				/* t->u.cont.k = cc; */
+				/* k = cps_make_kargs(ss, kname, t, args); */
+				/* cps_graph_set(ss, graph, kname, k); */
+				/* return kk; */
 			} else if (symbol_eq(strip_syntax(fst), SYM_SET)) {
 				sly_value name = strip_syntax(CAR(rest));
 				sly_value kname = cps_gensym_label_name(ss);

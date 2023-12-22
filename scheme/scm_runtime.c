@@ -150,8 +150,16 @@ scm_collect_value(scm_value *vptr)
 			scm_collect_value(&clos->free_vars[i]);
 		}
 	} break;
+	case tt_inf:
+	case tt_void:
+	case tt_bool:
+	case tt_char:
+	case tt_int:
+	case tt_function:
+	case TT_COUNT:
+	case tt_float:
 	default: {
-		scm_assert(0, "unimplemented");
+		scm_assert(0, "Unreachable");
 	} break;
 	}
 	memcpy(&heap_free->buf[fref],
@@ -164,11 +172,6 @@ scm_collect_value(scm_value *vptr)
 static void
 scm_gc(scm_value *cc)
 {
-	/* ROOTS:
-	 * intern_tbl
-	 * cc
-	 * arg_stack
-	 */
 	heap_free->idx = sizeof(scm_value);
 	heap_free->sz = heap_working->sz;
 	heap_free->buf = malloc(heap_free->sz);
@@ -287,13 +290,16 @@ init_constant(struct constant cnst)
 	case tt_vector: {
 		v = init_vector(cnst.u.as_ptr);
 	} break;
-	case tt_record: {
-		scm_assert(0, "unimplemented");
-	} break;
 	case tt_box: {
 		v = make_constant(cnst.u.as_uint);
 	} break;
-	case tt_closure: {
+	case tt_void: {
+		v = SCM_VOID;
+	} break;
+	case tt_record:
+	case tt_closure:
+	case tt_bigint:
+	case tt_function: {
 		scm_assert(0, "unimplemented");
 	} break;
 	case TT_COUNT:
@@ -568,7 +574,7 @@ primop_cons(void)
 }
 
 scm_value
-prim_cons(scm_value self)
+prim_cons(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_cons());
@@ -586,7 +592,7 @@ primop_car(void)
 }
 
 scm_value
-prim_car(scm_value self)
+prim_car(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_car());
@@ -604,10 +610,50 @@ primop_cdr(void)
 }
 
 scm_value
-prim_cdr(scm_value self)
+prim_cdr(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_cdr());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_set_car(void)
+{
+	scm_assert(chk_args(2, 0), "arity error");
+	scm_value pair = pop_arg();
+	scm_value val = pop_arg();
+	scm_assert(PAIR_P(pair), "type error expected <pair>");
+	Pair *p = GET_PTR(pair);
+	p->car = val;
+	return SCM_VOID;
+}
+
+scm_value
+prim_set_car(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_set_car());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_set_cdr(void)
+{
+	scm_assert(chk_args(2, 0), "arity error");
+	scm_value pair = pop_arg();
+	scm_value val = pop_arg();
+	scm_assert(PAIR_P(pair), "type error expected <pair>");
+	Pair *p = GET_PTR(pair);
+	p->cdr = val;
+	return SCM_VOID;
+}
+
+scm_value
+prim_set_cdr(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_set_cdr());
 	TAIL_CALL(k);
 }
 
@@ -627,7 +673,7 @@ primop_vector(void)
 }
 
 scm_value
-prim_vector(scm_value self)
+prim_vector(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_vector());
@@ -635,7 +681,7 @@ prim_vector(scm_value self)
 }
 
 scm_value
-prim_void(scm_value self)
+prim_void(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(SCM_VOID);
@@ -643,7 +689,7 @@ prim_void(scm_value self)
 }
 
 scm_value
-prim_boolean_p(scm_value self)
+prim_boolean_p(UNUSED_ATTR scm_value self)
 {
 	scm_assert(chk_args(2, 0), "arity error");
 	scm_value k = pop_arg();
@@ -652,7 +698,7 @@ prim_boolean_p(scm_value self)
 }
 
 scm_value
-prim_char_p(scm_value self)
+prim_char_p(UNUSED_ATTR scm_value self)
 {
 	scm_assert(chk_args(2, 0), "arity error");
 	scm_value k = pop_arg();
@@ -661,7 +707,7 @@ prim_char_p(scm_value self)
 }
 
 scm_value
-prim_null_p(scm_value self)
+prim_null_p(UNUSED_ATTR scm_value self)
 {
 	scm_assert(chk_args(2, 0), "arity error");
 	scm_value k = pop_arg();
@@ -670,7 +716,7 @@ prim_null_p(scm_value self)
 }
 
 scm_value
-prim_pair_p(scm_value self)
+prim_pair_p(UNUSED_ATTR scm_value self)
 {
 	scm_assert(chk_args(2, 0), "arity error");
 	scm_value k = pop_arg();
@@ -679,7 +725,7 @@ prim_pair_p(scm_value self)
 }
 
 scm_value
-prim_procedure_p(scm_value self)
+prim_procedure_p(UNUSED_ATTR scm_value self)
 {
 	scm_assert(chk_args(2, 0), "arity error");
 	scm_value k = pop_arg();
@@ -688,7 +734,7 @@ prim_procedure_p(scm_value self)
 }
 
 scm_value
-prim_symbol_p(scm_value self)
+prim_symbol_p(UNUSED_ATTR scm_value self)
 {
 	scm_assert(chk_args(2, 0), "arity error");
 	scm_value k = pop_arg();
@@ -697,7 +743,7 @@ prim_symbol_p(scm_value self)
 }
 
 scm_value
-prim_bytevector_p(scm_value self)
+prim_bytevector_p(UNUSED_ATTR scm_value self)
 {
 	scm_assert(chk_args(2, 0), "arity error");
 	scm_value k = pop_arg();
@@ -706,7 +752,7 @@ prim_bytevector_p(scm_value self)
 }
 
 scm_value
-prim_number_p(scm_value self)
+prim_number_p(UNUSED_ATTR scm_value self)
 {
 	scm_assert(chk_args(2, 0), "arity error");
 	scm_value k = pop_arg();
@@ -715,7 +761,7 @@ prim_number_p(scm_value self)
 }
 
 scm_value
-prim_string_p(scm_value self)
+prim_string_p(UNUSED_ATTR scm_value self)
 {
 	scm_assert(chk_args(1, 0), "arity error");
 	scm_value k = pop_arg();
@@ -724,7 +770,7 @@ prim_string_p(scm_value self)
 }
 
 scm_value
-prim_vector_p(scm_value self)
+prim_vector_p(UNUSED_ATTR scm_value self)
 {
 	scm_assert(chk_args(2, 0), "arity error");
 	scm_value k = pop_arg();
@@ -733,7 +779,7 @@ prim_vector_p(scm_value self)
 }
 
 scm_value
-prim_record_p(scm_value self)
+prim_record_p(UNUSED_ATTR scm_value self)
 {
 	scm_assert(chk_args(2, 0), "arity error");
 	scm_value k = pop_arg();
@@ -747,26 +793,94 @@ primop_eq(void)
 	scm_assert(chk_args(2, 0), "arity error");
 	scm_value obj1 = pop_arg();
 	scm_value obj2 = pop_arg();
+	if (SYMBOL_P(obj1)
+		&& SYMBOL_P(obj2)) {
+		Symbol *s1 = GET_PTR(obj1);
+		Symbol *s2 = GET_PTR(obj2);
+		return ITOBOOL(s1->hash == s2->hash);
+	}
 	return ITOBOOL(obj1 == obj2);
 }
 
 scm_value
-prim_eq(scm_value self)
+prim_eq(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_eq());
 	TAIL_CALL(k);
 }
 
+static inline int num_eqxx(scm_value x, scm_value y);
+
 scm_value
 primop_eqv(void)
 {
 	scm_assert(chk_args(2, 0), "arity error");
-	if (NUMBER_P(arg_stack.stk[1])
-		&& NUMBER_P(arg_stack.stk[0])) {
-		return primop_num_eq();
+	scm_value x = pop_arg();
+	scm_value y = pop_arg();
+	if (NUMBER_P(x) && NUMBER_P(y)) {
+		return ITOBOOL(num_eqxx(x, y));
 	}
+	push_arg(y);
+	push_arg(x);
 	return primop_eq();
+}
+
+scm_value
+prim_eqv(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_eqv());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_equal(void)
+{
+	scm_assert(chk_args(2, 0), "arity error");
+	scm_value x = pop_arg();
+	scm_value y = pop_arg();
+	if (NUMBER_P(x) && NUMBER_P(y)) {
+		return ITOBOOL(num_eqxx(x, y));
+	}
+	if (STRING_P(x) && STRING_P(y)) {
+		push_arg(y);
+		push_arg(x);
+		return primop_string_eq();
+	}
+	if (VECTOR_P(x) && VECTOR_P(y)) {
+		Vector *v1 = GET_PTR(x);
+		Vector *v2 = GET_PTR(y);
+		if (v1->len == v2->len) {
+			for (size_t i = 0; i < v1->len; ++i) {
+				push_arg(v2->elems[i]);
+				push_arg(v1->elems[i]);
+				if (primop_equal() == SCM_FALSE) {
+					return SCM_FALSE;
+				}
+			}
+			return SCM_TRUE;
+		} else {
+			return SCM_FALSE;
+		}
+	}
+	if (BYTEVECTOR_P(x) && BYTEVECTOR_P(y)) {
+		Bytevector *b1 = GET_PTR(x);
+		Bytevector *b2 = GET_PTR(x);
+		return ITOBOOL(b1->len == b2->len
+					   && (memcmp(b1->elems, b2->elems, b1->len) == 0));
+	}
+	push_arg(y);
+	push_arg(x);
+	return primop_eqv();
+}
+
+scm_value
+prim_equal(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_equal());
+	TAIL_CALL(k);
 }
 
 static inline scm_value
@@ -779,6 +893,7 @@ addfx(f64 x, scm_value y)
 	} else {
 		scm_assert(0, "Type error");
 	}
+	return SCM_VOID;
 }
 
 static inline scm_value
@@ -794,6 +909,7 @@ addix(i64 x, scm_value y)
 	} else {
 		scm_assert(0, "Type error");
 	}
+	return SCM_VOID;
 }
 
 static inline scm_value
@@ -806,6 +922,7 @@ addxx(scm_value x, scm_value y)
 	} else {
 		scm_assert(0, "Type error");
 	}
+	return SCM_VOID;
 }
 
 static inline scm_value
@@ -818,6 +935,7 @@ subfx(f64 x, scm_value y)
 	} else {
 		scm_assert(0, "Type error");
 	}
+	return SCM_VOID;
 }
 
 static inline scm_value
@@ -833,6 +951,7 @@ subix(i64 x, scm_value y)
 	} else {
 		scm_assert(0, "Type error");
 	}
+	return SCM_VOID;
 }
 
 static inline scm_value
@@ -845,6 +964,7 @@ subxx(scm_value x, scm_value y)
 	} else {
 		scm_assert(0, "Type error");
 	}
+	return SCM_VOID;
 }
 
 static inline scm_value
@@ -857,6 +977,7 @@ mulfx(f64 x, scm_value y)
 	} else {
 		scm_assert(0, "Type error");
 	}
+	return SCM_VOID;
 }
 
 static inline scm_value
@@ -872,6 +993,7 @@ mulix(i64 x, scm_value y)
 	} else {
 		scm_assert(0, "Type error");
 	}
+	return SCM_VOID;
 }
 
 static inline scm_value
@@ -884,6 +1006,7 @@ mulxx(scm_value x, scm_value y)
 	} else {
 		scm_assert(0, "Type error");
 	}
+	return SCM_VOID;
 }
 
 static inline scm_value
@@ -896,6 +1019,7 @@ divfx(f64 x, scm_value y)
 	} else {
 		scm_assert(0, "Type error");
 	}
+	return SCM_VOID;
 }
 
 static inline scm_value
@@ -908,6 +1032,7 @@ divix(i64 x, scm_value y)
 	} else {
 		scm_assert(0, "Type error");
 	}
+	return SCM_VOID;
 }
 
 static inline scm_value
@@ -920,6 +1045,7 @@ divxx(scm_value x, scm_value y)
 	} else {
 		scm_assert(0, "Type error");
 	}
+	return SCM_VOID;
 }
 
 static inline int
@@ -932,6 +1058,7 @@ lessfx(f64 x, scm_value y)
 	} else {
 		scm_assert(0, "Type error");
 	}
+	return 0;
 }
 
 static inline int
@@ -944,6 +1071,7 @@ lessix(i64 x, scm_value y)
 	} else {
 		scm_assert(0, "Type error");
 	}
+	return 0;
 }
 
 static inline int
@@ -956,10 +1084,128 @@ lessxx(scm_value x, scm_value y)
 	} else {
 		scm_assert(0, "Type error");
 	}
+	return 0;
 }
 
 static inline int
-eqfx(f64 x, scm_value y)
+grfx(f64 x, scm_value y)
+{
+	if (INTEGER_P(y)) {
+		return x > (f64)GET_INTEGRAL(y);
+	} else if (FLOAT_P(y)) {
+		return x > get_float(y);
+	} else {
+		scm_assert(0, "Type error");
+	}
+	return 0;
+}
+
+static inline int
+grix(i64 x, scm_value y)
+{
+	if (INTEGER_P(y)) {
+		return x > GET_INTEGRAL(y);
+	} else if (FLOAT_P(y)) {
+		return (f64)x > get_float(y);
+	} else {
+		scm_assert(0, "Type error");
+	}
+	return 0;
+}
+
+static inline int
+grxx(scm_value x, scm_value y)
+{
+	if (INTEGER_P(x)) {
+		return grix(GET_INTEGRAL(x), y);
+	} else if (FLOAT_P(x)) {
+		return grfx(get_float(x), y);
+	} else {
+		scm_assert(0, "Type error");
+	}
+	return 0;
+}
+
+static inline int
+leqfx(f64 x, scm_value y)
+{
+	if (INTEGER_P(y)) {
+		return x <= (f64)GET_INTEGRAL(y);
+	} else if (FLOAT_P(y)) {
+		return x <= get_float(y);
+	} else {
+		scm_assert(0, "Type error");
+	}
+	return 0;
+}
+
+static inline int
+leqix(i64 x, scm_value y)
+{
+	if (INTEGER_P(y)) {
+		return x <= GET_INTEGRAL(y);
+	} else if (FLOAT_P(y)) {
+		return (f64)x <= get_float(y);
+	} else {
+		scm_assert(0, "Type error");
+	}
+	return 0;
+}
+
+static inline int
+leqxx(scm_value x, scm_value y)
+{
+	if (INTEGER_P(x)) {
+		return leqix(GET_INTEGRAL(x), y);
+	} else if (FLOAT_P(x)) {
+		return leqfx(get_float(x), y);
+	} else {
+		scm_assert(0, "Type error");
+	}
+	return 0;
+}
+
+static inline int
+geqfx(f64 x, scm_value y)
+{
+	if (INTEGER_P(y)) {
+		return x >= (f64)GET_INTEGRAL(y);
+	} else if (FLOAT_P(y)) {
+		return x >= get_float(y);
+	} else {
+		scm_assert(0, "Type error");
+	}
+	return 0;
+}
+
+static inline int
+geqix(i64 x, scm_value y)
+{
+	if (INTEGER_P(y)) {
+		return x >= GET_INTEGRAL(y);
+	} else if (FLOAT_P(y)) {
+		return (f64)x >= get_float(y);
+	} else {
+		scm_assert(0, "Type error");
+	}
+	return 0;
+}
+
+static inline int
+geqxx(scm_value x, scm_value y)
+{
+	if (INTEGER_P(x)) {
+		return geqix(GET_INTEGRAL(x), y);
+	} else if (FLOAT_P(x)) {
+		return geqfx(get_float(x), y);
+	} else {
+		scm_assert(0, "Type error");
+	}
+	return 0;
+}
+
+static inline int
+num_eqfx(f64 x, scm_value y)
 {
 	if (INTEGER_P(y)) {
 		return x == (f64)GET_INTEGRAL(y);
@@ -968,10 +1214,11 @@ eqfx(f64 x, scm_value y)
 	} else {
 		scm_assert(0, "Type error");
 	}
+	return 0;
 }
 
 static inline int
-eqix(i64 x, scm_value y)
+num_eqix(i64 x, scm_value y)
 {
 	if (INTEGER_P(y)) {
 		return x == GET_INTEGRAL(y);
@@ -980,33 +1227,51 @@ eqix(i64 x, scm_value y)
 	} else {
 		scm_assert(0, "Type error");
 	}
+	return 0;
 }
 
 static inline int
-eqxx(scm_value x, scm_value y)
+num_eqxx(scm_value x, scm_value y)
 {
 	if (INTEGER_P(x)) {
-		return eqix(GET_INTEGRAL(x), y);
+		return num_eqix(GET_INTEGRAL(x), y);
 	} else if (FLOAT_P(x)) {
-		return eqfx(get_float(x), y);
+		return num_eqfx(get_float(x), y);
 	} else {
 		scm_assert(0, "Type error");
 	}
+	return 0;
 }
 
 scm_value
 primop_add(void)
 {
 	scm_assert(chk_args(0, 1), "arity error");
-	scm_value sum = make_int(0);
-	while (arg_stack.top) {
-		sum = addxx(sum, pop_arg());
+	scm_value sum;
+	switch (arg_stack.top) {
+	case 0: {
+		sum = make_int(0);
+	} break;
+	case 1: {
+		sum = make_int(pop_arg());
+	} break;
+	case 2: {
+		scm_value x = pop_arg();
+		scm_value y = pop_arg();
+		sum = addxx(x, y);
+	} break;
+	default: {
+		sum = pop_arg();
+		while (arg_stack.top) {
+			sum = addxx(sum, pop_arg());
+		}
+	} break;
 	}
 	return sum;
 }
 
 scm_value
-prim_add(scm_value self)
+prim_add(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_add());
@@ -1017,19 +1282,27 @@ scm_value
 primop_sub(void)
 {
 	scm_assert(chk_args(1, 1), "arity error");
-	if (arg_stack.top == 1) {
-		return subxx(make_int(0), pop_arg());
+	scm_value total;
+	switch (arg_stack.top) {
+	case 1: {
+		total = subxx(make_int(0), pop_arg());
+	} break;
+	case 2: {
+		scm_value x = pop_arg();
+		scm_value y = pop_arg();
+		total = subxx(x, y);
+	} break;
+	default: {
+		scm_value fst = pop_arg();
+		total = primop_add();
+		total = subxx(fst, total);
+	} break;
 	}
-	scm_value fst = pop_arg();
-	scm_value sum = make_int(0);
-	while (arg_stack.top) {
-		sum = addxx(sum, pop_arg());
-	}
-	return subxx(fst, sum);
+	return total;
 }
 
 scm_value
-prim_sub(scm_value self)
+prim_sub(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_sub());
@@ -1037,18 +1310,54 @@ prim_sub(scm_value self)
 }
 
 scm_value
+prim_inc(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(1, 0), "arity error");
+	scm_value k = pop_arg();
+	scm_value x = pop_arg();
+	push_arg(addxx(x, make_int(1)));
+	TAIL_CALL(k);
+}
+
+scm_value
+prim_dec(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(1, 0), "arity error");
+	scm_value k = pop_arg();
+	scm_value x = pop_arg();
+	push_arg(subxx(x, make_int(1)));
+	TAIL_CALL(k);
+}
+
+scm_value
 primop_mul(void)
 {
 	scm_assert(chk_args(0, 1), "arity error");
-	scm_value total = make_int(1);
-	while (arg_stack.top) {
-		total = mulxx(total, pop_arg());
+	scm_value total;
+	switch (arg_stack.top) {
+	case 0: {
+		total = make_int(1);
+	} break;
+	case 1: {
+		total = make_int(pop_arg());
+	} break;
+	case 2: {
+		scm_value x = pop_arg();
+		scm_value y = pop_arg();
+		total = mulxx(x, y);
+	} break;
+	default: {
+		total = pop_arg();
+		while (arg_stack.top) {
+			total = mulxx(total, pop_arg());
+		}
+	} break;
 	}
 	return total;
 }
 
 scm_value
-prim_mul(scm_value self)
+prim_mul(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_mul());
@@ -1059,19 +1368,27 @@ scm_value
 primop_div(void)
 {
 	scm_assert(chk_args(1, 1), "arity error");
-	if (arg_stack.top == 1) {
-		return divxx(make_float(1.0), pop_arg());
+	scm_value total;
+	switch (arg_stack.top) {
+	case 1: {
+		total = divxx(make_int(1), pop_arg());
+	} break;
+	case 2: {
+		scm_value x = pop_arg();
+		scm_value y = pop_arg();
+		total = divxx(x, y);
+	} break;
+	default: {
+		scm_value fst = pop_arg();
+		total = primop_mul();
+		total = divxx(fst, total);
+	} break;
 	}
-	scm_value fst = pop_arg();
-	scm_value total = make_int(1);
-	while (arg_stack.top) {
-		total = mulxx(total, pop_arg());
-	}
-	return divxx(fst, total);
+	return total;
 }
 
 scm_value
-prim_div(scm_value self)
+prim_div(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_div());
@@ -1083,13 +1400,16 @@ primop_num_eq(void)
 {
 	scm_assert(chk_args(0, 1), "arity error");
 	if (arg_stack.top < 2) {
+		while (arg_stack.top) {
+			scm_assert(NUMBER_P(pop_arg()), "type error expected <number>");
+		}
 		return SCM_TRUE;
 	}
 	scm_value x, y;
 	x = pop_arg();
 	while (arg_stack.top) {
 		y = pop_arg();
-		if (!eqxx(x, y)) {
+		if (!num_eqxx(x, y)) {
 			return SCM_FALSE;
 		}
 		x = y;
@@ -1098,7 +1418,7 @@ primop_num_eq(void)
 }
 
 scm_value
-prim_num_eq(scm_value self)
+prim_num_eq(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_num_eq());
@@ -1110,6 +1430,9 @@ primop_less(void)
 {
 	scm_assert(chk_args(0, 1), "arity error");
 	if (arg_stack.top < 2) {
+		while (arg_stack.top) {
+			scm_assert(NUMBER_P(pop_arg()), "type error expected <number>");
+		}
 		return SCM_TRUE;
 	}
 	scm_value x, y;
@@ -1125,10 +1448,148 @@ primop_less(void)
 }
 
 scm_value
-prim_less(scm_value self)
+prim_less(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_less());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_gr(void)
+{
+	scm_assert(chk_args(0, 1), "arity error");
+	if (arg_stack.top < 2) {
+		while (arg_stack.top) {
+			scm_assert(NUMBER_P(pop_arg()), "type error expected <number>");
+		}
+		return SCM_TRUE;
+	}
+	scm_value x, y;
+	x = pop_arg();
+	while (arg_stack.top) {
+		y = pop_arg();
+		if (!grxx(x, y)) {
+			return SCM_FALSE;
+		}
+		x = y;
+	}
+	return SCM_TRUE;
+}
+
+scm_value
+prim_gr(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_gr());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_leq(void)
+{
+	scm_assert(chk_args(0, 1), "arity error");
+	if (arg_stack.top < 2) {
+		while (arg_stack.top) {
+			scm_assert(NUMBER_P(pop_arg()), "type error expected <number>");
+		}
+		return SCM_TRUE;
+	}
+	scm_value x, y;
+	x = pop_arg();
+	while (arg_stack.top) {
+		y = pop_arg();
+		if (!leqxx(x, y)) {
+			return SCM_FALSE;
+		}
+		x = y;
+	}
+	return SCM_TRUE;
+}
+
+scm_value
+prim_leq(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_leq());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_geq(void)
+{
+	scm_assert(chk_args(0, 1), "arity error");
+	if (arg_stack.top < 2) {
+		while (arg_stack.top) {
+			scm_assert(NUMBER_P(pop_arg()), "type error expected <number>");
+		}
+		return SCM_TRUE;
+	}
+	scm_value x, y;
+	x = pop_arg();
+	while (arg_stack.top) {
+		y = pop_arg();
+		if (!geqxx(x, y)) {
+			return SCM_FALSE;
+		}
+		x = y;
+	}
+	return SCM_TRUE;
+}
+
+scm_value
+prim_geq(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_geq());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_zero_p(void)
+{
+	scm_assert(chk_args(1, 0), "arity error");
+	scm_value x = pop_arg();
+	return num_eqxx(x, make_int(0));
+}
+
+scm_value
+prim_zero_p(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_zero_p());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_positive_p(void)
+{
+	scm_assert(chk_args(1, 0), "arity error");
+	scm_value x = pop_arg();
+	return grxx(x, make_int(0));
+}
+
+scm_value
+prim_positive_p(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_positive_p());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_negative_p(void)
+{
+	scm_assert(chk_args(1, 0), "arity error");
+	scm_value x = pop_arg();
+	return lessxx(x, make_int(0));
+}
+
+scm_value
+prim_negative_p(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_negative_p());
 	TAIL_CALL(k);
 }
 
@@ -1143,7 +1604,7 @@ primop_string_len(void)
 }
 
 scm_value
-prim_string_len(scm_value self)
+prim_string_len(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_string_len());
@@ -1166,48 +1627,53 @@ primop_string_ref(void)
 }
 
 scm_value
-prim_string_ref(scm_value self)
+prim_string_ref(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_string_ref());
 	TAIL_CALL(k);
 }
 
-scm_value
-primop_string_eq(void)
+static inline int
+string_eq(scm_value v1, scm_value v2)
 {
-	scm_assert(chk_args(2, 0), "arity error");
-	scm_value v1 = pop_arg();
-	scm_value v2 = pop_arg();
 	scm_assert(STRING_P(v1), "type error, expected <string>");
 	scm_assert(STRING_P(v2), "type error, expected <string>");
 	String *s1 = GET_PTR(v1);
 	String *s2 = GET_PTR(v2);
-	if (s1->len == s2->len) {
-		size_t len = s1->len;
-		for (size_t i = 0; i < len; ++i) {
-			if (s1->elems[i] != s2->elems[i]) {
-				return SCM_FALSE;
-			}
-		}
-		return SCM_TRUE;
-	}
-	return SCM_FALSE;
+	return s1->len == s2->len && (memcmp(s1->elems, s2->elems, s1->len) == 0);
 }
 
 scm_value
-prim_string_eq(scm_value self)
+primop_string_eq(void)
+{
+	scm_assert(chk_args(0, 1), "arity error");
+	if (arg_stack.top < 2) {
+		while (arg_stack.top) {
+			scm_assert(STRING_P(pop_arg()), "type error expected <number>");
+		}
+		return SCM_TRUE;
+	}
+	scm_value fst = pop_arg();
+	while (arg_stack.top) {
+		if (!string_eq(fst, pop_arg())) {
+			return SCM_FALSE;
+		}
+	}
+	return SCM_TRUE;
+}
+
+scm_value
+prim_string_eq(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_string_eq());
 	TAIL_CALL(k);
 }
 
-scm_value
-primop_display(void)
+static inline void
+scm_print(scm_value value, int quote_p)
 {
-	scm_assert(chk_args(1, 0), "arity error");
-	scm_value value = pop_arg();
 	if (VOID_P(value)) {
 		printf("#<void>");
 	} else if (INTEGER_P(value)) {
@@ -1215,14 +1681,60 @@ primop_display(void)
 	} else if (FLOAT_P(value)) {
 		printf("%g", get_float(value));
 	} else if (CHAR_P(value)) {
-		putchar(GET_INTEGRAL(value));
+		int c = GET_INTEGRAL(value);
+		if (quote_p) {
+			switch (c) {
+			case 0x0: {
+				printf("#\\nul");
+			} break;
+			case 0x7: {
+				printf("#\\alarm");
+			} break;
+			case 0x8: {
+				printf("#\\backspace");
+			} break;
+			case 0x9: {
+				printf("#\\tab");
+			} break;
+			case 0xa: {
+				printf("#\\newline");
+			} break;
+			case 0xb: {
+				printf("#\\vtab");
+			} break;
+			case 0xc: {
+				printf("#\\page");
+			} break;
+			case 0xd: {
+				printf("#\\return");
+			} break;
+			case 0x1b: {
+				printf("#\\esc");
+			} break;
+			case 0x20: {
+				printf("#\\space");
+			} break;
+			case 0x7f: {
+				printf("#\\delete");
+			} break;
+			default: {
+				printf("#\\%c", c);
+			} break;
+			}
+		} else {
+			putchar(c);
+		}
 	} else if (value == SCM_TRUE) {
 		printf("#t");
 	} else if (value == SCM_FALSE) {
 		printf("#f");
 	} else if (STRING_P(value)) {
 		String *s = GET_PTR(value);
-		printf("%.*s", (int)s->len, s->elems);
+		if (quote_p) {
+			printf("\"%.*s\"", (int)s->len, s->elems);
+		} else {
+			printf("%.*s", (int)s->len, s->elems);
+		}
 	} else if (SYMBOL_P(value)) {
 		Symbol *s = GET_PTR(value);
 		printf("%.*s", s->len, s->name);
@@ -1231,39 +1743,33 @@ primop_display(void)
 		printf("(");
 		for (;;) {
 			if (PAIR_P(p->cdr)) {
-				push_arg(p->car);
-				primop_display();
+				scm_print(p->car, quote_p);
 				printf(" ");
 				p = GET_PTR(p->cdr);
 			} else if (NULL_P(p->cdr)) {
-				push_arg(p->car);
-				primop_display();
+				scm_print(p->car, quote_p);
 				printf(")");
 				break;
 			} else {
-				push_arg(p->car);
-				primop_display();
+				scm_print(p->car, quote_p);
 				printf(" . ");
-				push_arg(p->cdr);
-				primop_display();
+				scm_print(p->cdr, quote_p);
 				printf(")");
 				break;
 			}
 		}
 	} else if (PROCEDURE_P(value)) {
-		printf("#<procedure @ #x%lx>", closure_fn(value));
+		printf("#<procedure @ #x%lx>", (u64)closure_fn(value));
 	} else if (VECTOR_P(value)) {
 		Vector *vec = GET_PTR(value);
 		printf("#(");
 		if (vec->len) {
 			size_t i;
 			for (i = 0; i < vec->len - 1; ++i) {
-				push_arg(vec->elems[i]);
-				primop_display();
+				scm_print(vec->elems[i], quote_p);
 				printf(" ");
 			}
-			push_arg(vec->elems[i]);
-			primop_display();
+			scm_print(vec->elems[i], quote_p);
 		}
 		printf(")");
 	} else if (BYTEVECTOR_P(value)) {
@@ -1282,11 +1788,36 @@ primop_display(void)
 		printf("0x%lx\n", value);
 		scm_assert(0, "unimplemented");
 	}
+}
+
+scm_value
+primop_write(void)
+{
+	scm_assert(chk_args(1, 0), "arity error");
+	scm_value value = pop_arg();
+	scm_print(value, 1);
 	return SCM_VOID;
 }
 
 scm_value
-prim_display(scm_value self)
+prim_write(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_write());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_display(void)
+{
+	scm_assert(chk_args(1, 0), "arity error");
+	scm_value value = pop_arg();
+	scm_print(value, 0);
+	return SCM_VOID;
+}
+
+scm_value
+prim_display(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_display());
@@ -1302,7 +1833,7 @@ primop_newline(void)
 }
 
 scm_value
-prim_newline(scm_value self)
+prim_newline(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_newline());
@@ -1310,20 +1841,20 @@ prim_newline(scm_value self)
 }
 
 static scm_value
-tl_exit(scm_value self)
+tl_exit(UNUSED_ATTR scm_value self)
 {
 	scm_assert(chk_args(1, 0), "arity error");
 	scm_value x = pop_arg();
 	if (!VOID_P(x)) {
 		push_arg(x);
-		primop_display();
+		primop_write();
 		primop_newline();
 	}
 	longjmp(exit_point, 1);
 }
 
 static scm_value
-default_excption_handler(scm_value self)
+default_excption_handler(UNUSED_ATTR scm_value self)
 {
 	exit(1);
 	return SCM_VOID;
@@ -1363,18 +1894,27 @@ scm_runtime_load_dynamic(void)
 	push_arg(module_entry("string?", prim_string_p));
 	push_arg(module_entry("vector?", prim_vector_p));
 	push_arg(module_entry("eq?", prim_eq));
-	//push_arg(module_entry("eqv?", prim_eqv));
+	push_arg(module_entry("eqv?", prim_eqv));
+	push_arg(module_entry("equal?", prim_equal));
+	/* arithmetic */
 	push_arg(module_entry("+", prim_add));
 	push_arg(module_entry("-", prim_sub));
 	push_arg(module_entry("*", prim_mul));
 	push_arg(module_entry("/", prim_div));
 	push_arg(module_entry("=", prim_num_eq));
 	push_arg(module_entry("<", prim_less));
-
+	push_arg(module_entry(">", prim_gr));
+	push_arg(module_entry("<=", prim_leq));
+	push_arg(module_entry(">=", prim_geq));
+	push_arg(module_entry("zero?", prim_zero_p));
+	push_arg(module_entry("positive?", prim_positive_p));
+	push_arg(module_entry("negative?", prim_negative_p));
+	/* string */
 	push_arg(module_entry("string-length", prim_string_len));
 	push_arg(module_entry("string-ref", prim_string_ref));
 	push_arg(module_entry("string=?", prim_string_eq));
-
+	/* IO */
+	push_arg(module_entry("write", prim_write));
 	push_arg(module_entry("display", prim_display));
 	push_arg(module_entry("newline", prim_newline));
 	return primop_vector();

@@ -46,6 +46,10 @@ scm_value primop_car(void);
 scm_value prim_car(scm_value self);
 scm_value primop_cdr(void);
 scm_value prim_cdr(scm_value self);
+scm_value primop_set_car(void);
+scm_value prim_set_car(scm_value self);
+scm_value primop_set_cdr(void);
+scm_value prim_set_cdr(scm_value self);
 scm_value primop_vector(void);
 scm_value prim_vector(scm_value self);
 /* void */
@@ -61,6 +65,7 @@ scm_value prim_bytevector_p(scm_value self);
 scm_value prim_number_p(scm_value self);
 scm_value prim_string_p(scm_value self);
 scm_value prim_vector_p(scm_value self);
+scm_value prim_record_p(scm_value self);
 #if 0
 // unimplemented
 scm_value prim_eof_object_p(scm_value self);
@@ -73,20 +78,33 @@ scm_value primop_eqv(void);
 scm_value prim_eqv(scm_value self);
 scm_value primop_equal(void);
 scm_value prim_equal(scm_value self);
-
 /* arithmetic procedures */
+scm_value prim_inc(scm_value self);    // (1+ x)
+scm_value prim_dec(scm_value self);    // (1- x)
 scm_value primop_add(void);
-scm_value prim_add(scm_value self);
+scm_value prim_add(scm_value self);    // (+ x ...)
 scm_value primop_sub(void);
-scm_value prim_sub(scm_value self);
+scm_value prim_sub(scm_value self);    // (- x y ...)
 scm_value primop_mul(void);
-scm_value prim_mul(scm_value self);
+scm_value prim_mul(scm_value self);    // (* x ...)
 scm_value primop_div(void);
-scm_value prim_div(scm_value self);
+scm_value prim_div(scm_value self);    // (/ x y ...)
 scm_value primop_num_eq(void);
-scm_value prim_num_eq(scm_value self);
+scm_value prim_num_eq(scm_value self); // (= x ...)
 scm_value primop_less(void);
-scm_value prim_less(scm_value self);
+scm_value prim_less(scm_value self);   // (< x ...)
+scm_value primop_gr(void);
+scm_value prim_gr(scm_value self);     // (<= x ...)
+scm_value primop_leq(void);
+scm_value prim_leq(scm_value self);   // (>= x ...)
+scm_value primop_geq(void);
+scm_value prim_geq(scm_value self);   // (>= x ...)
+scm_value primop_zero_p(void);
+scm_value prim_zero_p(scm_value self); // (zero? x)
+scm_value primop_positive_p(void);
+scm_value prim_positive_p(scm_value self); // (positive? x)
+scm_value primop_negative_p(void);
+scm_value prim_negative_p(scm_value self); // (negative? x)
 //////////////////////////////////////////////////////////
 scm_value primop_string_len(void);
 scm_value prim_string_len(scm_value self);
@@ -95,6 +113,8 @@ scm_value prim_string_ref(scm_value self);
 scm_value primop_string_eq(void);
 scm_value prim_string_eq(scm_value self);
 /* IO procedures */
+scm_value primop_write(void);
+scm_value prim_write(scm_value self);
 scm_value primop_display(void);
 scm_value prim_display(scm_value self);
 scm_value primop_newline(void);
