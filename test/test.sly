@@ -1,17 +1,21 @@
-(define (pair x y)
-  (lambda (f) (f x y)))
+;; (define (pair x y)
+;;   (lambda (f) (f x y)))
 
-(define (fst p)
-  (p (lambda (x y) x)))
+;; (define (fst p)
+;;   (p (lambda (x y) x)))
 
-(define (snd p)
-  (p (lambda (x y) y)))
+;; (define (snd p)
+;;   (p (lambda (x y) y)))
 
-(define p1 (pair 'hello 'world))
-(define p2 (pair 'foo 'bar))
+;; (define p1 (pair 'hello 'world))
+;; (define p2 (pair 'foo 'bar))
 
-(display (fst p1)) (newline)
-(display (snd p1)) (newline)
+;; (display (fst p1)) (newline)
+;; (display (snd p1)) (newline)
 
-(display (fst p2)) (newline)
-(display (snd p2)) (newline)
+;; (display (fst p2)) (newline)
+;; (display (snd p2)) (newline)
+(define bar 420)
+(define foo (+ 69 bar))
+foo
+			 

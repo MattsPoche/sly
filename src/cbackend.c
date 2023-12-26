@@ -76,8 +76,6 @@ intern_constant(Sly_State *ss, sly_value constants, sly_value value)
 				intern_constant(ss, constants, vec->elems[i]);
 			}
 		}
-		printf("(intern_constant) value = ");
-		sly_displayln(value);
 		dictionary_set(ss, constants, value, (sly_value)idx);
 	} else {
 		idx = (size_t)cdr(entry);
@@ -255,7 +253,7 @@ emit_c_visit_expr(Sly_State *ss, CPS_Expr *expr, sly_value graph,
 		sly_assert(0, "unimplemented");
 	} break;
 	case tt_cps_box: {
-		sly_assert(0, "unimplemented");
+		return "make_box()";
 	} break;
 	case tt_cps_unbox: {
 		sly_assert(0, "unimplemented");
@@ -286,10 +284,7 @@ emit_c_visit_expr(Sly_State *ss, CPS_Expr *expr, sly_value graph,
 				emit_c_push_list(name, vars, file);
 				fprintf(file, push_tmpl, "(scm_value)", symbol_to_cid(code));
 				fprintf(file, "\tbox_set(%s, make_closure());\n", symbol_to_cid(name));
-			} else {
-				char *tmpl = emit_c_visit_expr(ss, p, graph, free_vars, constants, file);
-				fprintf(file, "\tbox_set(%s, %s);\n", symbol_to_cid(name), tmpl);
-			}
+			} 
 			procs = cdr(procs);
 			names = cdr(names);
 		}
@@ -319,8 +314,6 @@ _cps_emit_c(Sly_State *ss, sly_value graph, sly_value k,
 					fprintf(file, push_tmpl, "(scm_value)", symbol_to_cid(next->name));
 					fprintf(file, "\tk = make_closure();\n");
 				}
-				printf("k = ");
-				sly_displayln(k);
 				emit_c_push_refs(SLY_VOID, expr->u.call.args, file);
 				fprintf(file, push_tmpl, "", "k");
 				fprintf(file, tail_call_tmpl, symbol_to_cid(expr->u.call.proc));

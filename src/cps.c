@@ -569,15 +569,6 @@ _cps_translate(Sly_State *ss, CPS_Expr *fix, sly_value cc,
 				sly_value value = CAR(CDR(rest));
 				sly_value kname = cps_gensym_label_name(ss);
 				sly_value kk = _cps_translate(ss, fix, kname, graph, value);
-				if ((syntax_pair_p(value) || pair_p(value))
-					&& identifier_p(CAR(value))
-					&& symbol_eq(strip_syntax(CAR(value)), SYM_LAMBDA)) {
-					CPS_Kont *kont = cps_graph_ref(graph, kk);
-					fix->u.fix.names = cons(ss, name, fix->u.fix.names);
-					CPS_Expr *expr = kont->u.kargs.term->u.cont.expr;
-					fix->u.fix.procs = cons(ss, (sly_value)expr, fix->u.fix.procs);
-					return cc;
-				}
 				{
 					CPS_Expr *expr = cps_new_expr();
 					expr->type = tt_cps_box;
@@ -588,12 +579,13 @@ _cps_translate(Sly_State *ss, CPS_Expr *fix, sly_value cc,
 				t = cps_new_term();
 				t->type = tt_cps_continue;
 				t->u.cont.expr = cps_new_expr();
-				t->u.cont.expr->type = tt_cps_values;
-				sly_value args = make_list(ss, 1, name);
-				t->u.cont.expr->u.values.args = args;
-				t->u.cont.k = cc;
+				t->u.cont.expr->type = tt_cps_set;
+				t->u.cont.expr->u.set.var = name;
+				sly_value args = make_list(ss, 1, cps_gensym_temporary_name(ss));
+				t->u.cont.expr->u.set.val = car(args);
 				k = cps_make_kargs(ss, kname, t, args);
-				cps_graph_set(ss, graph, kname, k);
+				t->u.cont.k = cc;
+				cps_graph_set(ss, graph, k->name, k);
 				return kk;
 			} else if (symbol_eq(strip_syntax(fst), SYM_SET)) {
 				sly_value name = strip_syntax(CAR(rest));
@@ -1204,12 +1196,14 @@ var_is_dead(sly_value var_info, sly_value var)
 	CPS_Var_Info *vi = GET_PTR(s);
 	int used = 0;
 	int escapes = 0;
+	int updates = 0;
 	while (vi) {
 		used += vi->used;
 		escapes += vi->escapes;
+		updates += vi->updates;
 		vi = vi->alt;
 	}
-	return (used + escapes) == 0;
+	return (used + escapes + updates) == 0;
 }
 
 static int
@@ -1485,6 +1479,8 @@ cps_opt_constant_folding(Sly_State *ss, sly_value graph,
 					while (!null_p(names)) {
 						name = car(names);
 						if (var_is_dead(global_var_info, name)) {
+							printf("HERE\n");
+							sly_displayln(name);
 							CLICK();
 							expr->u.fix.names =
 								list_remove_idx(ss, expr->u.fix.names, idx);
@@ -1796,16 +1792,16 @@ cps_opt_resolve_aliases(Sly_State *ss,
 				if (next->type == tt_cps_kargs
 					&& list_len(next->u.kargs.vars) == 1
 					&& list_len(expr->u.values.args) == 1) {
-					sly_value val = car(expr->u.values.args);
-					sly_value var = car(next->u.kargs.vars);
-					CPS_Var_Info *vi_val = GET_PTR(dictionary_ref(info, val, SLY_VOID));
-					CPS_Var_Info *vi_var = GET_PTR(dictionary_ref(info, var, SLY_VOID));
-					printf("HERE\n");
-					sly_displayln(val);
-					sly_displayln(var);
-					printf("vi not null (%d, %d)\n",
-						   vi_val->binding->type,
-						   vi_var->binding->type);
+					/* sly_value val = car(expr->u.values.args); */
+					/* sly_value var = car(next->u.kargs.vars); */
+					/* CPS_Var_Info *vi_val = GET_PTR(dictionary_ref(info, val, SLY_VOID)); */
+					/* CPS_Var_Info *vi_var = GET_PTR(dictionary_ref(info, var, SLY_VOID)); */
+					/* printf("HERE\n"); */
+					/* sly_displayln(val); */
+					/* sly_displayln(var); */
+					/* printf("vi not null (%d, %d)\n", */
+					/* 	   vi_val->binding->type, */
+					/* 	   vi_var->binding->type); */
 
 					/* if (vi && vi->binding->type == tt_cps_box) { */
 					/* 	printf("HERE\n"); */
