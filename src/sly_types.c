@@ -1769,7 +1769,7 @@ syntax_get_token(Sly_State *ss, sly_value stx)
 char *
 symbol_to_cstr(sly_value sym)
 {
-	sly_assert(symbol_p(sym), "Type error expected <string>");
+	sly_assert(symbol_p(sym), "Type error expected <symbol>");
 	symbol *s = GET_PTR(sym);
 	char *cstr = GC_MALLOC(s->len + 1);
 	memcpy(cstr, s->name, s->len);

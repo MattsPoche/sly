@@ -1,0 +1,347 @@
+* R7RS Libraries
+** Base Library (scheme base)
+- [X] *
+- [X] +
+- [X] -
+- [X] /
+- [X] <
+- [X] <=
+- [X] =
+- [X] =>
+- [X] >
+- [X] >=
+- [ ] abs
+- [ ] and
+- [ ] append
+- [X] apply
+- [ ] assoc
+- [ ] assq
+- [ ] assv
+- [X] begin
+- [ ] binary-port?
+- [ ] boolean=?
+- [X] boolean?
+- [X] bytevector
+- [ ] bytevector-append
+- [ ] bytevector-copy
+- [ ] bytevector-copy!
+- [X] bytevector-length
+- [X] bytevector-u8-ref
+- [X] bytevector-u8-set!
+- [X] bytevector?
+- [ ] caar
+- [ ] cadr
+- [X] call-with-current-continuation
+- [ ] call-with-port
+- [X] call-with-values
+- [X] call/cc
+- [X] car
+- [ ] case
+- [ ] cdar
+- [ ] cddr
+- [ ] cdr
+- [ ] ceiling
+- [ ] char->integer
+- [ ] char-ready?
+- [ ] char<=?
+- [ ] char<?
+- [ ] char=?
+- [ ] char>=?
+- [ ] char>?
+- [ ] char?
+- [ ] close-input-port
+- [ ] close-output-port
+- [ ] close-port
+- [ ] complex?
+- [ ] cond
+- [ ] cond-expand
+- [X] cons
+- [ ] current-error-port
+- [ ] current-input-port
+- [ ] current-output-port
+- [X] define
+- [ ] define-record-type
+- [X] define-syntax
+- [ ] define-values
+- [ ] denominator
+- [ ] do
+- [ ] dynamic-wind
+- [ ] else
+- [ ] eof-object
+- [ ] eof-object?
+- [ ] eq?
+- [ ] equal?
+- [ ] eqv?
+- [ ] error
+- [ ] error-object-irritants
+- [ ] error-object-message
+- [ ] error-object?
+- [ ] even?
+- [ ] exact
+- [ ] exact-integer-sqrt
+- [ ] exact-integer?
+- [ ] exact?
+- [ ] expt
+- [ ] features
+- [ ] file-error?
+- [ ] floor
+- [ ] floor-quotient
+- [ ] floor-remainder
+- [ ] floor/
+- [ ] flush-output-port
+- [ ] for-each
+- [ ] gcd
+- [ ] get-output-bytevector
+- [ ] get-output-string
+- [ ] guard
+- [ ] if
+- [ ] include
+- [ ] include-ci
+- [ ] inexact
+- [ ] inexact?
+- [ ] input-port-open?
+- [ ] input-port?
+- [ ] integer->char
+- [ ] integer?
+- [ ] lambda
+- [ ] lcm
+- [ ] length
+- [ ] let
+- [ ] let*
+- [ ] let*-values
+- [ ] let-syntax
+- [ ] let-values
+- [ ] letrec
+- [ ] letrec*
+- [ ] letrec-syntax
+- [ ] list
+- [ ] list->string
+- [ ] list->vector
+- [ ] list-copy
+- [ ] list-ref
+- [ ] list-set!
+- [ ] list-tail
+- [ ] list?
+- [ ] make-bytevector
+- [ ] make-list
+- [ ] make-parameter
+- [ ] make-string
+- [ ] make-vector
+- [ ] map
+- [ ] max
+- [ ] member
+- [ ] memq
+- [ ] memv
+- [ ] min
+- [ ] modulo
+- [ ] negative?
+- [ ] newline
+- [ ] not
+- [ ] null?
+- [ ] number->string
+- [ ] number?
+- [ ] numerator
+- [ ] odd?
+- [ ] open-input-bytevector
+- [ ] open-input-string
+- [ ] open-output-bytevector
+- [ ] open-output-string
+- [ ] or
+- [ ] output-port-open?
+- [ ] output-port?
+- [ ] pair?
+- [ ] parameterize
+- [ ] peek-char
+- [ ] peek-u8
+- [ ] port?
+- [ ] positive?
+- [ ] procedure?
+- [ ] quasiquote
+- [ ] quote
+- [ ] quotient
+- [ ] raise
+- [ ] raise-continuable
+- [ ] rational?
+- [ ] rationalize
+- [ ] read-bytevector
+- [ ] read-bytevector!
+- [ ] read-char
+- [ ] read-error?
+- [ ] read-line
+- [ ] read-string
+- [ ] read-u8
+- [ ] real?
+- [ ] remainder
+- [ ] reverse
+- [ ] round
+- [ ] set!
+- [ ] set-car!
+- [ ] set-cdr!
+- [ ] square
+- [ ] string
+- [ ] string->list
+- [ ] string->number
+- [ ] string->symbol
+- [ ] string->utf8
+- [ ] string->vector
+- [ ] string-append
+- [ ] string-copy
+- [ ] string-copy!
+- [ ] string-fill!
+- [ ] string-for-each
+- [ ] string-length
+- [ ] string-map
+- [ ] string-ref
+- [ ] string-set!
+- [ ] string<=?
+- [ ] string<?
+- [ ] string=?
+- [ ] string>=?
+- [ ] string>?
+- [ ] string?
+- [ ] substring
+- [ ] symbol->string
+- [ ] symbol=?
+- [ ] symbol?
+- [ ] syntax-error
+- [ ] syntax-rules
+- [ ] textual-port?
+- [ ] truncate
+- [ ] truncate-quotient
+- [ ] truncate-remainder
+- [ ] truncate/
+- [ ] u8-ready?
+- [ ] unless
+- [ ] unquote
+- [ ] unquote-splicing
+- [ ] utf8->string
+- [ ] values
+- [X] vector
+- [ ] vector->list
+- [ ] vector->string
+- [ ] vector-append
+- [ ] vector-copy
+- [ ] vector-copy!
+- [ ] vector-fill!
+- [ ] vector-for-each
+- [X] vector-length
+- [ ] vector-map
+- [X] vector-ref
+- [X] vector-set!
+- [X] vector?
+- [ ] when
+- [ ] with-exception-handler
+- [ ] write-bytevector
+- [ ] write-char
+- [ ] write-string
+- [ ] write-u8
+- [X] zero?
+** Char Library (scheme char)
+- [ ] char-alphabetic?
+- [ ] char-ci<=?
+- [ ] char-ci<?
+- [ ] char-ci=?
+- [ ] char-ci>=?
+- [ ] char-ci>?
+- [ ] char-downcase
+- [ ] char-foldcase
+- [ ] char-lower-case?
+- [ ] char-numeric?
+- [ ] char-upcase
+- [ ] char-upper-case?
+- [ ] char-whitespace?
+- [ ] digit-value
+- [ ] string-ci<=?
+- [ ] string-ci<?
+- [ ] string-ci=?
+- [ ] string-ci>=?
+- [ ] string-ci>?
+- [ ] string-downcase
+- [ ] string-foldcase
+- [ ] string-upcase
+** Complex Library (scheme complex)
+- [ ] angle
+- [ ] imag-part
+- [ ] magnitude
+- [ ] make-polar
+- [ ] make-rectangular
+- [ ] real-part
+** CxR Library (scheme cxr)
+- [ ] caaaar
+- [ ] caaadr
+- [ ] caaar
+- [ ] caadar
+- [ ] caaddr
+- [ ] caadr
+- [ ] cadaar
+- [ ] cadadr
+- [ ] cadar
+- [ ] caddar
+- [ ] cadddr
+- [ ] caddr
+- [ ] cdaaar
+- [ ] cdaadr
+- [ ] cdaar
+- [ ] cdadar
+- [ ] cdaddr
+- [ ] cdadr
+- [ ] cddaar
+- [ ] cddadr
+- [ ] cddar
+- [ ] cdddar
+- [ ] cddddr
+- [ ] cdddr
+** Eval Library (scheme eval)
+- [ ] environment
+- [ ] eval
+** File Library (scheme file)
+- [ ] call-with-input-file
+- [ ] call-with-output-file
+- [ ] delete-file
+- [ ] file-exists?
+- [ ] open-binary-input-file
+- [ ] open-binary-output-file
+- [ ] open-input-file
+- [ ] open-output-file
+- [ ] with-input-from-file
+- [ ] with-output-to-file
+** Inexact Library (scheme inexact)
+- [ ] acos
+- [ ] asin
+- [ ] atan
+- [ ] cos
+- [ ] exp
+- [ ] finite?
+- [ ] infinite?
+- [ ] log
+- [ ] nan?
+- [ ] sin
+- [ ] sqrt
+- [ ] tan
+** Lazy Library (scheme lazy)
+- [ ] delay
+- [ ] delay-force
+- [ ] force
+- [ ] make-promise
+- [ ] promise?
+** Load Library (scheme load)
+- [ ] load
+** Process-Context Library (scheme process-context)
+- [ ] command-line
+- [ ] emergency-exit
+- [ ] exit
+- [ ] get-environment-variable
+- [ ] get-environment-variables
+** Read Library (scheme read)
+- [ ] read
+** Repl Library (scheme repl)
+- [ ] interaction-environment
+** Time Library (scheme time)
+- [ ] current-jiffy
+- [ ] current-second
+- [ ] jiffies-per-second
+** Write Library (scheme write)
+- [ ] display
+- [ ] write
+- [ ] write-shared
+- [ ] write-simple

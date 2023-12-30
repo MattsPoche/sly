@@ -60,6 +60,10 @@ main(int argc, char *argv[])
 				// ./cbuild.sh --clean && make -k && ./sly --expand test/test.sly
 				// gcc -fPIC -shared -ggdb -o test.so test.sly.c
 				FILE *file = fopen("test.sly.c", "w");
+				if (file == NULL) {
+					fprintf(stderr, "Error opening file\n");
+					return 1;
+				}
 				cps_emit_c(&ss, graph, entry, free_var_lookup, file, 1);
 				fclose(file);
 				int r = system("./scheme/build_runtime.sh -s");

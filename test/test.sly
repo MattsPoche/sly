@@ -15,7 +15,37 @@
 
 ;; (display (fst p2)) (newline)
 ;; (display (snd p2)) (newline)
-(define bar 420)
-(define foo (+ 69 bar))
-foo
-			 
+;; (define (f x y)
+;;   (+ (g x) (g y)))
+
+;; (define (g x)
+;;   (* x 2))
+
+;; (display (f 69 420)) (newline)
+;; (display (f 34 29)) (newline)
+
+;; (display (call-with-values
+;; 			 (lambda () (values 4 5))
+;; 		   (lambda (x y) x)))
+;; (newline)
+
+(define meta-table-index-name 0)
+(define meta-table-index-layout 1)
+(define meta-table-index-printer 2)
+(define *base-meta-table* (make-record 3 #f))
+
+(define (meta-table-printer tbl)
+  (display "($ ")
+  (display (record-ref tbl meta-table-index-name))
+  (display ")"))
+
+(record-set! *base-meta-table* meta-table-index-name '*base-meta-table*)
+(record-set! *base-meta-table* meta-table-index-layout #u8(1 1 1))
+(record-set! *base-meta-table* meta-table-index-printer meta-table-printer)
+(record-meta-set! *base-meta-table* *base-meta-table*)
+(display meta-table-printer)
+(newline)
+(display (record-ref *base-meta-table* meta-table-index-printer))
+(newline)
+(display *base-meta-table*)
+(newline)

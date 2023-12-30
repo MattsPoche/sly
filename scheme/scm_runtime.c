@@ -1,10 +1,20 @@
 #include <assert.h>
 #include <stdio.h>
+#include <wchar.h>
 #include <string.h>
 #include <setjmp.h>
 #include "../common/common_def.h"
 #include "scm_types.h"
 #include "scm_runtime.h"
+
+struct shared_buf {
+	u32 fref;
+	u32 len;  // length
+	i8 rc;
+	i8 wc;   // is wide char
+	i8 ro;   // is read-only
+	u8 bytes[];
+};
 
 #define ARG_STACK_LEN 0xffLU
 static struct {
@@ -38,6 +48,10 @@ _tail_call(scm_value proc)
 	if (!PROCEDURE_P(proc)) {
 		printf("\n#x%lx\n", proc);
 		scm_assert(PROCEDURE_P(proc), "type error, expected procedure");
+		return SCM_VOID;
+	}
+	if (CONTINUATION_P(proc)) {
+		pop_arg();
 	}
 	if (arg_stack.top == 0) {
 		push_arg(SCM_VOID);
@@ -75,6 +89,17 @@ scm_heap_alloc(size_t sz)
 	return i;
 }
 
+static void *
+scm_copy_mem(scm_value *vptr, u32 fref, size_t sz)
+{
+	void *ptr = &heap_free->buf[fref];
+	memcpy(ptr, GET_WORKING_PTR(*vptr), sz);
+	*((u32 *)GET_WORKING_PTR(*vptr)) = fref;
+	*vptr = (*vptr ^ (*vptr & ((1LU << 32) - 1))) | fref;
+	heap_free->idx += sz;
+	return ptr;
+}
+
 static void
 scm_collect_value(scm_value *vptr)
 {
@@ -97,7 +122,7 @@ scm_collect_value(scm_value *vptr)
 	case tt_pair: {
 		Pair *p = GET_WORKING_PTR(*vptr);
 		sz = sizeof(*p);
-		heap_free->idx += sz;
+		p = scm_copy_mem(vptr, fref, sz);
 		scm_collect_value(&p->car);
 		scm_collect_value(&p->cdr);
 	} break;
@@ -105,24 +130,41 @@ scm_collect_value(scm_value *vptr)
 		Symbol *s = GET_WORKING_PTR(*vptr);
 		sz = sizeof(*s) + s->len;
 		sz += mem_align_offset(sz);
-		heap_free->idx += sz;
+		scm_copy_mem(vptr, fref, sz);
 	} break;
 	case tt_bytevector: {
 		Bytevector *b = GET_WORKING_PTR(*vptr);
 		sz = sizeof(*b) + b->len;
 		sz += mem_align_offset(sz);
-		heap_free->idx += sz;
+		scm_copy_mem(vptr, fref, sz);
 	} break;
 	case tt_string: {
 		String *s = GET_WORKING_PTR(*vptr);
-		sz = sizeof(*s) + s->len;
+		if (s->buf->fref) {
+			s->buf = GET_FREE_PTR(s->buf->fref);
+			s->buf->rc++;
+		} else {
+			sz = sizeof(*s->buf) + s->buf->len;
+			sz += mem_align_offset(sz);
+			struct shared_buf *prev = s->buf;
+			void *ptr = &heap_free->buf[fref];
+			size_t len = sizeof(*s->buf)
+				+ (s->buf->len * (s->buf->wc ? sizeof(scm_wchar) : 1));
+			memcpy(ptr, s->buf, len);
+			prev->fref = fref;
+			heap_free->idx += sz;
+			s->buf = ptr;
+			s->buf->rc = 1;
+			fref += sz;
+		}
+		sz = sizeof(*s);
 		sz += mem_align_offset(sz);
-		heap_free->idx += sz;
+		s = scm_copy_mem(vptr, fref, sz);
 	} break;
 	case tt_vector: {
 		Vector *v = GET_WORKING_PTR(*vptr);
 		sz = sizeof(*v) + (v->len * sizeof(scm_value));
-		heap_free->idx += sz;
+		v = scm_copy_mem(vptr, fref, sz);
 		for (u32 i = 0; i < v->len; ++i) {
 			scm_collect_value(&v->elems[i]);
 		}
@@ -130,22 +172,22 @@ scm_collect_value(scm_value *vptr)
 	case tt_record: {
 		Record *rec = GET_WORKING_PTR(*vptr);
 		sz = sizeof(*rec) + (rec->len * sizeof(scm_value));
-		heap_free->idx += sz;
-		scm_collect_value(&rec->type);
+		rec = scm_copy_mem(vptr, fref, sz);
+		scm_collect_value(&rec->meta);
 		for (u32 i = 0; i < rec->len; ++i) {
 			scm_collect_value(&rec->elems[i]);
 		}
 	} break;
 	case tt_box: {
 		Box *box = GET_WORKING_PTR(*vptr);
-		sz = sizeof(*box);
-		heap_free->idx += sz;
+		box = scm_copy_mem(vptr, fref, sizeof(*box));
 		scm_collect_value(&box->value);
 	} break;
+	case tt_continuation:
 	case tt_closure: {
 		Closure *clos = GET_WORKING_PTR(*vptr);
 		sz = sizeof(*clos) + (clos->nfree_vars * sizeof(scm_value));
-		heap_free->idx += sz;
+		clos = scm_copy_mem(vptr, fref, sz);
 		for (u32 i = 0; i < clos->nfree_vars; ++i) {
 			scm_collect_value(&clos->free_vars[i]);
 		}
@@ -162,11 +204,6 @@ scm_collect_value(scm_value *vptr)
 		scm_assert(0, "Unreachable");
 	} break;
 	}
-	memcpy(&heap_free->buf[fref],
-		   GET_WORKING_PTR(*vptr),
-		   sz);
-	*((u32 *)GET_WORKING_PTR(*vptr)) = fref;
-	*vptr = (*vptr ^ (*vptr & ((1LU << 32) - 1))) | fref;
 }
 
 static void
@@ -199,9 +236,7 @@ scm_gc(scm_value *cc)
 void
 scm_chk_heap(scm_value *cc)
 {
-	if (gc_threashold == 0) {
-		gc_threashold = heap_working->idx;
-	} else if (heap_working->idx > (gc_threashold + (gc_threashold / 2))) {
+	if (heap_working->idx > (gc_threashold + (gc_threashold / 2))) {
 		gc_cycles++;
 		scm_gc(cc);
 	}
@@ -248,6 +283,16 @@ _cons(scm_value car, scm_value cdr)
 	p->car = car;
 	p->cdr = cdr;
 	return (NB_PAIR << 48)|value;
+}
+
+static inline int
+byte_p(scm_value value)
+{
+	if (INTEGER_P(value)) {
+		u32 b = GET_INTEGRAL(value);
+		return b <= UCHAR_MAX;
+	}
+	return 0;
 }
 
 scm_value
@@ -297,6 +342,7 @@ init_constant(struct constant cnst)
 		v = SCM_VOID;
 	} break;
 	case tt_record:
+	case tt_continuation:
 	case tt_closure:
 	case tt_bigint:
 	case tt_function: {
@@ -343,15 +389,153 @@ scm_intern_constants(struct constant *c, size_t len)
 	return interned+1;
 }
 
+static scm_value
+make_record(u32 len, scm_value meta)
+{
+	Record *rec;
+	scm_value value = scm_heap_alloc(sizeof(*rec) + (len * sizeof(scm_value)));
+	rec = GET_PTR(value);
+	rec->fref = 0;
+	rec->len = len;
+	rec->meta = meta;
+	return (NB_RECORD << 48)|value;
+}
+
+static scm_value
+record_ref(scm_value value, u32 idx)
+{
+	scm_assert(RECORD_P(value), "type error, expected <record>");
+	Record *rec = GET_PTR(value);
+	scm_assert(idx < rec->len, "error index out of bounds");
+	return rec->elems[idx];
+}
+
+static scm_value
+record_set(scm_value r, u32 idx, scm_value v)
+{
+	scm_assert(RECORD_P(r), "type error, expected <record>");
+	Record *rec = GET_PTR(r);
+	scm_assert(idx < rec->len, "error index out of bounds");
+	rec->elems[idx] = v;
+	return SCM_VOID;
+}
+
+static scm_value
+record_meta_set(scm_value value, scm_value v)
+{
+	scm_assert(RECORD_P(value), "type error, expected <record>");
+	Record *rec = GET_PTR(value);
+	rec->meta = v;
+	return SCM_VOID;
+}
+
+scm_value
+prim_make_record(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(3, 0), "arity error");
+	scm_value k = pop_arg();
+	scm_value len = pop_arg();
+	scm_value meta = pop_arg();
+	scm_assert(INTEGER_P(len), "type error, expected <integer>");
+	push_arg(make_record(GET_INTEGRAL(len), meta));
+	TAIL_CALL(k);
+}
+
+scm_value
+prim_record_ref(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(3, 0), "arity error");
+	scm_value k = pop_arg();
+	scm_value rec = pop_arg();
+	scm_value idx = pop_arg();
+	scm_assert(INTEGER_P(idx), "type error, expected <integer>");
+	push_arg(record_ref(rec, GET_INTEGRAL(idx)));
+	TAIL_CALL(k);
+}
+
+scm_value
+prim_record_set(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(4, 0), "arity error");
+	scm_value k = pop_arg();
+	scm_value rec = pop_arg();
+	scm_value idx = pop_arg();
+	scm_value value = pop_arg();
+	scm_assert(INTEGER_P(idx), "type error, expected <integer>");
+	push_arg(record_set(rec, GET_INTEGRAL(idx), value));
+	TAIL_CALL(k);
+}
+
+scm_value
+prim_record_meta_ref(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(2, 0), "arity error");
+	scm_value k = pop_arg();
+	scm_value rec = pop_arg();
+	scm_assert(RECORD_P(rec), "type error, expected <record>");
+	Record *r = GET_PTR(rec);
+	push_arg(r->meta);
+	TAIL_CALL(k);
+}
+
+scm_value
+prim_record_meta_set(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(3, 0), "arity error");
+	scm_value k = pop_arg();
+	scm_value rec = pop_arg();
+	scm_value meta = pop_arg();
+	push_arg(record_meta_set(rec, meta));
+	TAIL_CALL(k);
+}
+
+static struct shared_buf *
+make_sb(size_t len, int wc, int ro)
+{
+	len = len * (wc ? sizeof(scm_wchar) : 1);
+	struct shared_buf *sb = GET_PTR(scm_heap_alloc(sizeof(*sb) + len));
+	sb->fref = 0;
+	sb->len = len;
+	sb->wc = wc;
+	sb->ro = ro;
+	sb->rc = 1;
+	return sb;
+}
+
+static struct shared_buf *
+sb_narrow_to_wide(struct shared_buf *sb, u32 off, u32 len)
+{
+	struct shared_buf *new_sb = make_sb(len, 1, sb->ro);
+	u8 *p8 = sb->bytes;
+	u32 *p32 = (u32 *)new_sb->bytes;
+	for (u32 i = 0; i < sb->len; ++i) {
+		p32[i] = p8[off + i];
+	}
+	return new_sb;
+}
+
+static struct shared_buf *
+make_ascii_buf(const u8 *text, size_t len)
+{
+	struct shared_buf *sb = make_sb(len, 0, 1);
+	sb->fref = 0;
+	sb->len = len;
+	sb->ro = 0;
+	sb->wc = 0;
+	memcpy(sb->bytes, text, len);
+	return sb;
+}
+
 scm_value
 init_string(const STATIC_String *stc_str)
 {
 	String *s;
-	scm_value value = scm_heap_alloc(sizeof(*s) + stc_str->len);
+	scm_value value = scm_heap_alloc(sizeof(*s));
 	s = GET_PTR(value);
 	s->fref = 0;
 	s->len = stc_str->len;
-	memcpy(s->elems, stc_str->elems, stc_str->len);
+	s->off = 0;
+	s->buf = make_ascii_buf(stc_str->elems, stc_str->len);
 	return (NB_STRING << 48)|value;
 }
 
@@ -433,13 +617,13 @@ make_closure(void)
 klabel_t
 procedure_fn(scm_value value)
 {
-	if (CLOSURE_P(value)) {
+	if (CLOSURE_P(value) || CONTINUATION_P(value)) {
 		Closure *c = GET_PTR(value);
 		return c->code;
 	} else if (FUNCTION_P(value)) {
 		return GET_FN_PTR(value);
 	} else {
-		scm_assert(0, "type error expected <procedure");
+		scm_assert(0, "type error expected <procedure>");
 	}
 	return NULL;
 }
@@ -482,7 +666,11 @@ box_set(scm_value b, scm_value value)
 {
 	scm_assert(BOX_P(b), "type error expected variable");
 	Box *box = GET_PTR(b);
-	box->value = value;
+	if (BOX_P(value)) {
+		box_set(b, box_ref(value));
+	} else {
+		box->value = value;
+	}
 }
 
 scm_value
@@ -499,7 +687,7 @@ make_int(i64 x)
 	scm_assert(x <= INT32_MAX, "bigint unimplemented");
 	scm_assert(x >= INT32_MIN, "bigint unimplemented");
 	scm_value value = x;
-	return (NB_INT << 48)|value;
+	return (NB_INT << 48)|(value & ((1LU << 32) - 1));
 }
 
 scm_value
@@ -508,7 +696,7 @@ make_char(i64 x)
 	scm_assert(x <= INT32_MAX, "bigint unimplemented");
 	scm_assert(x >= INT32_MIN, "bigint unimplemented");
 	scm_value value = x;
-	return (NB_CHAR << 48)|value;
+	return (NB_CHAR << 48)|(value & ((1LU << 32) - 1));
 }
 
 scm_value
@@ -564,6 +752,22 @@ print_stk(void)
 	}
 }
 
+static scm_value
+car(scm_value p)
+{
+	scm_assert(PAIR_P(p), "type error expected <pair>");
+	Pair *pair = GET_PTR(p);
+	return pair->car;
+}
+
+static scm_value
+cdr(scm_value p)
+{
+	scm_assert(PAIR_P(p), "type error expected <pair>");
+	Pair *pair = GET_PTR(p);
+	return pair->cdr;
+}
+
 scm_value
 primop_cons(void)
 {
@@ -586,9 +790,7 @@ primop_car(void)
 {
 	scm_assert(chk_args(1, 0), "arity error");
 	scm_value p = pop_arg();
-	scm_assert(PAIR_P(p), "type error expected <pair>");
-	Pair *pair = GET_PTR(p);
-	return pair->car;
+	return car(p);
 }
 
 scm_value
@@ -604,9 +806,7 @@ primop_cdr(void)
 {
 	scm_assert(chk_args(1, 0), "arity error");
 	scm_value p = pop_arg();
-	scm_assert(PAIR_P(p), "type error expected <pair>");
-	Pair *pair = GET_PTR(p);
-	return pair->cdr;
+	return cdr(p);
 }
 
 scm_value
@@ -658,14 +858,96 @@ prim_set_cdr(UNUSED_ATTR scm_value self)
 }
 
 scm_value
+prim_list(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(1, 1), "arity error");
+	scm_value k = pop_arg();
+	scm_value lst = SCM_NULL;
+	size_t n = arg_stack.top;
+	for (size_t i = 0; i < n; ++i) {
+		lst = _cons(arg_stack.stk[i], lst);
+	}
+	arg_stack.top = 0;
+	TAIL_CALL(k);
+}
+
+static int
+race(scm_value h, scm_value t, u32 *len)
+{
+	if (PAIR_P(h)) {
+		h = cdr(h);
+		if (PAIR_P(h)) {
+			if (h == t) {
+				return 0;
+			} else {
+				if (len) *len += 1;
+				return race(cdr(h), cdr(t), len);
+			}
+		} else {
+			return NULL_P(h);
+		}
+	} else {
+		return NULL_P(h);
+	}
+}
+
+scm_value
+prim_list_p(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(2, 0), "arity error");
+	scm_value k = pop_arg();
+	scm_value lst = pop_arg();
+	push_arg(ITOBOOL(race(lst, lst, NULL)));
+	TAIL_CALL(k);
+}
+
+scm_value
+prim_length(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(2, 0), "arity error");
+	scm_value k = pop_arg();
+	scm_value lst = pop_arg();
+	u32 len = 0;
+	scm_assert(race(lst, lst, &len), "value error expected <list>");
+	push_arg(make_int(len));
+	TAIL_CALL(k);
+}
+
+scm_value
+prim_list_ref(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(3, 0), "arity error");
+	scm_value k = pop_arg();
+	scm_value lst = pop_arg();
+	scm_value i = pop_arg();
+	scm_assert(INTEGER_P(i), "type error expected <integer>");
+	u32 idx = GET_INTEGRAL(i);
+	while (idx--) {
+		scm_assert(PAIR_P(lst), "type error index out of bounds");
+		lst = cdr(lst);
+	}
+	push_arg(car(lst));
+	TAIL_CALL(k);
+
+}
+
+static scm_value
+make_vector(u32 len)
+{
+	Vector *vec;
+	scm_value value = scm_heap_alloc(sizeof(*vec) + (len * sizeof(scm_value)));
+	vec = GET_PTR(value);
+	vec->fref = 0;
+	vec->len = len;
+	return (NB_VECTOR << 48)|value;
+}
+
+scm_value
 primop_vector(void)
 {
 	Vector *vec;
-	scm_value value =
-		scm_heap_alloc(sizeof(*vec) + (sizeof(scm_value) * arg_stack.top));
+	scm_value value = make_vector(arg_stack.top);
 	vec = GET_PTR(value);
-	vec->fref = 0;
-	vec->len = arg_stack.top;
 	for (size_t i = 0; arg_stack.top; ++i) {
 		vec->elems[i] = pop_arg();
 	}
@@ -677,6 +959,219 @@ prim_vector(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_vector());
+	TAIL_CALL(k);
+}
+
+static scm_value
+make_byevector(u32 len)
+{
+	Bytevector *bv;
+	scm_value value = scm_heap_alloc(sizeof(*bv) + len);
+	bv = GET_PTR(value);
+	bv->fref = 0;
+	bv->len = len;
+	return (NB_BYTEVECTOR << 48)|value;
+}
+
+scm_value
+primop_make_vector(void)
+{
+	scm_assert(chk_args(1, 1), "arity error");
+	scm_value vl = pop_arg();
+	scm_assert(INTEGER_P(vl), "type error, expected <integer>");
+	u32 len = GET_INTEGRAL(vl);
+	scm_value v = make_vector(len);
+	if (arg_stack.top) {
+		scm_value x = pop_arg();
+		Vector *vec = GET_PTR(v);
+		for (u32 i = 0; i < len; ++i) {
+			vec->elems[i] = x;
+		}
+	}
+	return v;
+}
+
+scm_value
+prim_make_vector(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_make_vector());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_vector_len(void)
+{
+	scm_assert(chk_args(1, 0), "arity error");
+	scm_value v = pop_arg();
+	scm_assert(VECTOR_P(v), "type error, expected <vector>");
+	Vector *vec = GET_PTR(v);
+	return make_int(vec->len);
+}
+
+scm_value
+prim_vector_len(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_vector_len());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_vector_ref(void)
+{
+	scm_assert(chk_args(2, 0), "arity error");
+	scm_value v = pop_arg();
+	scm_value i = pop_arg();
+	scm_assert(VECTOR_P(v), "type error, expected <vector>");
+	scm_assert(INTEGER_P(i), "type error, expected <integer>");
+	Vector *vec = GET_PTR(v);
+	u32 idx = GET_INTEGRAL(i);
+	scm_assert(idx < vec->len, "error index out of bounds");
+	return make_int(vec->elems[idx]);
+}
+
+scm_value
+prim_vector_ref(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_vector_ref());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_vector_set(void)
+{
+	scm_assert(chk_args(3, 0), "arity error");
+	scm_value v = pop_arg();
+	scm_value i = pop_arg();
+	scm_value x = pop_arg();
+	scm_assert(BYTEVECTOR_P(v), "type error, expected <bytevector>");
+	scm_assert(INTEGER_P(i), "type error, expected <integer>");
+	Vector *vec = GET_PTR(v);
+	u32 idx = GET_INTEGRAL(i);
+	scm_assert(idx < vec->len, "error index out of bounds");
+	vec->elems[idx] = x;
+	return SCM_VOID;
+}
+
+scm_value
+prim_vector_set(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_vector_set());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_make_bytevector(void)
+{
+	scm_assert(chk_args(1, 1), "arity error");
+	scm_value vl = pop_arg();
+	scm_assert(INTEGER_P(vl), "type error, expected <integer>");
+	u32 len = GET_INTEGRAL(vl);
+	scm_value bv = make_byevector(len);
+	if (arg_stack.top) {
+		scm_value b = pop_arg();
+		scm_assert(byte_p(b), "type error, expected <byte>");
+		Bytevector *vec = GET_PTR(bv);
+		memset(vec->elems, GET_INTEGRAL(b), len);
+	}
+	return bv;
+}
+
+scm_value
+prim_make_bytevector(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_make_bytevector());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_bytevector_len(void)
+{
+	scm_assert(chk_args(1, 0), "arity error");
+	scm_value bv = pop_arg();
+	scm_assert(BYTEVECTOR_P(bv), "type error, expected <bytevector>");
+	Bytevector *v = GET_PTR(bv);
+	return make_int(v->len);
+}
+
+scm_value
+prim_bytevector_len(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_bytevector_len());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_bytevector_u8_ref(void)
+{
+	scm_assert(chk_args(2, 0), "arity error");
+	scm_value bv = pop_arg();
+	scm_value iv = pop_arg();
+	scm_assert(BYTEVECTOR_P(bv), "type error, expected <bytevector>");
+	scm_assert(INTEGER_P(iv), "type error, expected <integer>");
+	Bytevector *vec = GET_PTR(bv);
+	u32 idx = GET_INTEGRAL(iv);
+	scm_assert(idx < vec->len, "error index out of bounds");
+	return make_int(vec->elems[idx]);
+}
+
+scm_value
+prim_bytevector_u8_ref(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_bytevector_u8_ref());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_bytevector_u8_set(void)
+{
+	scm_assert(chk_args(3, 0), "arity error");
+	scm_value bv = pop_arg();
+	scm_value iv = pop_arg();
+	scm_value byte = pop_arg();
+	scm_assert(BYTEVECTOR_P(bv), "type error, expected <bytevector>");
+	scm_assert(INTEGER_P(iv), "type error, expected <integer>");
+	scm_assert(byte_p(byte), "type error, expected <byte>");
+	Bytevector *vec = GET_PTR(bv);
+	u32 idx = GET_INTEGRAL(iv);
+	scm_assert(idx < vec->len, "error index out of bounds");
+	vec->elems[idx] = GET_INTEGRAL(byte);
+	return SCM_VOID;
+}
+
+scm_value
+prim_bytevector_u8_set(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_bytevector_u8_set());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_bytevector(void)
+{
+	size_t len = arg_stack.top;
+	scm_value value = make_byevector(len);
+	Bytevector *bv = GET_PTR(value);
+	for (size_t i = 0; i < len; ++i) {
+		scm_value b = pop_arg();
+		scm_assert(byte_p(b), "type error, expected <byte>");
+		bv->elems[i] = GET_INTEGRAL(b);
+	}
+	return value;
+}
+
+scm_value
+prim_bytevector(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_bytevector());
 	TAIL_CALL(k);
 }
 
@@ -1243,6 +1738,89 @@ num_eqxx(scm_value x, scm_value y)
 	return 0;
 }
 
+static inline scm_value
+closure_to_continuation(scm_value cc)
+{
+	scm_assert(CLOSURE_P(cc), "Type error expected a closure");
+	return (NB_CONTINUATION << 48)|(u32)GET_INTEGRAL(cc);
+}
+
+scm_value
+prim_call_with_current_continuation(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(2, 0), "arity_error");
+	scm_value k = pop_arg();
+	scm_value f = pop_arg();
+	scm_assert(PROCEDURE_P(f), "Error Expected Procedure");
+	push_arg(closure_to_continuation(k));
+	push_ref(k);
+	TAIL_CALL(f);
+}
+
+static scm_value
+call_consumer_with_values(scm_value self)
+{
+	scm_value k = closure_ref(self, 0);
+	scm_value consumer = closure_ref(self, 1);
+	push_ref(k);
+	TAIL_CALL(consumer);
+}
+
+
+scm_value
+prim_call_with_values(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(3, 0), "arity_error");
+	scm_value k = pop_arg();
+	scm_value producer = pop_arg();
+	scm_value consumer = pop_arg();
+	scm_assert(PROCEDURE_P(producer), "type error, expected <procedure>");
+	scm_assert(PROCEDURE_P(consumer), "type error, expected <procedure>");
+	// Make continuation that calls `consumer' with values returned from `producer'
+	// The continuation of `producer' is this continuation.
+	push_arg(consumer);
+	push_arg(k);
+	push_arg((scm_value)call_consumer_with_values);
+	push_arg(make_closure());
+	TAIL_CALL(producer);
+}
+
+static inline void
+push_list_args(scm_value lst)
+{
+	if (NULL_P(lst)) {
+		return;
+	} else if (PAIR_P(lst)) {
+		Pair *p = GET_PTR(lst);
+		push_list_args(p->cdr);
+		push_arg(p->car);
+	} else {
+		scm_assert(0, "type error expected <pair>");
+	}
+}
+
+scm_value
+prim_apply(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(2, 1), "arity_error");
+	scm_value k = pop_arg();
+	scm_value proc = pop_arg();
+	scm_value args;
+	if (arg_stack.top == 0) {
+		push_arg(k);
+		TAIL_CALL(proc);
+	} else {
+		args = arg_stack.stk[0];
+		for (size_t i = 1; i < arg_stack.top; ++i) {
+			args = _cons(arg_stack.stk[i], args);
+		}
+		arg_stack.top = 0;
+		push_list_args(args);
+		push_arg(k);
+		TAIL_CALL(proc);
+	}
+}
+
 scm_value
 primop_add(void)
 {
@@ -1593,6 +2171,83 @@ prim_negative_p(UNUSED_ATTR scm_value self)
 	TAIL_CALL(k);
 }
 
+static scm_value
+make_string(size_t len, int wc, int ro)
+{
+	String *s;
+	scm_value value = scm_heap_alloc(sizeof(*s));
+	s = GET_PTR(value);
+	s->buf = make_sb(len, wc, ro);
+	s->fref = 0;
+	s->off = len;
+	s->off = 0;
+	return (NB_STRING << 48)|value;
+}
+
+static inline void string_set(String *s, size_t i, scm_wchar ch);
+
+scm_value
+primop_string(void)
+{
+	scm_assert(chk_args(0, 1), "arity error");
+	size_t len = arg_stack.top;
+	int wc = 0;
+	for (size_t i = 0; i < len; ++i) {
+		scm_value ch = arg_stack.stk[i];
+		scm_assert(CHAR_P(ch), "type error, expected <character>");
+		if (GET_INTEGRAL(ch) > CHAR_MAX) {
+			wc = 1;
+			break;
+		}
+	}
+	scm_value string = make_string(len, wc, 0);
+	for (size_t i = 0; i < len; ++i) {
+		string_set(GET_PTR(string), i, pop_arg());
+	}
+	return string;
+}
+
+scm_value
+prim_string(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_string());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_make_string(void)
+{
+	scm_assert(chk_args(1, 1), "arity error");
+	scm_value len = pop_arg();
+	scm_value ch = SCM_FALSE;
+	int wc = 0;
+	scm_assert(INTEGER_P(len), "type error, expected <character>");
+	if (arg_stack.top) {
+		ch = pop_arg();
+		scm_assert(CHAR_P(ch), "type error, expected <character>");
+		if (GET_INTEGRAL(ch) > CHAR_MAX) {
+			wc = 1;
+		}
+	}
+	u32 l = GET_INTEGRAL(len);
+	scm_value string = make_string(l, wc, 0);
+	if (CHAR_P(ch)) {
+		for (size_t i = 0; i < l; ++i) {
+			string_set(GET_PTR(string), i, GET_INTEGRAL(ch));
+		}
+	}
+	return string;
+}
+
+scm_value
+prim_make_string(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_make_string());
+	TAIL_CALL(k);
+}
+
 scm_value
 primop_string_len(void)
 {
@@ -1611,6 +2266,24 @@ prim_string_len(UNUSED_ATTR scm_value self)
 	TAIL_CALL(k);
 }
 
+static inline void *
+sb_ref(struct shared_buf *buf, size_t off, size_t idx)
+{
+	return &buf->bytes[(off + idx) * (buf->wc ? sizeof(scm_wchar) : 1)];
+}
+
+static inline scm_wchar
+string_ref(String *s, size_t i)
+{
+	if (s->buf->wc) {
+		scm_wchar *c = sb_ref(s->buf, s->off, i);
+		return *c;
+	} else {
+		i8 *c = sb_ref(s->buf, s->off, i);
+		return *c;
+	}
+}
+
 scm_value
 primop_string_ref(void)
 {
@@ -1623,7 +2296,7 @@ primop_string_ref(void)
 	i64 i = GET_INTEGRAL(idx);
 	scm_assert(i >= 0, "value error, index expected to be non-negative integer");
 	scm_assert(i < s->len, "value error, index out of bounds");
-	return make_char(s->elems[i]);
+	return make_char(string_ref(s, i));
 }
 
 scm_value
@@ -1634,6 +2307,106 @@ prim_string_ref(UNUSED_ATTR scm_value self)
 	TAIL_CALL(k);
 }
 
+static inline struct shared_buf *
+sb_copy(struct shared_buf *sb, u32 off, u32 len)
+{
+	len = (size_t)len * (sb->wc ? sizeof(scm_wchar) : 1);
+	struct shared_buf *new_sb = make_sb(len, sb->wc, 0);
+	memcpy(new_sb->bytes, sb_ref(sb, off, 0), len);
+	return new_sb;
+}
+
+static inline void
+string_set(String *s, size_t i, scm_wchar ch)
+{
+	scm_assert(s->buf->ro == 0, "Error string is read-only");
+	if (ch > CHAR_MAX && (s->buf->wc == 0)) {
+		s->buf = sb_narrow_to_wide(s->buf, s->off, s->len);
+	} else if (s->buf->rc > 1) {
+		s->buf = sb_copy(s->buf, s->off, s->len);
+	}
+	if (s->buf->wc) {
+		scm_wchar *c = sb_ref(s->buf, s->off, i);
+		*c = ch;
+	} else {
+		i8 *c = sb_ref(s->buf, s->off, i);
+		*c = ch;
+	}
+}
+
+static inline scm_value
+string_copy(scm_value string, u32 start, u32 end)
+{
+	String *s1, *s2;
+	scm_value new_string = scm_heap_alloc(sizeof(*s1));
+	s1 = GET_PTR(string);
+	s2 = GET_PTR(new_string);
+	s2->buf = s1->buf;
+	s2->fref = 0;
+	s2->off = start;
+	s2->len = end - start;
+	return (NB_STRING << 48)|new_string;
+}
+
+scm_value
+primop_string_copy(void)
+{
+	scm_assert(chk_args(1, 1), "arity error");
+	scm_value string = pop_arg();
+	scm_value start, end;
+	scm_assert(STRING_P(string), "type error expected <string>");
+	String *s = GET_PTR(string);
+	if (arg_stack.top == 1) {
+		start = pop_arg();
+		scm_assert(INTEGER_P(start), "type error expected <integer>");
+		return string_copy(string, GET_INTEGRAL(start), s->len);
+	}
+	if (arg_stack.top == 2) {
+		start = pop_arg();
+		end = pop_arg();
+		scm_assert(INTEGER_P(start), "type error expected <integer>");
+		scm_assert(INTEGER_P(end), "type error expected <integer>");
+		return string_copy(string, GET_INTEGRAL(start), GET_INTEGRAL(end));
+	}
+	scm_assert(0, "arity error");
+	return SCM_VOID;
+}
+
+scm_value
+prim_string_copy(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_string_copy());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_string_set(void)
+{
+	scm_assert(chk_args(3, 0), "arity error");
+	scm_value str = pop_arg();
+	scm_value idx = pop_arg();
+	scm_value ch = pop_arg();
+	scm_assert(STRING_P(str), "type error, expected <string>");
+	scm_assert(INTEGER_P(idx), "type error, expected <integer>");
+	scm_assert(CHAR_P(ch), "type error, expected <character>");
+	String *s = GET_PTR(str);
+	i64 i = GET_INTEGRAL(idx);
+	scm_wchar c = GET_INTEGRAL(ch);
+	scm_assert(i >= 0, "value error, index expected to be non-negative integer");
+	scm_assert(i < s->len, "value error, index out of bounds");
+	string_set(s, i, c);
+	return SCM_VOID;
+}
+
+scm_value
+prim_string_set(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_string_set());
+	TAIL_CALL(k);
+}
+
 static inline int
 string_eq(scm_value v1, scm_value v2)
 {
@@ -1641,7 +2414,87 @@ string_eq(scm_value v1, scm_value v2)
 	scm_assert(STRING_P(v2), "type error, expected <string>");
 	String *s1 = GET_PTR(v1);
 	String *s2 = GET_PTR(v2);
-	return s1->len == s2->len && (memcmp(s1->elems, s2->elems, s1->len) == 0);
+	if (s1->len != s2->len) {
+		return 0;
+	}
+	for (u32 i = 0; i < s1->len; ++i) {
+		if (string_ref(s1, i) != string_ref(s2, i)) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
+static inline int
+string_less(scm_value v1, scm_value v2)
+{
+	scm_assert(STRING_P(v1), "type error, expected <string>");
+	scm_assert(STRING_P(v2), "type error, expected <string>");
+	String *s1 = GET_PTR(v1);
+	String *s2 = GET_PTR(v2);
+	u32 len = (s1->len < s2->len) ? s1->len : s2->len;
+	for (u32 i = 0; i < len; ++i) {
+		scm_wchar c1 = string_ref(s1, i);
+		scm_wchar c2 = string_ref(s2, i);
+		if (c1 != c2) {
+			return c1 < c2;
+		}
+	}
+	return s1->len < s2->len;
+}
+
+static inline int
+string_gr(scm_value v1, scm_value v2)
+{
+	scm_assert(STRING_P(v1), "type error, expected <string>");
+	scm_assert(STRING_P(v2), "type error, expected <string>");
+	String *s1 = GET_PTR(v1);
+	String *s2 = GET_PTR(v2);
+	u32 len = (s1->len < s2->len) ? s1->len : s2->len;
+	for (u32 i = 0; i < len; ++i) {
+		scm_wchar c1 = string_ref(s1, i);
+		scm_wchar c2 = string_ref(s2, i);
+		if (c1 != c2) {
+			return c1 > c2;
+		}
+	}
+	return s1->len > s2->len;
+}
+
+static inline int
+string_leq(scm_value v1, scm_value v2)
+{
+	scm_assert(STRING_P(v1), "type error, expected <string>");
+	scm_assert(STRING_P(v2), "type error, expected <string>");
+	String *s1 = GET_PTR(v1);
+	String *s2 = GET_PTR(v2);
+	u32 len = (s1->len < s2->len) ? s1->len : s2->len;
+	for (u32 i = 0; i < len; ++i) {
+		scm_wchar c1 = string_ref(s1, i);
+		scm_wchar c2 = string_ref(s2, i);
+		if (c1 != c2) {
+			return c1 < c2;
+		}
+	}
+	return s1->len <= s2->len;
+}
+
+static inline int
+string_geq(scm_value v1, scm_value v2)
+{
+	scm_assert(STRING_P(v1), "type error, expected <string>");
+	scm_assert(STRING_P(v2), "type error, expected <string>");
+	String *s1 = GET_PTR(v1);
+	String *s2 = GET_PTR(v2);
+	u32 len = (s1->len < s2->len) ? s1->len : s2->len;
+	for (u32 i = 0; i < len; ++i) {
+		scm_wchar c1 = string_ref(s1, i);
+		scm_wchar c2 = string_ref(s2, i);
+		if (c1 != c2) {
+			return c1 > c2;
+		}
+	}
+	return s1->len >= s2->len;
 }
 
 scm_value
@@ -1668,6 +2521,114 @@ prim_string_eq(UNUSED_ATTR scm_value self)
 {
 	scm_value k = pop_arg();
 	push_arg(primop_string_eq());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_string_less(void)
+{
+	scm_assert(chk_args(0, 1), "arity error");
+	if (arg_stack.top < 2) {
+		while (arg_stack.top) {
+			scm_assert(STRING_P(pop_arg()), "type error expected <number>");
+		}
+		return SCM_TRUE;
+	}
+	scm_value fst = pop_arg();
+	while (arg_stack.top) {
+		if (!string_less(fst, pop_arg())) {
+			return SCM_FALSE;
+		}
+	}
+	return SCM_TRUE;
+}
+
+scm_value
+prim_string_less(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_string_less());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_string_gr(void)
+{
+	scm_assert(chk_args(0, 1), "arity error");
+	if (arg_stack.top < 2) {
+		while (arg_stack.top) {
+			scm_assert(STRING_P(pop_arg()), "type error expected <number>");
+		}
+		return SCM_TRUE;
+	}
+	scm_value fst = pop_arg();
+	while (arg_stack.top) {
+		if (!string_gr(fst, pop_arg())) {
+			return SCM_FALSE;
+		}
+	}
+	return SCM_TRUE;
+}
+
+scm_value
+prim_string_gr(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_string_gr());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_string_leq(void)
+{
+	scm_assert(chk_args(0, 1), "arity error");
+	if (arg_stack.top < 2) {
+		while (arg_stack.top) {
+			scm_assert(STRING_P(pop_arg()), "type error expected <number>");
+		}
+		return SCM_TRUE;
+	}
+	scm_value fst = pop_arg();
+	while (arg_stack.top) {
+		if (!string_leq(fst, pop_arg())) {
+			return SCM_FALSE;
+		}
+	}
+	return SCM_TRUE;
+}
+
+scm_value
+prim_string_leq(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_string_leq());
+	TAIL_CALL(k);
+}
+
+scm_value
+primop_string_geq(void)
+{
+	scm_assert(chk_args(0, 1), "arity error");
+	if (arg_stack.top < 2) {
+		while (arg_stack.top) {
+			scm_assert(STRING_P(pop_arg()), "type error expected <number>");
+		}
+		return SCM_TRUE;
+	}
+	scm_value fst = pop_arg();
+	while (arg_stack.top) {
+		if (!string_geq(fst, pop_arg())) {
+			return SCM_FALSE;
+		}
+	}
+	return SCM_TRUE;
+}
+
+scm_value
+prim_string_geq(UNUSED_ATTR scm_value self)
+{
+	scm_value k = pop_arg();
+	push_arg(primop_string_geq());
 	TAIL_CALL(k);
 }
 
@@ -1730,10 +2691,19 @@ scm_print(scm_value value, int quote_p)
 		printf("#f");
 	} else if (STRING_P(value)) {
 		String *s = GET_PTR(value);
-		if (quote_p) {
-			printf("\"%.*s\"", (int)s->len, s->elems);
+		void *b = sb_ref(s->buf, s->off, 0);
+		if (s->buf->wc) {
+			if (quote_p) {
+				wprintf(L"\"%.*ls\"", (int)s->len, (wchar_t *)b);
+			} else {
+				wprintf(L"%.*ls", (int)s->len, (wchar_t *)b);
+			}
 		} else {
-			printf("%.*s", (int)s->len, s->elems);
+			if (quote_p) {
+				printf("\"%.*s\"", (int)s->len, (char *)b);
+			} else {
+				printf("%.*s", (int)s->len, (char *)b);
+			}
 		}
 	} else if (SYMBOL_P(value)) {
 		Symbol *s = GET_PTR(value);
@@ -1791,36 +2761,50 @@ scm_print(scm_value value, int quote_p)
 }
 
 scm_value
-primop_write(void)
-{
-	scm_assert(chk_args(1, 0), "arity error");
-	scm_value value = pop_arg();
-	scm_print(value, 1);
-	return SCM_VOID;
-}
-
-scm_value
 prim_write(UNUSED_ATTR scm_value self)
 {
+	scm_assert(chk_args(2, 0), "arity error");
 	scm_value k = pop_arg();
-	push_arg(primop_write());
-	TAIL_CALL(k);
-}
-
-scm_value
-primop_display(void)
-{
-	scm_assert(chk_args(1, 0), "arity error");
 	scm_value value = pop_arg();
-	scm_print(value, 0);
-	return SCM_VOID;
+	if (RECORD_P(value)) {
+		Record *rec = GET_PTR(value);
+		if (RECORD_P(rec->meta)) {
+			Record *meta = GET_PTR(rec->meta);
+			push_arg(value);
+			push_arg(k);
+			if (PROCEDURE_P(meta->elems[2])) {
+				TAIL_CALL(meta->elems[2]);
+			}
+		}
+		printf("($ N/A)");
+	} else {
+		scm_print(value, 1);
+	}
+	push_arg(SCM_VOID);
+	TAIL_CALL(k);
 }
 
 scm_value
 prim_display(UNUSED_ATTR scm_value self)
 {
+	scm_assert(chk_args(2, 0), "arity error");
 	scm_value k = pop_arg();
-	push_arg(primop_display());
+	scm_value value = pop_arg();
+	if (RECORD_P(value)) {
+		Record *rec = GET_PTR(value);
+		if (RECORD_P(rec->meta)) {
+			Record *meta = GET_PTR(rec->meta);
+			if (PROCEDURE_P(meta->elems[2])) {
+				push_arg(value);
+				push_arg(k);
+				TAIL_CALL(meta->elems[2]);
+			}
+		}
+		printf("($ N/A)");
+	} else {
+		scm_print(value, 0);
+	}
+	push_arg(SCM_VOID);
 	TAIL_CALL(k);
 }
 
@@ -1844,12 +2828,12 @@ static scm_value
 tl_exit(UNUSED_ATTR scm_value self)
 {
 	scm_assert(chk_args(1, 0), "arity error");
-	scm_value x = pop_arg();
-	if (!VOID_P(x)) {
-		push_arg(x);
-		primop_write();
-		primop_newline();
-	}
+	/* scm_value x = pop_arg(); */
+	/* if (!VOID_P(x)) { */
+	/* 	push_arg(x); */
+	/* 	primop_write(); */
+	/* 	primop_newline(); */
+	/* } */
 	longjmp(exit_point, 1);
 }
 
@@ -1881,7 +2865,6 @@ scm_runtime_load_dynamic(void)
 	push_arg(module_entry("cons", prim_cons));
 	push_arg(module_entry("car", prim_car));
 	push_arg(module_entry("cdr", prim_cdr));
-	push_arg(module_entry("vector", prim_vector));
 	push_arg(module_entry("void", prim_void));
 	push_arg(module_entry("boolean?", prim_boolean_p));
 	push_arg(module_entry("char?", prim_char_p));
@@ -1909,14 +2892,49 @@ scm_runtime_load_dynamic(void)
 	push_arg(module_entry("zero?", prim_zero_p));
 	push_arg(module_entry("positive?", prim_positive_p));
 	push_arg(module_entry("negative?", prim_negative_p));
+	/* list */
+	push_arg(module_entry("list", prim_list));
+	push_arg(module_entry("list?", prim_list_p));
+	push_arg(module_entry("length", prim_length));
+	push_arg(module_entry("list-ref", prim_list_ref));
 	/* string */
+	push_arg(module_entry("string", prim_string));
+	push_arg(module_entry("make-string", prim_make_string));
+	push_arg(module_entry("string-copy", prim_string_copy));
 	push_arg(module_entry("string-length", prim_string_len));
 	push_arg(module_entry("string-ref", prim_string_ref));
+	push_arg(module_entry("string-set!", prim_string_set));
 	push_arg(module_entry("string=?", prim_string_eq));
+	push_arg(module_entry("string<?", prim_string_less));
+	push_arg(module_entry("string>?", prim_string_gr));
+	push_arg(module_entry("string<=?", prim_string_leq));
+	push_arg(module_entry("string>=?", prim_string_geq));
+	/* bytevector */
+	push_arg(module_entry("bytevector", prim_bytevector));
+	push_arg(module_entry("make-bytevector", prim_make_bytevector));
+	push_arg(module_entry("bytevector-length", prim_bytevector_len));
+	push_arg(module_entry("bytevector-u8-ref", prim_bytevector_u8_ref));
+	push_arg(module_entry("bytevector-u8-set!", prim_bytevector_u8_set));
+	/* vector */
+	push_arg(module_entry("vector", prim_vector));
+	push_arg(module_entry("make-vector", prim_make_vector));
+	push_arg(module_entry("vector-length", prim_vector_len));
+	push_arg(module_entry("vector-ref", prim_vector_ref));
+	push_arg(module_entry("vector-set!", prim_vector_set));
+	/* record */
+	push_arg(module_entry("make-record", prim_make_record));
+	push_arg(module_entry("record-ref", prim_record_ref));
+	push_arg(module_entry("record-set!", prim_record_set));
+	push_arg(module_entry("record-meta-ref", prim_record_meta_ref));
+	push_arg(module_entry("record-meta-set!", prim_record_meta_set));
 	/* IO */
 	push_arg(module_entry("write", prim_write));
 	push_arg(module_entry("display", prim_display));
 	push_arg(module_entry("newline", prim_newline));
+	push_arg(module_entry("call-with-current-continuation", prim_call_with_current_continuation));
+	push_arg(module_entry("call/cc", prim_call_with_current_continuation));
+	push_arg(module_entry("call-with-values", prim_call_with_values));
+	push_arg(module_entry("apply", prim_apply));
 	return primop_vector();
 }
 

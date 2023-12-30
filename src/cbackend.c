@@ -89,7 +89,7 @@ convert_to_cid(char *str)
 {
 	for (size_t i = 0; str[i]; ++i) {
 		if (!(isalnum(str[i]) || str[i] == '_')) {
-			str[i] = '_';
+			str[i] = (str[i] % 27) + 'A';
 		}
 	}
 
@@ -122,7 +122,7 @@ emit_c_push_refs(sly_value name, sly_value lst, FILE *file)
 		return;
 	}
 	sly_value elem = car(lst);
-	emit_c_push_list(name, cdr(lst), file);
+	emit_c_push_refs(name, cdr(lst), file);
 	if (!sly_eq(name, elem)) {
 		fprintf(file, "\tpush_ref(%s);\n", symbol_to_cid(elem));
 	}
@@ -213,7 +213,6 @@ emit_c_visit_expr(Sly_State *ss, CPS_Expr *expr, sly_value graph,
 		case tt_prim_gr: sly_assert(0, "unimplemented"); break;
 		case tt_prim_leq: sly_assert(0, "unimplemented"); break;
 		case tt_prim_geq: sly_assert(0, "unimplemented"); break;
-		case tt_prim_apply: sly_assert(0, "unimplemented"); break;
 		case tt_prim_cons: {
 			return "primop_cons()";
 		} break;
@@ -227,7 +226,7 @@ emit_c_visit_expr(Sly_State *ss, CPS_Expr *expr, sly_value graph,
 		}
 	} break;
 	case tt_cps_values: {
-		sly_value args = expr->u.values.args;
+		sly_value args = list_reverse(ss, expr->u.values.args);
 		while (!null_p(args)) {
 			fprintf(file, "\tpush_ref(%s);\n", symbol_to_cid(car(args)));
 			args = cdr(args);
@@ -284,7 +283,7 @@ emit_c_visit_expr(Sly_State *ss, CPS_Expr *expr, sly_value graph,
 				emit_c_push_list(name, vars, file);
 				fprintf(file, push_tmpl, "(scm_value)", symbol_to_cid(code));
 				fprintf(file, "\tbox_set(%s, make_closure());\n", symbol_to_cid(name));
-			} 
+			}
 			procs = cdr(procs);
 			names = cdr(names);
 		}
@@ -309,7 +308,7 @@ _cps_emit_c(Sly_State *ss, sly_value graph, sly_value k,
 			if (expr->type == tt_cps_call) {
 				if (next->type != tt_cps_ktail) {
 					sly_value vars = dictionary_ref(free_vars, next->name, SLY_NULL);
-					emit_c_push_refs(SLY_VOID, vars, file);
+					emit_c_push_list(SLY_VOID, vars, file);
 					fprintf(file, push_tmpl, "", "k");
 					fprintf(file, push_tmpl, "(scm_value)", symbol_to_cid(next->name));
 					fprintf(file, "\tk = make_closure();\n");

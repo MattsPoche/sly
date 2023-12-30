@@ -16,10 +16,10 @@ DEPENDANCIES=$(CSOURCE:src/%.c=bin/%.d)
 all: bin $(DEPENDANCIES) $(TARGET)
 
 bin:
-	@mkdir bin
+	@mkdir -p bin
 
-test: $(TARGET)
-	./$< test/*.sly
+test: all
+	./$(TARGET) test/test.sly
 
 clean:
 	@rm -rf bin

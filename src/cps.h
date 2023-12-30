@@ -51,7 +51,6 @@ enum prim {
 	tt_prim_gr,           // >
 	tt_prim_leq,          // <=
 	tt_prim_geq,          // >=
-	tt_prim_apply,
 	tt_prim_cons,
 	tt_prim_car,
 	tt_prim_cdr,
