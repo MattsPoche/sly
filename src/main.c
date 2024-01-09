@@ -27,36 +27,10 @@ main(int argc, char *argv[])
 		while (argc) {
 			Sly_State ss = {0};
 			sly_value ast = sly_expand_only(&ss, next_arg(&argc, &argv));
-			sly_value graph = make_dictionary(&ss);
-			sly_value name = make_symbol(&ss, "$tkexit", 7);
-			CPS_Kont *kont = cps_make_ktail(&ss, 0);
-			kont->name = name;
-			cps_graph_set(&ss, graph, name, kont);
-			sly_displayln(strip_syntax(ast));
-			cps_init_primops(&ss);
-			sly_value entry = cps_translate(&ss, name, graph, ast);
-			cps_display(&ss, graph, entry);
-			printf("========================================================\n");
-			graph = cps_opt_contraction_phase(&ss, graph, entry, 1);
-			cps_display(&ss, graph, entry);
-			printf("\n");
-			sly_value var_info = cps_collect_var_info(&ss, graph,
-													  make_dictionary(&ss),
-													  make_dictionary(&ss),
-													  make_dictionary(&ss), NULL, entry);
-			sly_value free_var_lookup = cps_collect_free_variables(&ss, graph, var_info, entry);
-			printf("free vars:\n");
-			vector *vec = GET_PTR(free_var_lookup);
-			for (size_t i = 0; i < vec->cap; ++i) {
-				sly_value entry = vec->elems[i];
-				if (!slot_is_free(entry)) {
-					sly_display(car(entry), 1);
-					printf(" = ");
-					sly_displayln(cdr(entry));
-				}
-			}
+			return compile_form(&ss, ast);
+#if 0
 			{
-#if 1
+#if 0
 				// ./cbuild.sh --clean && make -k && ./sly --expand test/test.sly
 				// gcc -fPIC -shared -ggdb -o test.so test.sly.c
 				FILE *file = fopen("test.sly.c", "w");
@@ -87,6 +61,24 @@ main(int argc, char *argv[])
 				trampoline(load_dynamic());
 				dlclose(handle);
 #else
+				sly_value graph = make_dictionary(&ss);
+				sly_value name = make_symbol(&ss, "$tkexit", 7);
+				CPS_Kont *kont = cps_make_ktail(&ss, 0);
+				kont->name = name;
+				cps_graph_set(&ss, graph, name, kont);
+				sly_displayln(strip_syntax(ast));
+				cps_init_primops(&ss);
+				sly_value entry = cps_translate(&ss, name, graph, ast);
+				cps_display(&ss, graph, entry);
+				printf("========================================================\n");
+				graph = cps_opt_contraction_phase(&ss, graph, entry, 1);
+				cps_display(&ss, graph, entry);
+				printf("\n");
+				sly_value var_info = cps_collect_var_info(&ss, graph,
+														  make_dictionary(&ss),
+														  make_dictionary(&ss),
+														  make_dictionary(&ss), NULL, entry);
+				sly_value free_var_lookup = cps_collect_free_variables(&ss, graph, var_info, entry);
 				FILE *file = fopen("test.sly.c", "w");
 				cps_emit_c(&ss, graph, entry, free_var_lookup, file, 0);
 				fclose(file);
@@ -96,6 +88,7 @@ main(int argc, char *argv[])
 				sly_assert(r == 0, "compile error");
 #endif
 			}
+#endif
 		}
 	} else {
 		printf("No source file provided.\nExiting ...\n");

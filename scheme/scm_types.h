@@ -19,11 +19,14 @@
 #define NB_BOX		    (NAN_BITS|tt_box) // referance
 #define NB_CLOSURE	    (NAN_BITS|tt_closure) // closure
 #define NB_FUNCTION	    (NAN_BITS|tt_function) // procedure with no free variables
-#define NB_CONTINUATION (NAN_BITS|tt_continuation) // procedure representing a continuation
+#define NB_NAN          (NAN_BITS|tt_nan)
+#define NB_INFINITY     (NAN_BITS|tt_inf)
 #define SCM_NULL  (NB_PAIR << 48)
 #define SCM_FALSE (NB_BOOL << 48)
 #define SCM_TRUE  (SCM_FALSE + 1)
 #define SCM_VOID  (NB_VOID << 48)
+#define SCM_INFINITY (NB_INFINITY << 48)
+#define SCM_NAN      (NB_NAN << 48)
 #define TAG_VALUE(type, val_bits) (((type) << 48)|(val_bits))
 #define TYPEOF(value) ((value) >> 48)
 #define GET_FN_PTR(value) ((klabel_t)((value) & ((1LU << 48) - 1)))
@@ -49,7 +52,7 @@
 #define BOX_P(value) (TYPEOF(value) == NB_BOX)
 #define CLOSURE_P(value) (TYPEOF(value) == NB_CLOSURE)
 #define FUNCTION_P(value) (TYPEOF(value) == NB_FUNCTION)
-#define CONTINUATION_P(value) (TYPEOF(value) == NB_CONTINUATION)
+#define CONTINUATION_P(value) (CLOSURE_P(value) && ((Closure *)(GET_PTR(value)))->is_cont)
 #define PROCEDURE_P(value) \
 	(CLOSURE_P(value) || FUNCTION_P(value) || CONTINUATION_P(value))
 #define TAIL_CALL(proc) return _tail_call(proc)
@@ -65,14 +68,14 @@ enum type_tag {
 	tt_bigint,			// 0x5
 	tt_pair,			// 0x6
 	tt_symbol,			// 0x7
-	tt_bytevector,		// 0x8
-	tt_string,			// 0x9
-	tt_vector,			// 0xa
-	tt_record,			// 0xb
-	tt_box,				// 0xc
-	tt_closure,			// 0xd
-	tt_function,		// 0xe
-	tt_continuation,	// 0xf
+	tt_nan,             // 0x8
+	tt_bytevector,		// 0x9
+	tt_string,			// 0xa
+	tt_vector,			// 0xb
+	tt_record,			// 0xc
+	tt_box,				// 0xd
+	tt_closure,			// 0xe
+	tt_function,		// 0xf
 	TT_COUNT,
 	tt_float,
 };
@@ -87,6 +90,7 @@ typedef scm_value (*klabel_t)(scm_value self);
 typedef struct _closure {
 	u32 fref;
 	u32 nfree_vars;
+	i32 is_cont;
 	klabel_t code;
 	scm_value free_vars[];
 } Closure;

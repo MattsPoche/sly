@@ -3,6 +3,10 @@
 #include <wchar.h>
 #include <string.h>
 #include <setjmp.h>
+#include <errno.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include "../common/common_def.h"
 #include "scm_types.h"
 #include "scm_runtime.h"
@@ -16,7 +20,7 @@ struct shared_buf {
 	u8 bytes[];
 };
 
-#define ARG_STACK_LEN 0xffLU
+#define ARG_STACK_LEN 512LU
 static struct {
 	size_t top;
 	scm_value stk[ARG_STACK_LEN];
@@ -38,6 +42,8 @@ static scm_value **intern_tbl;
 static size_t intern_tbl_len = 0;
 static scm_value *interned;
 static struct constant *constants;
+
+static inline void scm_print(scm_value value, int quote_p);
 
 scm_value
 _tail_call(scm_value proc)
@@ -140,6 +146,10 @@ scm_collect_value(scm_value *vptr)
 	} break;
 	case tt_string: {
 		String *s = GET_WORKING_PTR(*vptr);
+		sz = sizeof(*s);
+		sz += mem_align_offset(sz);
+		s = scm_copy_mem(vptr, fref, sz);
+		fref += sz;
 		if (s->buf->fref) {
 			s->buf = GET_FREE_PTR(s->buf->fref);
 			s->buf->rc++;
@@ -155,11 +165,9 @@ scm_collect_value(scm_value *vptr)
 			heap_free->idx += sz;
 			s->buf = ptr;
 			s->buf->rc = 1;
+			s->buf->fref = 0;
 			fref += sz;
 		}
-		sz = sizeof(*s);
-		sz += mem_align_offset(sz);
-		s = scm_copy_mem(vptr, fref, sz);
 	} break;
 	case tt_vector: {
 		Vector *v = GET_WORKING_PTR(*vptr);
@@ -183,7 +191,6 @@ scm_collect_value(scm_value *vptr)
 		box = scm_copy_mem(vptr, fref, sizeof(*box));
 		scm_collect_value(&box->value);
 	} break;
-	case tt_continuation:
 	case tt_closure: {
 		Closure *clos = GET_WORKING_PTR(*vptr);
 		sz = sizeof(*clos) + (clos->nfree_vars * sizeof(scm_value));
@@ -193,6 +200,7 @@ scm_collect_value(scm_value *vptr)
 		}
 	} break;
 	case tt_inf:
+	case tt_nan:
 	case tt_void:
 	case tt_bool:
 	case tt_char:
@@ -230,7 +238,7 @@ scm_gc(scm_value *cc)
 	heap_free->buf = NULL;
 	heap_free->idx = 0;
 	heap_free->sz = 0;
-	gc_threashold = heap_working->idx;
+	====gc_threashold = heap_working->idx;
 }
 
 void
@@ -261,6 +269,19 @@ chk_args(size_t req, int rest)
 	} else {
 		return nargs == req;
 	}
+}
+
+static char *
+string_to_cstr(scm_value s)
+{
+	scm_assert(STRING_P(s), "type error expected <string>");
+	String *str = GET_PTR(s);
+	u32 off = str->off;
+	u32 len = str->len;
+	char *cstr = malloc(len + 1);
+	memcpy(cstr, &str->buf->bytes[off], len);
+	cstr[len] = '\0';
+	return cstr;
 }
 
 scm_value
@@ -304,6 +325,10 @@ init_constant(struct constant cnst)
 		scm_assert(0, "Invalid type");
 		v = make_float(cnst.u.as_float);
 	} break;
+	case tt_nan: {
+		scm_assert(0, "Invalid type");
+		v = make_float(cnst.u.as_float);
+	} break;
 	case tt_bool: {
 		v = ITOBOOL(cnst.u.as_int);
 	} break;
@@ -342,7 +367,6 @@ init_constant(struct constant cnst)
 		v = SCM_VOID;
 	} break;
 	case tt_record:
-	case tt_continuation:
 	case tt_closure:
 	case tt_bigint:
 	case tt_function: {
@@ -387,6 +411,40 @@ scm_intern_constants(struct constant *c, size_t len)
 		interned[i] = make_constant(i);
 	}
 	return interned+1;
+}
+
+static scm_value
+char_to_integer(scm_value ch)
+{
+	scm_assert(CHAR_P(ch), "type error expected <character>");
+	return make_int(GET_INTEGRAL(ch));
+}
+
+static scm_value
+integer_to_char(scm_value i)
+{
+	scm_assert(INTEGER_P(i), "type error expected <character>");
+	return make_char(GET_INTEGRAL(i));
+}
+
+scm_value
+prim_char_to_integer(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(2, 0), "arity error");
+	scm_value k = pop_arg();
+	scm_value ch = pop_arg();
+	push_arg(char_to_integer(ch));
+	TAIL_CALL(k);
+}
+
+scm_value
+prim_integer_to_char(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(2, 0), "arity error");
+	scm_value k = pop_arg();
+	scm_value i = pop_arg();
+	push_arg(integer_to_char(i));
+	TAIL_CALL(k);
 }
 
 static scm_value
@@ -606,6 +664,7 @@ make_closure(void)
 		scm_heap_alloc(sizeof(*clos) + (sizeof(scm_value) * arg_stack.top));
 	clos = GET_PTR(value);
 	clos->fref = 0;
+	clos->is_cont = 0;
 	clos->code = (klabel_t)pop_arg();
 	clos->nfree_vars = arg_stack.top;
 	for (size_t i = 0; arg_stack.top; ++i) {
@@ -617,7 +676,7 @@ make_closure(void)
 klabel_t
 procedure_fn(scm_value value)
 {
-	if (CLOSURE_P(value) || CONTINUATION_P(value)) {
+	if (CLOSURE_P(value)) {
 		Closure *c = GET_PTR(value);
 		return c->code;
 	} else if (FUNCTION_P(value)) {
@@ -1742,7 +1801,9 @@ static inline scm_value
 closure_to_continuation(scm_value cc)
 {
 	scm_assert(CLOSURE_P(cc), "Type error expected a closure");
-	return (NB_CONTINUATION << 48)|(u32)GET_INTEGRAL(cc);
+	Closure *clos = GET_PTR(cc);
+	clos->is_cont = 1;
+	return cc;
 }
 
 scm_value
@@ -2179,7 +2240,7 @@ make_string(size_t len, int wc, int ro)
 	s = GET_PTR(value);
 	s->buf = make_sb(len, wc, ro);
 	s->fref = 0;
-	s->off = len;
+	s->len = len;
 	s->off = 0;
 	return (NB_STRING << 48)|value;
 }
@@ -2202,7 +2263,9 @@ primop_string(void)
 	}
 	scm_value string = make_string(len, wc, 0);
 	for (size_t i = 0; i < len; ++i) {
-		string_set(GET_PTR(string), i, pop_arg());
+		scm_value v = pop_arg();
+		scm_wchar ch = GET_INTEGRAL(v);
+		string_set(GET_PTR(string), i, ch);
 	}
 	return string;
 }
@@ -2691,20 +2754,12 @@ scm_print(scm_value value, int quote_p)
 		printf("#f");
 	} else if (STRING_P(value)) {
 		String *s = GET_PTR(value);
-		void *b = sb_ref(s->buf, s->off, 0);
-		if (s->buf->wc) {
-			if (quote_p) {
-				wprintf(L"\"%.*ls\"", (int)s->len, (wchar_t *)b);
-			} else {
-				wprintf(L"%.*ls", (int)s->len, (wchar_t *)b);
-			}
-		} else {
-			if (quote_p) {
-				printf("\"%.*s\"", (int)s->len, (char *)b);
-			} else {
-				printf("%.*s", (int)s->len, (char *)b);
-			}
+		if (quote_p) putchar('"');
+		for (size_t i = 0; i < s->len; ++i) {
+			scm_wchar ch = string_ref(s, i);
+			putchar(ch);
 		}
+		if (quote_p) putchar('"');
 	} else if (SYMBOL_P(value)) {
 		Symbol *s = GET_PTR(value);
 		printf("%.*s", s->len, s->name);
@@ -2744,7 +2799,7 @@ scm_print(scm_value value, int quote_p)
 		printf(")");
 	} else if (BYTEVECTOR_P(value)) {
 		Bytevector *vec = GET_PTR(value);
-		printf("#vu8(");
+		printf("#u8(");
 		if (vec->len) {
 			size_t i;
 			for (i = 0; i < vec->len - 1; ++i) {
@@ -2758,6 +2813,78 @@ scm_print(scm_value value, int quote_p)
 		printf("0x%lx\n", value);
 		scm_assert(0, "unimplemented");
 	}
+}
+
+scm_value
+prim_open_fd_ro(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(2, 0), "arity error");
+	scm_value k = pop_arg();
+	scm_value file_path = pop_arg();
+	scm_assert(STRING_P(file_path), "type error expected <string>");
+	char *fp = string_to_cstr(file_path);
+	printf("%s\n", fp);
+	int fd = open(fp, O_RDONLY);
+	free(fp);
+	scm_assert(fd > 0, strerror(errno));
+	push_arg(make_int(fd));
+	TAIL_CALL(k);
+}
+
+scm_value
+prim_close_fd(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(2, 0), "arity error");
+	scm_value k = pop_arg();
+	scm_value val = pop_arg();
+	scm_assert(INTEGER_P(val), "type error expected <integer>");
+	scm_assert(close(GET_INTEGRAL(val)) == 0, strerror(errno));
+	TAIL_CALL(k);
+}
+
+scm_value
+prim_read_fd(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(3, 0), "arity error");
+	scm_value k = pop_arg();
+	scm_value fd = pop_arg();
+	scm_value val = pop_arg();
+	scm_assert(INTEGER_P(fd), "type error expected <integer>");
+	scm_assert(BYTEVECTOR_P(val), "type error expected <bytevector>");
+	int fildes = GET_INTEGRAL(fd);
+	Bytevector *vec = GET_PTR(val);
+	scm_assert(read(fildes, vec->elems, vec->len) >= 0, strerror(errno));
+	push_arg(val);
+	TAIL_CALL(k);
+}
+
+scm_value
+prim_c_open_file_object(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(3, 0), "arity error");
+	scm_value k = pop_arg();
+	scm_value file_path = pop_arg();
+	scm_value mode = pop_arg();
+	scm_assert(STRING_P(file_path), "type error expected <string>");
+	scm_assert(STRING_P(mode), "type error expected <string>");
+	char *fp = string_to_cstr(file_path);
+	char *m = string_to_cstr(mode);
+	FILE *file = fopen(fp, m);
+	free(fp);
+	free(m);
+	scm_assert(file != NULL, strerror(errno));
+	push_arg((scm_value)file);
+	TAIL_CALL(k);
+}
+
+scm_value
+prim_c_close_file_object(UNUSED_ATTR scm_value self)
+{
+	scm_assert(chk_args(2, 0), "arity error");
+	scm_value k = pop_arg();
+	scm_value f = pop_arg();
+	fclose((FILE *)f);
+	TAIL_CALL(k);
 }
 
 scm_value
@@ -2855,6 +2982,7 @@ scm_module_lookup(char *name, scm_value module)
 			return entry->cdr;
 		}
 	}
+	printf("%s\n", name);
 	scm_assert(0, "error undefined identifier");
 	return SCM_VOID;
 }
@@ -2892,6 +3020,9 @@ scm_runtime_load_dynamic(void)
 	push_arg(module_entry("zero?", prim_zero_p));
 	push_arg(module_entry("positive?", prim_positive_p));
 	push_arg(module_entry("negative?", prim_negative_p));
+	/* char */
+	push_arg(module_entry("char->integer", prim_char_to_integer));
+	push_arg(module_entry("integer->char", prim_integer_to_char));
 	/* list */
 	push_arg(module_entry("list", prim_list));
 	push_arg(module_entry("list?", prim_list_p));
@@ -2928,10 +3059,16 @@ scm_runtime_load_dynamic(void)
 	push_arg(module_entry("record-meta-ref", prim_record_meta_ref));
 	push_arg(module_entry("record-meta-set!", prim_record_meta_set));
 	/* IO */
-	push_arg(module_entry("write", prim_write));
-	push_arg(module_entry("display", prim_display));
+	push_arg(module_entry("open-fd-ro", prim_open_fd_ro));
+	push_arg(module_entry("read-fd", prim_read_fd));
+	push_arg(module_entry("close-fd", prim_close_fd));
+	push_arg(module_entry("c/open-file-object", prim_c_open_file_object));
+	push_arg(module_entry("c/close-file-object", prim_c_close_file_object));
 	push_arg(module_entry("newline", prim_newline));
-	push_arg(module_entry("call-with-current-continuation", prim_call_with_current_continuation));
+	push_arg(module_entry("display", prim_display));
+	push_arg(module_entry("write", prim_write));
+	push_arg(module_entry("call-with-current-continuation",
+						  prim_call_with_current_continuation));
 	push_arg(module_entry("call/cc", prim_call_with_current_continuation));
 	push_arg(module_entry("call-with-values", prim_call_with_values));
 	push_arg(module_entry("apply", prim_apply));

@@ -96,6 +96,8 @@ scm_value prim_number_p(scm_value self);
 scm_value prim_string_p(scm_value self);
 scm_value prim_vector_p(scm_value self);
 scm_value prim_record_p(scm_value self);
+scm_value prim_integer_to_char(scm_value self);
+scm_value prim_char_to_integer(scm_value self);
 #if 0
 // unimplemented
 scm_value prim_eof_object_p(scm_value self);
@@ -159,6 +161,11 @@ scm_value prim_string_leq(scm_value self);
 scm_value primop_string_geq(void);
 scm_value prim_string_geq(scm_value self);
 /* IO procedures */
+scm_value prim_open_fd_ro(scm_value self);
+scm_value prim_close_fd(scm_value self);
+scm_value prim_read_fd(scm_value self);
+scm_value prim_c_open_file_object(scm_value self);
+scm_value prim_c_close_file_object(scm_value self);
 scm_value prim_write(scm_value self);
 scm_value prim_display(scm_value self);
 scm_value primop_newline(void);

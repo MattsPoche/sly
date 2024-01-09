@@ -7,8 +7,6 @@
 #include "eval.h"
 #include "sly_vm.h"
 
-/* TODO: Implement module system */
-
 #define scope() gensym_from_cstr(ss, "scope")
 #define add_binding(id, binding)						\
 		dictionary_set(ss, all_bindings, id, binding);
@@ -18,6 +16,8 @@
 enum core_form {
 	cf_define = 0,
 	cf_lambda,
+	cf_load,
+	cf_include,
 	cf_quote,
 	cf_syntax_quote,
 	cf_begin,
@@ -46,7 +46,13 @@ enum core_form {
 	cf_pair_p,
 	cf_procedure_p,
 	cf_symbol_p,
+	cf_open_fd_ro,
+	cf_read_fd,
+	cf_close_fd,
+	cf_make_bytevector,
 	cf_bytevector_p,
+	cf_bytevector_length,
+	cf_bytevector_ref,
 	cf_number_p,
 	cf_string_p,
 	cf_string,
@@ -60,6 +66,8 @@ enum core_form {
 	cf_record_set,
 	cf_record_meta_ref,
 	cf_record_meta_set,
+	cf_char_to_integer,
+	cf_integer_to_char,
 	cf_string_length,
 	cf_string_ref,
 	cf_string_eq,
@@ -74,6 +82,8 @@ enum core_form {
 static char *core_form_names[CORE_FORM_COUNT] = {
 	[cf_define] = "define",
 	[cf_lambda] = "lambda",
+	[cf_load] = "load",
+	[cf_include] = "include",
 	[cf_quote] = "quote",
 	[cf_syntax_quote] = "syntax-quote",
 	[cf_begin] = "begin",
@@ -102,7 +112,13 @@ static char *core_form_names[CORE_FORM_COUNT] = {
 	[cf_pair_p] = "pair?",
 	[cf_procedure_p] = "procedure?",
 	[cf_symbol_p] = "symbol?",
+	[cf_open_fd_ro] = "open-fd-ro",
+	[cf_read_fd] = "read-fd",
+	[cf_close_fd] = "close-fd",
+	[cf_make_bytevector] = "make-bytevector",
 	[cf_bytevector_p] = "bytevector?",
+	[cf_bytevector_length] = "bytevector-length",
+	[cf_bytevector_ref] = "bytevector-u8-ref",
 	[cf_number_p] = "number?",
 	[cf_record_p] = "record?",
 	[cf_make_record] = "make-record",
@@ -118,6 +134,8 @@ static char *core_form_names[CORE_FORM_COUNT] = {
 	[cf_eq] = "eq?",
 	[cf_num_eq] = "=",
 	[cf_less] = "<",
+	[cf_char_to_integer] = "char->integer",
+	[cf_integer_to_char] = "integer->char",
 	[cf_string_length] = "string-length",
 	[cf_string_ref] = "string-ref",
 	[cf_string_eq] = "string=?",
@@ -205,6 +223,20 @@ set_add(Sly_State *ss, sly_value set, sly_value value)
 }
 
 static sly_value
+set_join(Sly_State *ss, sly_value set1, sly_value set2)
+{
+	sly_assert(dictionary_p(set2), "Type error expected <dictionary>");
+	vector *s = GET_PTR(set2);
+	for (size_t i = 0; i < s->cap; ++i) {
+		sly_value entry = s->elems[i];
+		if (!slot_is_free(entry)) {
+			set_add(ss, set1, car(entry));
+		}
+	}
+	return set1;
+}
+
+static sly_value
 set_flip(Sly_State *ss, sly_value set, sly_value value)
 {
 	if (set_contains(ss, set, value)) {
@@ -242,6 +274,12 @@ adjust_scope(Sly_State *ss, sly_value s, sly_value sc, set_op op)
 					adjust_scope(ss, cdr(s), sc, op));
 	}
 	return s;
+}
+
+static sly_value
+add_scope_set(Sly_State *ss, sly_value s, sly_value set)
+{
+	return adjust_scope(ss, s, set, set_join);
 }
 
 static sly_value
@@ -567,9 +605,23 @@ expand_provide(Sly_State *ss, sly_value s, sly_value env)
 	} else {
 		append(p, cdr(s));
 	}
-
 	return SLY_VOID;
 }
+
+static sly_value
+expand_include(Sly_State *ss, sly_value s, UNUSED_ATTR sly_value env)
+{
+	sly_value file_path = syntax_to_datum(car(cdr(s)));
+	sly_assert(string_p(file_path),
+			   "Type Error expected file path as string in require form");
+	char *old_file_path = ss->file_path;
+	ss->file_path = string_to_cstr(file_path);
+	sly_value ast = parse_file(ss, ss->file_path, &ss->source_code);
+	add_scope_set(ss, ast, syntax_scopes(car(s)));
+	ss->file_path = old_file_path;
+	return ast;
+}
+
 
 static sly_value
 expand_id_application_form(Sly_State *ss, sly_value s, sly_value env)
@@ -593,6 +645,9 @@ expand_id_application_form(Sly_State *ss, sly_value s, sly_value env)
 	}
 	if (sly_equal(binding, core_symbol(cf_provide))) {
 		return expand_provide(ss, s, env);
+	}
+	if (sly_equal(binding, core_symbol(cf_include))) {
+		return expand_include(ss, s, env);
 	}
 	if (vector_contains(ss, core_forms, binding)) {
 		return expand_core_form(ss, s, env);
